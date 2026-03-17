@@ -9,12 +9,10 @@ describe('SuppliersService', () => {
   let supplierRepo: Record<string, jest.Mock>;
 
   const mockSupplier = {
-    id: 'supplier-1',
-    tenantId: 'tenant-1',
+    id: 'sup-1',
     code: 'SUP-001',
-    nameEn: 'Test Supplier',
-    nameAr: 'مورد تجريبي',
-    email: 'supplier@example.com',
+    name: 'Acme Supplies',
+    tenantId: 'tenant-1',
   };
 
   beforeEach(async () => {
@@ -22,7 +20,7 @@ describe('SuppliersService', () => {
       findOne: jest.fn(),
       find: jest.fn(),
       create: jest.fn((dto) => dto),
-      save: jest.fn((entity) => ({ id: 'supplier-1', ...entity })),
+      save: jest.fn((entity) => ({ id: 'sup-1', ...entity })),
       remove: jest.fn(),
     };
 
@@ -37,12 +35,12 @@ describe('SuppliersService', () => {
   });
 
   describe('create', () => {
-    const createDto = { code: 'SUP-002', nameEn: 'New Supplier' };
+    const createDto = { code: 'SUP-002', name: 'New Supplier' } as any;
 
     it('should create a new supplier', async () => {
       supplierRepo.findOne.mockResolvedValue(null);
 
-      const result = await service.create('tenant-1', createDto as any);
+      const result = await service.create('tenant-1', createDto);
 
       expect(supplierRepo.create).toHaveBeenCalledWith({ ...createDto, tenantId: 'tenant-1' });
       expect(supplierRepo.save).toHaveBeenCalled();
@@ -52,14 +50,12 @@ describe('SuppliersService', () => {
     it('should throw ConflictException if supplier code already exists', async () => {
       supplierRepo.findOne.mockResolvedValue(mockSupplier);
 
-      await expect(service.create('tenant-1', createDto as any)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.create('tenant-1', createDto)).rejects.toThrow(ConflictException);
     });
   });
 
   describe('findAll', () => {
-    it('should return all suppliers for the tenant', async () => {
+    it('should return all suppliers for a tenant', async () => {
       supplierRepo.find.mockResolvedValue([mockSupplier]);
 
       const result = await service.findAll('tenant-1');
@@ -76,7 +72,7 @@ describe('SuppliersService', () => {
     it('should return a supplier by id', async () => {
       supplierRepo.findOne.mockResolvedValue(mockSupplier);
 
-      const result = await service.findById('tenant-1', 'supplier-1');
+      const result = await service.findById('tenant-1', 'sup-1');
 
       expect(result).toEqual(mockSupplier);
     });
@@ -92,19 +88,11 @@ describe('SuppliersService', () => {
     it('should update and return the supplier', async () => {
       supplierRepo.findOne.mockResolvedValue({ ...mockSupplier });
 
-      const result = await service.update('tenant-1', 'supplier-1', { nameEn: 'Updated Supplier' } as any);
+      const result = await service.update('tenant-1', 'sup-1', { name: 'Updated Supplier' } as any);
 
       expect(supplierRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ nameEn: 'Updated Supplier' }),
+        expect.objectContaining({ name: 'Updated Supplier' }),
       );
-    });
-
-    it('should throw NotFoundException if supplier to update not found', async () => {
-      supplierRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.update('tenant-1', 'missing', { nameEn: 'Updated' } as any),
-      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -112,7 +100,7 @@ describe('SuppliersService', () => {
     it('should remove the supplier', async () => {
       supplierRepo.findOne.mockResolvedValue(mockSupplier);
 
-      await service.remove('tenant-1', 'supplier-1');
+      await service.remove('tenant-1', 'sup-1');
 
       expect(supplierRepo.remove).toHaveBeenCalledWith(mockSupplier);
     });

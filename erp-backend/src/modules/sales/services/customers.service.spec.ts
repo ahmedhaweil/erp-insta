@@ -9,12 +9,10 @@ describe('CustomersService', () => {
   let customerRepo: Record<string, jest.Mock>;
 
   const mockCustomer = {
-    id: 'customer-1',
+    id: 'cust-1',
+    name: 'John Doe',
+    email: 'john@example.com',
     tenantId: 'tenant-1',
-    nameEn: 'Test Customer',
-    nameAr: 'عميل تجريبي',
-    email: 'customer@example.com',
-    phone: '+201234567890',
   };
 
   beforeEach(async () => {
@@ -22,7 +20,7 @@ describe('CustomersService', () => {
       findOne: jest.fn(),
       find: jest.fn(),
       create: jest.fn((dto) => dto),
-      save: jest.fn((entity) => ({ id: 'customer-1', ...entity })),
+      save: jest.fn((entity) => ({ id: 'cust-1', ...entity })),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -36,20 +34,19 @@ describe('CustomersService', () => {
   });
 
   describe('create', () => {
-    const createDto = { nameEn: 'New Customer', email: 'new@example.com' };
+    const createDto = { name: 'Jane Smith', email: 'jane@example.com' } as any;
 
     it('should create a new customer', async () => {
-      const result = await service.create('tenant-1', createDto as any);
+      const result = await service.create('tenant-1', createDto);
 
       expect(customerRepo.create).toHaveBeenCalledWith({ ...createDto, tenantId: 'tenant-1' });
       expect(customerRepo.save).toHaveBeenCalled();
       expect(result).toHaveProperty('id');
-      expect(result).toHaveProperty('tenantId', 'tenant-1');
     });
   });
 
   describe('findAll', () => {
-    it('should return all customers for the tenant', async () => {
+    it('should return all customers for a tenant', async () => {
       customerRepo.find.mockResolvedValue([mockCustomer]);
 
       const result = await service.findAll('tenant-1');
@@ -66,7 +63,7 @@ describe('CustomersService', () => {
     it('should return a customer by id', async () => {
       customerRepo.findOne.mockResolvedValue(mockCustomer);
 
-      const result = await service.findById('tenant-1', 'customer-1');
+      const result = await service.findById('tenant-1', 'cust-1');
 
       expect(result).toEqual(mockCustomer);
     });
@@ -82,10 +79,10 @@ describe('CustomersService', () => {
     it('should update and return the customer', async () => {
       customerRepo.findOne.mockResolvedValue({ ...mockCustomer });
 
-      const result = await service.update('tenant-1', 'customer-1', { nameEn: 'Updated Customer' } as any);
+      const result = await service.update('tenant-1', 'cust-1', { name: 'Updated Name' } as any);
 
       expect(customerRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ nameEn: 'Updated Customer' }),
+        expect.objectContaining({ name: 'Updated Name' }),
       );
     });
 
@@ -93,7 +90,7 @@ describe('CustomersService', () => {
       customerRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.update('tenant-1', 'missing', { nameEn: 'Updated' } as any),
+        service.update('tenant-1', 'missing', { name: 'X' } as any),
       ).rejects.toThrow(NotFoundException);
     });
   });

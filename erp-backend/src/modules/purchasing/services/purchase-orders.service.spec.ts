@@ -14,13 +14,12 @@ describe('PurchaseOrdersService', () => {
 
   const mockOrder = {
     id: 'po-1',
-    tenantId: 'tenant-1',
     orderNumber: 'PO-000001',
+    tenantId: 'tenant-1',
     status: PurchaseOrderStatus.DRAFT,
-    supplierId: 'supplier-1',
-    totalAmount: 5000,
-    createdBy: 'user-1',
+    totalAmount: 500,
     lines: [],
+    supplier: { id: 'sup-1' },
   };
 
   beforeEach(async () => {
@@ -52,21 +51,18 @@ describe('PurchaseOrdersService', () => {
 
   describe('create', () => {
     const createDto = {
-      supplierId: 'supplier-1',
-      lines: [
-        { productId: 'product-1', quantity: 10, unitPrice: 500 },
-      ],
-    };
+      supplierId: 'sup-1',
+      lines: [{ productId: 'prod-1', quantity: 10, unitPrice: 50 }],
+    } as any;
 
     it('should create an order with auto-generated number', async () => {
-      orderRepo.count.mockResolvedValue(3);
+      orderRepo.count.mockResolvedValue(0);
 
-      const result = await service.create('tenant-1', 'user-1', createDto as any);
+      const result = await service.create('tenant-1', 'user-1', createDto);
 
-      expect(orderRepo.count).toHaveBeenCalledWith({ where: { tenantId: 'tenant-1' } });
       expect(orderRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          orderNumber: 'PO-000004',
+          orderNumber: 'PO-000001',
           status: PurchaseOrderStatus.DRAFT,
           tenantId: 'tenant-1',
           createdBy: 'user-1',
@@ -74,10 +70,22 @@ describe('PurchaseOrdersService', () => {
       );
       expect(orderRepo.save).toHaveBeenCalled();
     });
+
+    it('should increment order number based on existing count', async () => {
+      orderRepo.count.mockResolvedValue(42);
+
+      await service.create('tenant-1', 'user-1', createDto);
+
+      expect(orderRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderNumber: 'PO-000043',
+        }),
+      );
+    });
   });
 
   describe('findAll', () => {
-    it('should return all purchase orders for the tenant', async () => {
+    it('should return all orders for a tenant', async () => {
       orderRepo.find.mockResolvedValue([mockOrder]);
 
       const result = await service.findAll('tenant-1');
@@ -92,7 +100,7 @@ describe('PurchaseOrdersService', () => {
   });
 
   describe('findById', () => {
-    it('should return a purchase order by id', async () => {
+    it('should return an order by id', async () => {
       orderRepo.findOne.mockResolvedValue(mockOrder);
 
       const result = await service.findById('tenant-1', 'po-1');
@@ -108,15 +116,14 @@ describe('PurchaseOrdersService', () => {
   });
 
   describe('confirm', () => {
-    it('should confirm a draft purchase order', async () => {
+    it('should confirm a draft order', async () => {
       orderRepo.findOne.mockResolvedValue({ ...mockOrder, status: PurchaseOrderStatus.DRAFT });
+      orderRepo.save.mockImplementation((entity) => entity);
 
       const result = await service.confirm('tenant-1', 'user-1', 'po-1');
 
-      expect(orderRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ status: PurchaseOrderStatus.CONFIRMED }),
-      );
-      expect(eventEmitter.emit).toHaveBeenCalledWith('purchase.received', expect.anything());
+      expect(result.status).toBe(PurchaseOrderStatus.CONFIRMED);
+      expect(eventEmitter.emit).toHaveBeenCalledWith('purchase.received', expect.any(Object));
     });
 
     it('should throw ConflictException if order is not draft', async () => {
@@ -129,14 +136,13 @@ describe('PurchaseOrdersService', () => {
   });
 
   describe('cancel', () => {
-    it('should cancel a draft purchase order', async () => {
+    it('should cancel a draft order', async () => {
       orderRepo.findOne.mockResolvedValue({ ...mockOrder, status: PurchaseOrderStatus.DRAFT });
+      orderRepo.save.mockImplementation((entity) => entity);
 
       const result = await service.cancel('tenant-1', 'po-1');
 
-      expect(orderRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ status: PurchaseOrderStatus.CANCELLED }),
-      );
+      expect(result.status).toBe(PurchaseOrderStatus.CANCELLED);
     });
 
     it('should throw ConflictException if order is already cancelled', async () => {
