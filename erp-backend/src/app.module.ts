@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { BullModule } from '@nestjs/bullmq';
 import { configuration, configValidationSchema } from './config';
@@ -17,8 +16,8 @@ import { ComplianceModule } from './modules/compliance/compliance.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 
-@Module({
-  imports: [
+function buildImports() {
+  const imports: any[] = [
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
@@ -35,18 +34,6 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
       wildcard: true,
       delimiter: '.',
       maxListeners: 20,
-    }),
-
-    // BullMQ for background jobs
-    BullModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        connection: {
-          host: config.get('redis.host'),
-          port: config.get('redis.port'),
-          password: config.get('redis.password'),
-        },
-      }),
     }),
 
     // Database
@@ -66,6 +53,28 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
     ComplianceModule,
     NotificationsModule,
     RealtimeModule,
-  ],
+  ];
+
+  // BullMQ for background jobs – only when Redis is available
+  if (process.env.REDIS_HOST && process.env.REDIS_HOST !== 'disabled') {
+    imports.splice(2, 0,
+      BullModule.forRootAsync({
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) => ({
+          connection: {
+            host: config.get('redis.host'),
+            port: config.get('redis.port'),
+            password: config.get('redis.password'),
+          },
+        }),
+      }),
+    );
+  }
+
+  return imports;
+}
+
+@Module({
+  imports: buildImports(),
 })
 export class AppModule {}

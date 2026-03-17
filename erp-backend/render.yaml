@@ -1,0 +1,50 @@
+databases:
+  - name: erp-saas-db
+    plan: free
+    databaseName: erp_saas
+    user: erp_admin
+
+services:
+  - type: web
+    name: erp-saas-api
+    runtime: docker
+    dockerfilePath: ./docker/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: APP_PORT
+        value: 3000
+      - key: DB_HOST
+        fromDatabase:
+          name: erp-saas-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: erp-saas-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: erp-saas-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: erp-saas-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: erp-saas-db
+          property: password
+      - key: DB_SSL
+        value: "true"
+      - key: DB_LOGGING
+        value: "false"
+      - key: REDIS_HOST
+        value: disabled
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: PORT
+        value: 3000

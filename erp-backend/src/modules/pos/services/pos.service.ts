@@ -125,7 +125,7 @@ export class PosService {
       cashReceived: dto.cashReceived ?? null,
       changeAmount,
       createdBy: userId,
-    });
+    } as Partial<PosOrder>);
     const savedOrder = await this.orderRepo.save(order);
 
     for (const line of lines) {
@@ -136,7 +136,7 @@ export class PosService {
     return this.orderRepo.findOne({
       where: { id: savedOrder.id },
       relations: ['lines'],
-    });
+    }) as Promise<PosOrder>;
   }
 
   async getSessionOrders(

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { EInvoice, EInvoiceStatus } from '../entities/e-invoice.entity';
+import { EInvoice, EInvoiceProvider, EInvoiceStatus } from '../entities/e-invoice.entity';
 import { SubmitInvoiceDto } from '../dto/submit-invoice.dto';
 
 @Injectable()
@@ -20,7 +20,7 @@ export class EInvoiceService {
       invoiceId: dto.invoiceId,
       invoiceType: dto.invoiceType,
       status: EInvoiceStatus.PENDING,
-      provider: 'eta', // default provider; can be extended
+      provider: EInvoiceProvider.ETA,
     });
     return this.eInvoiceRepo.save(invoice);
   }
