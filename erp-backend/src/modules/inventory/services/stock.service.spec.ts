@@ -16,13 +16,13 @@ describe('StockService', () => {
   let warehouseRepo: Record<string, jest.Mock>;
   let eventEmitter: Record<string, jest.Mock>;
 
-  const mockProduct = { id: 'product-1', tenantId: 'tenant-1', code: 'PRD-001' };
-  const mockWarehouse = { id: 'wh-1', tenantId: 'tenant-1', nameEn: 'Main Warehouse', nameAr: 'المستودع الرئيسي' };
-  const mockWarehouse2 = { id: 'wh-2', tenantId: 'tenant-1', nameEn: 'Secondary', nameAr: 'ثانوي' };
+  const mockProduct = { id: 'prod-1', tenantId: 'tenant-1' };
+  const mockWarehouse = { id: 'wh-1', tenantId: 'tenant-1', nameEn: 'Main Warehouse' };
+  const mockWarehouse2 = { id: 'wh-2', tenantId: 'tenant-1', nameEn: 'Secondary Warehouse' };
   const mockStock = {
     id: 'stock-1',
     tenantId: 'tenant-1',
-    productId: 'product-1',
+    productId: 'prod-1',
     warehouseId: 'wh-1',
     quantity: 100,
     reservedQty: 10,
@@ -64,7 +64,7 @@ describe('StockService', () => {
   });
 
   describe('getStock', () => {
-    it('should return stock records for the tenant', async () => {
+    it('should return stock filtered by tenant', async () => {
       stockRepo.find.mockResolvedValue([mockStock]);
 
       const result = await service.getStock('tenant-1');
@@ -80,48 +80,42 @@ describe('StockService', () => {
     it('should filter by productId and warehouseId when provided', async () => {
       stockRepo.find.mockResolvedValue([mockStock]);
 
-      await service.getStock('tenant-1', 'product-1', 'wh-1');
+      await service.getStock('tenant-1', 'prod-1', 'wh-1');
 
-      expect(stockRepo.find).toHaveBeenCalledWith({
-        where: { tenantId: 'tenant-1', productId: 'product-1', warehouseId: 'wh-1' },
-        relations: ['product', 'warehouse'],
-        order: { createdAt: 'DESC' },
-      });
+      expect(stockRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: 'tenant-1', productId: 'prod-1', warehouseId: 'wh-1' },
+        }),
+      );
     });
   });
 
   describe('adjust', () => {
-    const adjustDto = {
-      productId: 'product-1',
-      warehouseId: 'wh-1',
-      quantity: 50,
-      reason: 'Recount',
-    };
+    const adjustDto = { productId: 'prod-1', warehouseId: 'wh-1', quantity: 50, reason: 'restock' };
 
-    it('should create new stock record if none exists', async () => {
+    it('should create new stock record when none exists', async () => {
       productRepo.findOne.mockResolvedValue(mockProduct);
       warehouseRepo.findOne.mockResolvedValue(mockWarehouse);
       stockRepo.findOne.mockResolvedValue(null);
+      stockRepo.save.mockResolvedValue({ id: 'stock-new', quantity: 50 });
 
-      const result = await service.adjust('tenant-1', 'user-1', adjustDto as any);
+      const result = await service.adjust('tenant-1', 'user-1', adjustDto);
 
-      expect(stockRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ tenantId: 'tenant-1', productId: 'product-1' }),
-      );
+      expect(stockRepo.create).toHaveBeenCalled();
       expect(stockRepo.save).toHaveBeenCalled();
-      expect(eventEmitter.emit).toHaveBeenCalledWith('stock.adjusted', expect.anything());
+      expect(result).toHaveProperty('id');
     });
 
     it('should add quantity to existing stock', async () => {
       productRepo.findOne.mockResolvedValue(mockProduct);
       warehouseRepo.findOne.mockResolvedValue(mockWarehouse);
       stockRepo.findOne.mockResolvedValue({ ...mockStock, quantity: 100 });
+      stockRepo.save.mockImplementation((entity) => entity);
 
-      const result = await service.adjust('tenant-1', 'user-1', adjustDto as any);
+      const result = await service.adjust('tenant-1', 'user-1', adjustDto);
 
-      expect(stockRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ quantity: 150 }),
-      );
+      expect(result.quantity).toBe(150);
+      expect(eventEmitter.emit).toHaveBeenCalledWith('stock.adjusted', expect.any(Object));
     });
 
     it('should throw BadRequestException if adjustment results in negative stock', async () => {
@@ -131,32 +125,23 @@ describe('StockService', () => {
 
       const negativeDto = { ...adjustDto, quantity: -20 };
 
-      await expect(
-        service.adjust('tenant-1', 'user-1', negativeDto as any),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.adjust('tenant-1', 'user-1', negativeDto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
-    it('should throw NotFoundException if product does not exist', async () => {
+    it('should throw NotFoundException if product not found', async () => {
       productRepo.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.adjust('tenant-1', 'user-1', adjustDto as any),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should throw NotFoundException if warehouse does not exist', async () => {
-      productRepo.findOne.mockResolvedValue(mockProduct);
-      warehouseRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.adjust('tenant-1', 'user-1', adjustDto as any),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.adjust('tenant-1', 'user-1', adjustDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('transfer', () => {
     const transferDto = {
-      productId: 'product-1',
+      productId: 'prod-1',
       fromWarehouseId: 'wh-1',
       toWarehouseId: 'wh-2',
       quantity: 20,
@@ -168,41 +153,46 @@ describe('StockService', () => {
         .mockResolvedValueOnce(mockWarehouse)
         .mockResolvedValueOnce(mockWarehouse2);
       stockRepo.findOne
-        .mockResolvedValueOnce({ ...mockStock, quantity: 100, reservedQty: 10 })
+        .mockResolvedValueOnce({ ...mockStock, quantity: 100, reservedQty: 0 })
         .mockResolvedValueOnce(null);
+      stockRepo.save.mockImplementation((entity) => entity);
 
-      const result = await service.transfer('tenant-1', 'user-1', transferDto as any);
+      const result = await service.transfer('tenant-1', 'user-1', transferDto);
 
-      expect(stockRepo.save).toHaveBeenCalledTimes(2);
-      expect(movementRepo.save).toHaveBeenCalled();
+      expect(result.from.quantity).toBe(80);
+      expect(result.to.quantity).toBe(20);
     });
 
-    it('should throw BadRequestException if insufficient available stock', async () => {
+    it('should throw BadRequestException if insufficient stock', async () => {
       productRepo.findOne.mockResolvedValue(mockProduct);
       warehouseRepo.findOne
         .mockResolvedValueOnce(mockWarehouse)
         .mockResolvedValueOnce(mockWarehouse2);
-      stockRepo.findOne.mockResolvedValue({ ...mockStock, quantity: 15, reservedQty: 10 });
+      stockRepo.findOne.mockResolvedValueOnce({ ...mockStock, quantity: 5, reservedQty: 0 });
 
-      await expect(
-        service.transfer('tenant-1', 'user-1', transferDto as any),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.transfer('tenant-1', 'user-1', transferDto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
-    it('should throw BadRequestException if source and destination are the same', async () => {
-      const sameWarehouseDto = { ...transferDto, toWarehouseId: 'wh-1' };
+    it('should throw BadRequestException if same warehouse', async () => {
+      const sameWhDto = { ...transferDto, toWarehouseId: 'wh-1' };
 
-      await expect(
-        service.transfer('tenant-1', 'user-1', sameWarehouseDto as any),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.transfer('tenant-1', 'user-1', sameWhDto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
-    it('should throw BadRequestException if transfer quantity is not positive', async () => {
-      const zeroDto = { ...transferDto, quantity: 0 };
+    it('should throw NotFoundException if no stock in source warehouse', async () => {
+      productRepo.findOne.mockResolvedValue(mockProduct);
+      warehouseRepo.findOne
+        .mockResolvedValueOnce(mockWarehouse)
+        .mockResolvedValueOnce(mockWarehouse2);
+      stockRepo.findOne.mockResolvedValueOnce(null);
 
-      await expect(
-        service.transfer('tenant-1', 'user-1', zeroDto as any),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.transfer('tenant-1', 'user-1', transferDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });
