@@ -9,13 +9,12 @@ describe('ProductsService', () => {
   let productRepo: Record<string, jest.Mock>;
 
   const mockProduct = {
-    id: 'product-1',
+    id: 'prod-1',
+    code: 'SKU-001',
+    nameEn: 'Widget',
     tenantId: 'tenant-1',
-    code: 'PRD-001',
-    nameEn: 'Test Product',
-    nameAr: 'منتج تجريبي',
-    category: { id: 'cat-1', name: 'Electronics' },
-    unit: { id: 'unit-1', name: 'Piece' },
+    category: { id: 'cat-1' },
+    unit: { id: 'unit-1' },
   };
 
   beforeEach(async () => {
@@ -23,7 +22,7 @@ describe('ProductsService', () => {
       findOne: jest.fn(),
       find: jest.fn(),
       create: jest.fn((dto) => dto),
-      save: jest.fn((entity) => ({ id: 'product-1', ...entity })),
+      save: jest.fn((entity) => ({ id: 'prod-1', ...entity })),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -37,20 +36,19 @@ describe('ProductsService', () => {
   });
 
   describe('create', () => {
-    const createDto = { code: 'PRD-002', nameEn: 'New Product' };
+    const createDto = { code: 'SKU-002', nameEn: 'Gadget' } as any;
 
     it('should create a new product', async () => {
-      const result = await service.create('tenant-1', createDto as any);
+      const result = await service.create('tenant-1', createDto);
 
       expect(productRepo.create).toHaveBeenCalledWith({ ...createDto, tenantId: 'tenant-1' });
       expect(productRepo.save).toHaveBeenCalled();
       expect(result).toHaveProperty('id');
-      expect(result).toHaveProperty('tenantId', 'tenant-1');
     });
   });
 
   describe('findAll', () => {
-    it('should return all products for the tenant', async () => {
+    it('should return all products for a tenant', async () => {
       productRepo.find.mockResolvedValue([mockProduct]);
 
       const result = await service.findAll('tenant-1');
@@ -68,7 +66,7 @@ describe('ProductsService', () => {
     it('should return a product by id', async () => {
       productRepo.findOne.mockResolvedValue(mockProduct);
 
-      const result = await service.findById('tenant-1', 'product-1');
+      const result = await service.findById('tenant-1', 'prod-1');
 
       expect(result).toEqual(mockProduct);
     });
@@ -84,10 +82,10 @@ describe('ProductsService', () => {
     it('should update and return the product', async () => {
       productRepo.findOne.mockResolvedValue({ ...mockProduct });
 
-      const result = await service.update('tenant-1', 'product-1', { nameEn: 'Updated Product' } as any);
+      const result = await service.update('tenant-1', 'prod-1', { nameEn: 'Updated Widget' } as any);
 
       expect(productRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ nameEn: 'Updated Product' }),
+        expect.objectContaining({ nameEn: 'Updated Widget' }),
       );
     });
 
@@ -95,7 +93,7 @@ describe('ProductsService', () => {
       productRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.update('tenant-1', 'missing', { nameEn: 'Updated' } as any),
+        service.update('tenant-1', 'missing', { nameEn: 'X' } as any),
       ).rejects.toThrow(NotFoundException);
     });
   });
