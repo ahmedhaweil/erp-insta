@@ -11,6 +11,7 @@ import { UserRole } from './entities/user-role.entity';
 import { Session } from './entities/session.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { AuthService } from './services/auth.service';
+import { RbacService } from './services/rbac.service';
 import { AuthController } from './controllers/auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TenantsModule } from '@modules/tenants/tenants.module';
@@ -29,7 +30,7 @@ import { TenantsModule } from '@modules/tenants/tenants.module';
     TenantsModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService, JwtModule],
+  providers: [AuthService, RbacService, JwtStrategy],
+  exports: [AuthService, RbacService, JwtModule],
 })
 export class AuthModule {}

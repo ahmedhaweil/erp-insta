@@ -26,7 +26,7 @@ export const accountingService = {
     api.post<ApiResponse<JournalEntry>>('/accounting/journal-entries', data).then((r) => r.data.data),
 
   postJournalEntry: (id: string) =>
-    api.post<ApiResponse<JournalEntry>>(`/accounting/journal-entries/${id}/post`).then((r) => r.data.data),
+    api.patch<ApiResponse<JournalEntry>>(`/accounting/journal-entries/${id}/post`).then((r) => r.data.data),
 
   reverseJournalEntry: (id: string) =>
     api.post<ApiResponse<JournalEntry>>(`/accounting/journal-entries/${id}/reverse`).then((r) => r.data.data),

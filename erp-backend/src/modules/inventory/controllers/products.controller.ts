@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { ProductsService } from '../services/products.service';
 import { CreateProductDto } from '../dto/create-product.dto';
@@ -37,5 +37,11 @@ export class ProductsController {
     @Body() dto: Partial<CreateProductDto>,
   ) {
     return this.productsService.update(tenantId, id, dto);
+  }
+
+  @RequirePermissions({ module: 'inventory', screen: 'products', action: 'delete' })
+  @Delete(':id')
+  deactivate(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.productsService.update(tenantId, id, { isActive: false } as any);
   }
 }

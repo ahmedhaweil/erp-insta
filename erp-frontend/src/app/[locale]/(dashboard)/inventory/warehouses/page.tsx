@@ -1,26 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { inventoryService } from '@/services/inventory.service';
+import { useWarehouses } from '@/hooks/use-products';
 import type { Warehouse } from '@/types';
 
 export default function WarehousesPage() {
   const t = useTranslations('inventory');
   const tc = useTranslations('common');
   const locale = useLocale();
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    inventoryService.getWarehouses()
-      .then(setWarehouses)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: warehouses = [], isLoading } = useWarehouses();
 
   const columns = [
     { key: 'code', header: tc('code') },
@@ -37,7 +29,7 @@ export default function WarehousesPage() {
   return (
     <div>
       <PageHeader title={t('warehouses')} action={{ label: t('newWarehouse'), onClick: () => {} }} />
-      <DataTable columns={columns} data={warehouses} loading={loading} />
+      <DataTable columns={columns} data={warehouses} loading={isLoading} searchable />
     </div>
   );
 }

@@ -3,12 +3,14 @@ import {
   UnauthorizedException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { authenticator } from 'otplib';
 import { User } from '../entities/user.entity';
 import { Session } from '../entities/session.entity';
@@ -131,6 +133,66 @@ export class AuthService {
 
   async logout(userId: string): Promise<void> {
     await this.sessionRepo.update({ userId, revoked: false }, { revoked: true });
+  }
+
+  async forgotPassword(email: string, tenantSlug: string): Promise<{ message: string }> {
+    const tenant = await this.tenantsService.findBySlug(tenantSlug);
+    const user = await this.userRepo.findOne({
+      where: { email, tenantId: tenant.id },
+    });
+
+    // Always return success to prevent email enumeration
+    if (!user) {
+      return { message: 'If the email exists, a reset link has been sent' };
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = await bcrypt.hash(resetToken, 10);
+
+    user.resetToken = tokenHash;
+    user.resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await this.userRepo.save(user);
+
+    // TODO: Send email with reset link containing resetToken
+    // For now, return the token in response (dev only)
+    return {
+      message: 'If the email exists, a reset link has been sent',
+      // Include token for development/testing purposes
+      ...(this.configService.get('app.env') === 'development' ? { resetToken } : {}),
+    } as any;
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    // Find users with non-expired reset tokens
+    const users = await this.userRepo
+      .createQueryBuilder('user')
+      .where('user.resetTokenExpiry > :now', { now: new Date() })
+      .andWhere('user.resetToken IS NOT NULL')
+      .getMany();
+
+    // Verify token against hashes
+    let matchedUser: User | null = null;
+    for (const user of users) {
+      const isValid = await bcrypt.compare(token, user.resetToken);
+      if (isValid) {
+        matchedUser = user;
+        break;
+      }
+    }
+
+    if (!matchedUser) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    matchedUser.passwordHash = await bcrypt.hash(newPassword, 12);
+    matchedUser.resetToken = null as any;
+    matchedUser.resetTokenExpiry = null as any;
+    matchedUser.failedAttempts = 0;
+    matchedUser.lockedUntil = null as any;
+    await this.userRepo.save(matchedUser);
+
+    return { message: 'Password has been reset successfully' };
   }
 
   async registerUser(tenantId: string, dto: RegisterUserDto): Promise<User> {

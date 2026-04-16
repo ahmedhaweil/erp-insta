@@ -43,6 +43,12 @@ export class Product extends TenantBaseEntity {
   @Column({ name: 'sell_price', type: 'decimal', precision: 18, scale: 4, default: 0 })
   sellPrice: number;
 
+  @Column({ name: 'reorder_level', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  reorderLevel: number;
+
+  @Column({ name: 'reorder_qty', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  reorderQty: number;
+
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 

@@ -1,31 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { salesService } from '@/services/sales.service';
+import { useSalesInvoices, useMarkInvoicePaid } from '@/hooks/use-sales';
 import type { SalesInvoice } from '@/types';
 
 export default function SalesInvoicesPage() {
   const t = useTranslations('sales');
   const tc = useTranslations('common');
-  const [invoices, setInvoices] = useState<SalesInvoice[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
-    try { setInvoices(await salesService.getSalesInvoices()); }
-    catch { /* handle */ }
-    finally { setLoading(false); }
-  };
-
-  const handlePay = async (id: string) => {
-    await salesService.markInvoicePaid(id);
-    loadData();
-  };
+  const { data: invoices = [], isLoading } = useSalesInvoices();
+  const payMutation = useMarkInvoicePaid();
 
   const columns = [
     { key: 'invoiceNumber', header: t('invoiceNumber') },
@@ -37,7 +24,13 @@ export default function SalesInvoicesPage() {
     {
       key: 'actions', header: tc('actions'),
       render: (item: SalesInvoice) => ['draft', 'sent', 'partial'].includes(item.status) ? (
-        <button onClick={(e) => { e.stopPropagation(); handlePay(item.id); }} className="text-sm text-green-600 hover:underline">{t('markPaid')}</button>
+        <button
+          onClick={(e) => { e.stopPropagation(); payMutation.mutate(item.id); }}
+          disabled={payMutation.isPending}
+          className="text-sm text-green-600 hover:underline disabled:opacity-50"
+        >
+          {t('markPaid')}
+        </button>
       ) : null,
     },
   ];
@@ -45,7 +38,7 @@ export default function SalesInvoicesPage() {
   return (
     <div>
       <PageHeader title={t('invoices')} action={{ label: t('newInvoice'), onClick: () => {} }} />
-      <DataTable columns={columns} data={invoices} loading={loading} />
+      <DataTable columns={columns} data={invoices} loading={isLoading} searchable />
     </div>
   );
 }

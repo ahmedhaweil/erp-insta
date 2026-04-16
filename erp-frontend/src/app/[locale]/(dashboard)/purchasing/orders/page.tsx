@@ -1,31 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { purchasingService } from '@/services/purchasing.service';
+import { usePurchaseOrders, useConfirmPurchaseOrder } from '@/hooks/use-purchasing';
 import type { PurchaseOrder } from '@/types';
 
 export default function PurchaseOrdersPage() {
   const t = useTranslations('purchasing');
   const tc = useTranslations('common');
-  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
-    try { setOrders(await purchasingService.getPurchaseOrders()); }
-    catch { /* handle */ }
-    finally { setLoading(false); }
-  };
-
-  const handleConfirm = async (id: string) => {
-    await purchasingService.confirmPurchaseOrder(id);
-    loadData();
-  };
+  const { data: orders = [], isLoading } = usePurchaseOrders();
+  const confirmMutation = useConfirmPurchaseOrder();
 
   const columns = [
     { key: 'orderNumber', header: t('orderNumber') },
@@ -35,7 +22,13 @@ export default function PurchaseOrdersPage() {
     {
       key: 'actions', header: tc('actions'),
       render: (item: PurchaseOrder) => item.status === 'draft' ? (
-        <button onClick={(e) => { e.stopPropagation(); handleConfirm(item.id); }} className="text-sm text-primary-600 hover:underline">{t('confirmOrder')}</button>
+        <button
+          onClick={(e) => { e.stopPropagation(); confirmMutation.mutate(item.id); }}
+          disabled={confirmMutation.isPending}
+          className="text-sm text-primary-600 hover:underline disabled:opacity-50"
+        >
+          {t('confirmOrder')}
+        </button>
       ) : null,
     },
   ];
@@ -43,7 +36,7 @@ export default function PurchaseOrdersPage() {
   return (
     <div>
       <PageHeader title={t('orders')} action={{ label: t('newOrder'), onClick: () => {} }} />
-      <DataTable columns={columns} data={orders} loading={loading} />
+      <DataTable columns={columns} data={orders} loading={isLoading} searchable />
     </div>
   );
 }

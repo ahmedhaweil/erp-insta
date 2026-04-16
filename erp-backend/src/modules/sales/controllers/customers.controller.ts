@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { CustomersService } from '../services/customers.service';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
@@ -37,5 +37,11 @@ export class CustomersController {
     @Body() dto: Partial<CreateCustomerDto>,
   ) {
     return this.customersService.update(tenantId, id, dto);
+  }
+
+  @RequirePermissions({ module: 'sales', screen: 'customers', action: 'delete' })
+  @Delete(':id')
+  deactivate(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.customersService.update(tenantId, id, { isActive: false } as any);
   }
 }

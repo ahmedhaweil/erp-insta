@@ -1,42 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { accountingService } from '@/services/accounting.service';
+import { useJournalEntries, usePostJournalEntry } from '@/hooks/use-accounting';
 import type { JournalEntry } from '@/types';
 
 export default function JournalEntriesPage() {
   const t = useTranslations('accounting');
   const tc = useTranslations('common');
-  const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadEntries();
-  }, []);
-
-  const loadEntries = async () => {
-    try {
-      const data = await accountingService.getJournalEntries();
-      setEntries(data);
-    } catch {
-      // handle error
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePost = async (id: string) => {
-    try {
-      await accountingService.postJournalEntry(id);
-      loadEntries();
-    } catch {
-      // handle error
-    }
-  };
+  const { data: entries = [], isLoading } = useJournalEntries();
+  const postEntry = usePostJournalEntry();
 
   const columns = [
     { key: 'refNumber', header: t('refNumber') },
@@ -61,8 +37,9 @@ export default function JournalEntriesPage() {
       render: (item: JournalEntry) =>
         item.status === 'draft' ? (
           <button
-            onClick={(e) => { e.stopPropagation(); handlePost(item.id); }}
-            className="text-sm text-primary-600 hover:underline"
+            onClick={(e) => { e.stopPropagation(); postEntry.mutate(item.id); }}
+            disabled={postEntry.isPending}
+            className="text-sm text-primary-600 hover:underline disabled:opacity-50"
           >
             {t('postEntry')}
           </button>
@@ -73,7 +50,7 @@ export default function JournalEntriesPage() {
   return (
     <div>
       <PageHeader title={t('journalEntries')} />
-      <DataTable columns={columns} data={entries} loading={loading} />
+      <DataTable columns={columns} data={entries} loading={isLoading} searchable />
     </div>
   );
 }

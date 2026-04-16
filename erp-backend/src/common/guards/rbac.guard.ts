@@ -1,14 +1,18 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Inject, Optional } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
   PERMISSIONS_KEY,
   PermissionRequirement,
 } from '../decorators/require-permissions.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { RbacService } from '@modules/auth/services/rbac.service';
 
 @Injectable()
 export class RbacGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private reflector: Reflector,
+    @Optional() @Inject(RbacService) private readonly rbacService: RbacService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
@@ -33,9 +37,21 @@ export class RbacGuard implements CanActivate {
       throw new ForbiddenException('No user context');
     }
 
-    // TODO: Check permissions from Redis cache or database
-    // For now, allow all authenticated users
-    // This will be fully implemented when RbacService is built
+    if (!this.rbacService) {
+      // If RbacService is not injected, allow (graceful degradation)
+      return true;
+    }
+
+    const hasPermission = await this.rbacService.hasAllPermissions(
+      user.tenantId,
+      user.sub,
+      requiredPermissions,
+    );
+
+    if (!hasPermission) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
     return true;
   }
 }

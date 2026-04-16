@@ -2,11 +2,13 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SalesInvoice, SalesInvoiceStatus } from '../entities/sales-invoice.entity';
 import { SalesInvoiceLine } from '../entities/sales-invoice-line.entity';
+import { Customer } from '../entities/customer.entity';
 import { CreateSalesInvoiceDto } from '../dto/create-sales-invoice.dto';
 
 @Injectable()
@@ -16,6 +18,8 @@ export class SalesInvoicesService {
     private readonly invoiceRepo: Repository<SalesInvoice>,
     @InjectRepository(SalesInvoiceLine)
     private readonly lineRepo: Repository<SalesInvoiceLine>,
+    @InjectRepository(Customer)
+    private readonly customerRepo: Repository<Customer>,
   ) {}
 
   async create(
@@ -35,6 +39,21 @@ export class SalesInvoicesService {
     }, 0);
     const totalAmount = subtotal + taxAmount;
 
+    // Credit limit check
+    if (dto.customerId) {
+      const customer = await this.customerRepo.findOne({
+        where: { id: dto.customerId, tenantId },
+      });
+      if (customer && Number(customer.creditLimit) > 0) {
+        const newBalance = Number(customer.balance) + totalAmount;
+        if (newBalance > Number(customer.creditLimit)) {
+          throw new BadRequestException(
+            `Credit limit exceeded. Limit: ${customer.creditLimit}, Current balance: ${customer.balance}, Invoice: ${totalAmount.toFixed(2)}`,
+          );
+        }
+      }
+    }
+
     const invoice = this.invoiceRepo.create({
       ...dto,
       tenantId,
@@ -47,7 +66,19 @@ export class SalesInvoicesService {
       lines: dto.lines.map((l) => this.lineRepo.create(l)),
     });
 
-    return this.invoiceRepo.save(invoice);
+    const saved = await this.invoiceRepo.save(invoice);
+
+    // Update customer balance (increase outstanding)
+    if (dto.customerId) {
+      await this.customerRepo
+        .createQueryBuilder()
+        .update(Customer)
+        .set({ balance: () => `balance + ${totalAmount}` })
+        .where('id = :id AND tenant_id = :tenantId', { id: dto.customerId, tenantId })
+        .execute();
+    }
+
+    return saved;
   }
 
   async findAll(tenantId: string): Promise<SalesInvoice[]> {
@@ -80,6 +111,18 @@ export class SalesInvoicesService {
 
     invoice.paidAmount = invoice.totalAmount;
     invoice.status = SalesInvoiceStatus.PAID;
-    return this.invoiceRepo.save(invoice);
+    const saved = await this.invoiceRepo.save(invoice);
+
+    // Decrease customer balance on payment
+    if (invoice.customerId) {
+      await this.customerRepo
+        .createQueryBuilder()
+        .update(Customer)
+        .set({ balance: () => `GREATEST(balance - ${Number(invoice.totalAmount)}, 0)` })
+        .where('id = :id AND tenant_id = :tenantId', { id: invoice.customerId, tenantId })
+        .execute();
+    }
+
+    return saved;
   }
 }

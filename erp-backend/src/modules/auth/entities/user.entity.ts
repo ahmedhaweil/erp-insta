@@ -37,6 +37,13 @@ export class User extends TenantBaseEntity {
   @Column({ name: 'two_fa_enabled', default: false })
   twoFaEnabled: boolean;
 
+  @Column({ name: 'reset_token', nullable: true })
+  @Exclude()
+  resetToken: string;
+
+  @Column({ name: 'reset_token_expiry', type: 'timestamptz', nullable: true })
+  resetTokenExpiry: Date;
+
   @OneToMany(() => UserRole, (userRole) => userRole.user)
   userRoles: UserRole[];
 }

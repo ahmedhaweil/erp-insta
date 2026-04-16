@@ -58,7 +58,10 @@
     "cancelled": "Cancelled",
     "paid": "Paid",
     "partial": "Partial",
-    "overdue": "Overdue"
+    "overdue": "Overdue",
+    "confirmDelete": "Are you sure you want to delete this item? This action cannot be undone.",
+    "deleteSuccess": "Deleted successfully",
+    "approved": "Approved"
   },
   "auth": {
     "login": "Login",
