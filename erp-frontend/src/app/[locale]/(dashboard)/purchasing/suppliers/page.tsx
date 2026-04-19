@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import PageHeader from '@/components/ui/PageHeader';
@@ -16,6 +17,7 @@ export default function SuppliersPage() {
   const t = useTranslations('purchasing');
   const tc = useTranslations('common');
   const locale = useLocale();
+  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
 
   const { data: suppliers = [], isLoading } = useSuppliers();
@@ -47,7 +49,7 @@ export default function SuppliersPage() {
   return (
     <div>
       <PageHeader title={t('suppliers')} action={{ label: t('newSupplier'), onClick: () => setShowModal(true) }} />
-      <DataTable columns={columns} data={suppliers} loading={isLoading} searchable />
+      <DataTable columns={columns} data={suppliers} loading={isLoading} searchable onRowClick={(item) => router.push(`/purchasing/suppliers/${item.id}`)} />
 
       <Modal isOpen={showModal} onClose={() => { setShowModal(false); reset(); }} title={t('newSupplier')} size="lg">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

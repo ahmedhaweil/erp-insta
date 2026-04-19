@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import PageHeader from '@/components/ui/PageHeader';
@@ -16,6 +17,7 @@ export default function ProductsPage() {
   const t = useTranslations('inventory');
   const tc = useTranslations('common');
   const locale = useLocale();
+  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
 
   const { data: products = [], isLoading } = useProducts();
@@ -72,7 +74,7 @@ export default function ProductsPage() {
   return (
     <div>
       <PageHeader title={t('products')} action={{ label: t('newProduct'), onClick: () => setShowModal(true) }} />
-      <DataTable columns={columns} data={products} loading={isLoading} searchable />
+      <DataTable columns={columns} data={products} loading={isLoading} searchable onRowClick={(item) => router.push(`/inventory/products/${item.id}`)} />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={t('newProduct')} size="lg">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

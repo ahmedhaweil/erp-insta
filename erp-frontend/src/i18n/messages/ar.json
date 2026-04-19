@@ -61,7 +61,10 @@
     "overdue": "متأخر",
     "confirmDelete": "هل أنت متأكد من حذف هذا العنصر؟ لا يمكن التراجع عن هذا الإجراء.",
     "deleteSuccess": "تم الحذف بنجاح",
-    "approved": "معتمد"
+    "approved": "معتمد",
+    "details": "التفاصيل",
+    "editMode": "وضع التعديل",
+    "viewMode": "وضع العرض"
   },
   "auth": {
     "login": "تسجيل الدخول",
@@ -101,6 +104,9 @@
     "eInvoices": "الفواتير الإلكترونية",
     "notifications": "الإشعارات",
     "reports": "التقارير",
+    "trialBalance": "ميزان المراجعة",
+    "profitLoss": "الأرباح والخسائر",
+    "balanceSheet": "الميزانية العمومية",
     "settings": "الإعدادات"
   },
   "dashboard": {
@@ -213,7 +219,11 @@
     "confirmOrder": "تأكيد الأمر",
     "cancelOrder": "إلغاء الأمر",
     "approveInvoice": "اعتماد الفاتورة",
-    "markPaid": "تحديد كمدفوع"
+    "markPaid": "تحديد كمدفوع",
+    "taxId": "الرقم الضريبي",
+    "balance": "الرصيد",
+    "creditLimit": "حد الائتمان",
+    "dueDate": "تاريخ الاستحقاق"
   },
   "pos": {
     "title": "نقاط البيع",
@@ -232,7 +242,14 @@
     "newSale": "بيع جديد",
     "todaySales": "مبيعات اليوم",
     "totalSales": "إجمالي المبيعات",
-    "totalOrders": "عدد الطلبات"
+    "totalOrders": "عدد الطلبات",
+    "searchProducts": "بحث عن منتج...",
+    "addToCart": "أضف للسلة",
+    "cart": "السلة",
+    "completeSale": "إتمام البيع",
+    "items": "عناصر",
+    "qty": "الكمية",
+    "changeAmount": "الباقي"
   },
   "compliance": {
     "title": "الامتثال الضريبي",
@@ -273,5 +290,29 @@
     "branches": "الفروع",
     "users": "المستخدمون",
     "roles": "الأدوار"
+  },
+  "reports": {
+    "title": "التقارير",
+    "trialBalance": "ميزان المراجعة",
+    "profitLoss": "الأرباح والخسائر",
+    "balanceSheet": "الميزانية العمومية",
+    "fromDate": "من تاريخ",
+    "toDate": "إلى تاريخ",
+    "asOfDate": "حتى تاريخ",
+    "generateReport": "إنشاء التقرير",
+    "accountCode": "كود الحساب",
+    "accountName": "اسم الحساب",
+    "totalRevenue": "إجمالي الإيرادات",
+    "totalExpenses": "إجمالي المصروفات",
+    "netIncome": "صافي الدخل",
+    "totalAssets": "إجمالي الأصول",
+    "totalLiabilities": "إجمالي الخصوم",
+    "totalEquity": "إجمالي حقوق الملكية",
+    "revenue": "الإيرادات",
+    "expenses": "المصروفات",
+    "assets": "الأصول",
+    "liabilities": "الخصوم",
+    "equity": "حقوق الملكية",
+    "balance": "الرصيد"
   }
 }

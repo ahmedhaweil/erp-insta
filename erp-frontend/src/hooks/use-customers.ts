@@ -47,3 +47,17 @@ export function useUpdateCustomer() {
     },
   });
 }
+
+export function useDeleteCustomer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => salesService.deleteCustomer(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers'] });
+      toast.success('Customer deleted');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to delete customer');
+    },
+  });
+}

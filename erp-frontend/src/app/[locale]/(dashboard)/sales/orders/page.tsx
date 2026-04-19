@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -10,6 +11,7 @@ import type { SalesOrder } from '@/types';
 export default function SalesOrdersPage() {
   const t = useTranslations('sales');
   const tc = useTranslations('common');
+  const router = useRouter();
 
   const { data: orders = [], isLoading } = useSalesOrders();
   const confirmMutation = useConfirmSalesOrder();
@@ -36,7 +38,7 @@ export default function SalesOrdersPage() {
   return (
     <div>
       <PageHeader title={t('orders')} action={{ label: t('newOrder'), onClick: () => {} }} />
-      <DataTable columns={columns} data={orders} loading={isLoading} searchable />
+      <DataTable columns={columns} data={orders} loading={isLoading} searchable onRowClick={(item) => router.push(`/sales/orders/${item.id}`)} />
     </div>
   );
 }

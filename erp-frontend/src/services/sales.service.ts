@@ -43,4 +43,7 @@ export const salesService = {
 
   markInvoicePaid: (id: string) =>
     api.post<ApiResponse<SalesInvoice>>(`/sales/invoices/${id}/pay`).then((r) => r.data.data),
+
+  deleteCustomer: (id: string) =>
+    api.delete(`/sales/customers/${id}`).then((r) => r.data),
 };

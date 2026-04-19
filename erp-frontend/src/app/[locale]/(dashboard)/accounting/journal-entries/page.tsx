@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -10,6 +11,7 @@ import type { JournalEntry } from '@/types';
 export default function JournalEntriesPage() {
   const t = useTranslations('accounting');
   const tc = useTranslations('common');
+  const router = useRouter();
 
   const { data: entries = [], isLoading } = useJournalEntries();
   const postEntry = usePostJournalEntry();
@@ -50,7 +52,7 @@ export default function JournalEntriesPage() {
   return (
     <div>
       <PageHeader title={t('journalEntries')} />
-      <DataTable columns={columns} data={entries} loading={isLoading} searchable />
+      <DataTable columns={columns} data={entries} loading={isLoading} searchable onRowClick={(item) => router.push(`/accounting/journal-entries/${item.id}`)} />
     </div>
   );
 }

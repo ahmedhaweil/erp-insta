@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -10,6 +11,7 @@ import type { PurchaseInvoice } from '@/types';
 export default function PurchaseInvoicesPage() {
   const t = useTranslations('purchasing');
   const tc = useTranslations('common');
+  const router = useRouter();
 
   const { data: invoices = [], isLoading } = usePurchaseInvoices();
   const approveMutation = useApprovePurchaseInvoice();
@@ -51,7 +53,7 @@ export default function PurchaseInvoicesPage() {
   return (
     <div>
       <PageHeader title={t('invoices')} action={{ label: t('newInvoice'), onClick: () => {} }} />
-      <DataTable columns={columns} data={invoices} loading={isLoading} searchable />
+      <DataTable columns={columns} data={invoices} loading={isLoading} searchable onRowClick={(item) => router.push(`/purchasing/invoices/${item.id}`)} />
     </div>
   );
 }

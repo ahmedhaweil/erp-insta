@@ -61,7 +61,10 @@
     "overdue": "Overdue",
     "confirmDelete": "Are you sure you want to delete this item? This action cannot be undone.",
     "deleteSuccess": "Deleted successfully",
-    "approved": "Approved"
+    "approved": "Approved",
+    "details": "Details",
+    "editMode": "Edit Mode",
+    "viewMode": "View Mode"
   },
   "auth": {
     "login": "Login",
@@ -101,6 +104,9 @@
     "eInvoices": "E-Invoices",
     "notifications": "Notifications",
     "reports": "Reports",
+    "trialBalance": "Trial Balance",
+    "profitLoss": "Profit & Loss",
+    "balanceSheet": "Balance Sheet",
     "settings": "Settings"
   },
   "dashboard": {
@@ -213,7 +219,11 @@
     "confirmOrder": "Confirm Order",
     "cancelOrder": "Cancel Order",
     "approveInvoice": "Approve Invoice",
-    "markPaid": "Mark as Paid"
+    "markPaid": "Mark as Paid",
+    "taxId": "Tax ID",
+    "balance": "Balance",
+    "creditLimit": "Credit Limit",
+    "dueDate": "Due Date"
   },
   "pos": {
     "title": "Point of Sale",
@@ -232,7 +242,14 @@
     "newSale": "New Sale",
     "todaySales": "Today's Sales",
     "totalSales": "Total Sales",
-    "totalOrders": "Total Orders"
+    "totalOrders": "Total Orders",
+    "searchProducts": "Search products...",
+    "addToCart": "Add to Cart",
+    "cart": "Cart",
+    "completeSale": "Complete Sale",
+    "items": "items",
+    "qty": "Qty",
+    "changeAmount": "Change"
   },
   "compliance": {
     "title": "Tax Compliance",
@@ -273,5 +290,29 @@
     "branches": "Branches",
     "users": "Users",
     "roles": "Roles"
+  },
+  "reports": {
+    "title": "Reports",
+    "trialBalance": "Trial Balance",
+    "profitLoss": "Profit & Loss",
+    "balanceSheet": "Balance Sheet",
+    "fromDate": "From Date",
+    "toDate": "To Date",
+    "asOfDate": "As of Date",
+    "generateReport": "Generate Report",
+    "accountCode": "Account Code",
+    "accountName": "Account Name",
+    "totalRevenue": "Total Revenue",
+    "totalExpenses": "Total Expenses",
+    "netIncome": "Net Income",
+    "totalAssets": "Total Assets",
+    "totalLiabilities": "Total Liabilities",
+    "totalEquity": "Total Equity",
+    "revenue": "Revenue",
+    "expenses": "Expenses",
+    "assets": "Assets",
+    "liabilities": "Liabilities",
+    "equity": "Equity",
+    "balance": "Balance"
   }
 }

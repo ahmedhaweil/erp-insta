@@ -74,3 +74,45 @@ export function useTransferStock() {
     },
   });
 }
+
+export function useUpdateProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => inventoryService.updateProduct(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['products'] });
+      toast.success('Product updated');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to update product');
+    },
+  });
+}
+
+export function useDeleteProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => inventoryService.deleteProduct(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['products'] });
+      toast.success('Product deleted');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to delete product');
+    },
+  });
+}
+
+export function useCreateWarehouse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => inventoryService.createWarehouse(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['warehouses'] });
+      toast.success('Warehouse created');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to create warehouse');
+    },
+  });
+}

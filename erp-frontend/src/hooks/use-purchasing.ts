@@ -80,3 +80,69 @@ export function useMarkPurchaseInvoicePaid() {
     },
   });
 }
+
+export function useSupplier(id: string) {
+  return useQuery({
+    queryKey: ['suppliers', id],
+    queryFn: () => purchasingService.getSupplier(id),
+    enabled: !!id,
+  });
+}
+
+export function usePurchaseOrder(id: string) {
+  return useQuery({
+    queryKey: ['purchase-orders', id],
+    queryFn: () => purchasingService.getPurchaseOrder(id),
+    enabled: !!id,
+  });
+}
+
+export function usePurchaseInvoice(id: string) {
+  return useQuery({
+    queryKey: ['purchase-invoices', id],
+    queryFn: () => purchasingService.getPurchaseInvoice(id),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateSupplier() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => purchasingService.updateSupplier(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['suppliers'] });
+      toast.success('Supplier updated');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to update supplier');
+    },
+  });
+}
+
+export function useDeleteSupplier() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => purchasingService.deleteSupplier(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['suppliers'] });
+      toast.success('Supplier deleted');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to delete supplier');
+    },
+  });
+}
+
+export function useCancelPurchaseOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => purchasingService.cancelPurchaseOrder(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      toast.success('Purchase order cancelled');
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to cancel order');
+    },
+  });
+}

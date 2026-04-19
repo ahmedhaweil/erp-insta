@@ -28,4 +28,13 @@ export const inventoryService = {
 
   transferStock: (data: { productId: string; fromWarehouseId: string; toWarehouseId: string; quantity: number }) =>
     api.post<ApiResponse<any>>('/inventory/stock/transfer', data).then((r) => r.data.data),
+
+  deleteProduct: (id: string) =>
+    api.delete(`/inventory/products/${id}`).then((r) => r.data),
+
+  createWarehouse: (data: { code: string; nameAr: string; nameEn?: string; branchId: string; address?: string }) =>
+    api.post<ApiResponse<Warehouse>>('/inventory/warehouses', data).then((r) => r.data.data),
+
+  updateWarehouse: (id: string, data: any) =>
+    api.patch<ApiResponse<Warehouse>>(`/inventory/warehouses/${id}`, data).then((r) => r.data.data),
 };

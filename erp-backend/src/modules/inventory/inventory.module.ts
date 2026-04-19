@@ -10,6 +10,7 @@ import { ProductsService } from './services/products.service';
 import { StockService } from './services/stock.service';
 import { ProductsController } from './controllers/products.controller';
 import { StockController } from './controllers/stock.controller';
+import { WarehousesController } from './controllers/warehouses.controller';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { StockController } from './controllers/stock.controller';
       StockMovement,
     ]),
   ],
-  controllers: [ProductsController, StockController],
+  controllers: [ProductsController, StockController, WarehousesController],
   providers: [ProductsService, StockService],
   exports: [ProductsService, StockService],
 })

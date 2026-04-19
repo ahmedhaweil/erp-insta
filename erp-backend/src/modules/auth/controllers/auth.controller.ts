@@ -17,6 +17,13 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Post('setup')
+  @HttpCode(HttpStatus.OK)
+  setup() {
+    return this.authService.setup();
+  }
+
+  @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto, @Req() req: Request) {

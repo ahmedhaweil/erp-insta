@@ -195,6 +195,44 @@ export class AuthService {
     return { message: 'Password has been reset successfully' };
   }
 
+  async setup(): Promise<{ tenant: any; user: any; credentials: any }> {
+    // Check if any tenant exists - only allow setup on empty DB
+    const existingTenants = await this.tenantsService.findAll();
+    if (existingTenants && existingTenants.length > 0) {
+      throw new ForbiddenException('System already set up. Use normal login.');
+    }
+
+    // Create default tenant
+    const tenant = await this.tenantsService.create({
+      name: 'Demo Company',
+      slug: 'demo',
+      plan: 'enterprise',
+      country: 'SA',
+      email: 'admin@demo.com',
+    });
+
+    // Create admin user
+    const passwordHash = await bcrypt.hash('Admin@123', 12);
+    const user = this.userRepo.create({
+      name: 'Admin User',
+      email: 'admin@demo.com',
+      passwordHash,
+      tenantId: tenant.id,
+      isActive: true,
+    });
+    const savedUser = await this.userRepo.save(user);
+
+    return {
+      tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug },
+      user: { id: savedUser.id, email: savedUser.email, name: savedUser.name },
+      credentials: {
+        email: 'admin@demo.com',
+        password: 'Admin@123',
+        tenantSlug: 'demo',
+      },
+    };
+  }
+
   async registerUser(tenantId: string, dto: RegisterUserDto): Promise<User> {
     const existing = await this.userRepo.findOne({
       where: { email: dto.email, tenantId },

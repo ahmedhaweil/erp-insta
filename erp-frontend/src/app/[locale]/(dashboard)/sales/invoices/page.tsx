@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -10,6 +11,7 @@ import type { SalesInvoice } from '@/types';
 export default function SalesInvoicesPage() {
   const t = useTranslations('sales');
   const tc = useTranslations('common');
+  const router = useRouter();
 
   const { data: invoices = [], isLoading } = useSalesInvoices();
   const payMutation = useMarkInvoicePaid();
@@ -38,7 +40,7 @@ export default function SalesInvoicesPage() {
   return (
     <div>
       <PageHeader title={t('invoices')} action={{ label: t('newInvoice'), onClick: () => {} }} />
-      <DataTable columns={columns} data={invoices} loading={isLoading} searchable />
+      <DataTable columns={columns} data={invoices} loading={isLoading} searchable onRowClick={(item) => router.push(`/sales/invoices/${item.id}`)} />
     </div>
   );
 }

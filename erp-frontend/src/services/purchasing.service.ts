@@ -46,4 +46,7 @@ export const purchasingService = {
 
   markPurchaseInvoicePaid: (id: string) =>
     api.post<ApiResponse<PurchaseInvoice>>(`/purchasing/invoices/${id}/pay`).then((r) => r.data.data),
+
+  deleteSupplier: (id: string) =>
+    api.delete(`/purchasing/suppliers/${id}`).then((r) => r.data),
 };

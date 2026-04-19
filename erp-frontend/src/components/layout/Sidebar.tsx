@@ -15,6 +15,7 @@ import {
   Bell,
   Settings,
   ChevronDown,
+  BarChart3,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -81,6 +82,15 @@ export default function Sidebar() {
       items: [
         { key: 'taxConfig', href: '/compliance/tax-config' },
         { key: 'eInvoices', href: '/compliance/e-invoices' },
+      ],
+    },
+    {
+      key: 'reports',
+      icon: <BarChart3 size={20} />,
+      items: [
+        { key: 'trialBalance', href: '/reports/trial-balance' },
+        { key: 'profitLoss', href: '/reports/profit-loss' },
+        { key: 'balanceSheet', href: '/reports/balance-sheet' },
       ],
     },
     {

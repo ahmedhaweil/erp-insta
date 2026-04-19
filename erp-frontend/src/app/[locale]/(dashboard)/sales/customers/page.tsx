@@ -2,13 +2,15 @@
 
 import { useState } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { useCustomers, useCreateCustomer } from '@/hooks/use-customers';
+import { useCustomers, useCreateCustomer, useDeleteCustomer } from '@/hooks/use-customers';
 import { customerSchema, type CustomerFormData } from '@/lib/validations/customer.schema';
 import type { Customer } from '@/types';
 
@@ -16,10 +18,13 @@ export default function CustomersPage() {
   const t = useTranslations('sales');
   const tc = useTranslations('common');
   const locale = useLocale();
+  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data: customers = [], isLoading } = useCustomers();
   const createMutation = useCreateCustomer();
+  const deleteMutation = useDeleteCustomer();
 
   const {
     register,
@@ -47,6 +52,17 @@ export default function CustomersPage() {
     { key: 'balance', header: t('balance'), render: (item: Customer) => Number(item.balance).toFixed(2) },
     { key: 'creditLimit', header: t('creditLimit'), render: (item: Customer) => Number(item.creditLimit).toFixed(2) },
     { key: 'isActive', header: tc('status'), render: (item: Customer) => <StatusBadge status={item.isActive ? 'active' : 'inactive'} label={item.isActive ? tc('active') : tc('inactive')} /> },
+    {
+      key: 'actions', header: tc('actions'),
+      render: (item: Customer) => (
+        <button
+          onClick={(e) => { e.stopPropagation(); setDeleteId(item.id); }}
+          className="text-sm text-red-600 hover:underline"
+        >
+          {tc('delete')}
+        </button>
+      ),
+    },
   ];
 
   return (
@@ -57,6 +73,21 @@ export default function CustomersPage() {
         data={customers}
         loading={isLoading}
         searchable
+        onRowClick={(item) => router.push(`/sales/customers/${item.id}`)}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => {
+          if (deleteId) {
+            deleteMutation.mutate(deleteId, { onSettled: () => setDeleteId(null) });
+          }
+        }}
+        title={tc('confirmDelete')}
+        message={tc('confirmDeleteMessage')}
+        destructive
+        loading={deleteMutation.isPending}
       />
 
       <Modal isOpen={showModal} onClose={() => { setShowModal(false); reset(); }} title={t('newCustomer')} size="lg">
