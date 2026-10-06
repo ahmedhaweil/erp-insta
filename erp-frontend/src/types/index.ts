@@ -116,10 +116,14 @@ export interface SalesOrder {
   customerId: string;
   orderNumber: string;
   date: string;
-  status: 'draft' | 'confirmed' | 'delivered' | 'cancelled';
+  status: 'draft' | 'sent' | 'confirmed' | 'delivered' | 'cancelled';
   subtotal: number;
   taxAmount: number;
   totalAmount: number;
+  warehouseId?: string | null;
+  validityDate?: string | null;
+  invoiceStatus?: 'nothing' | 'to_invoice' | 'partial' | 'invoiced';
+  deliveryStatus?: 'pending' | 'partial' | 'delivered';
   lines: OrderLine[];
 }
 
@@ -131,6 +135,10 @@ export interface OrderLine {
   discount: number;
   taxRate: number;
   lineTotal: number;
+  qtyDelivered?: number;
+  qtyInvoiced?: number;
+  qtyReceived?: number;
+  qtyBilled?: number;
 }
 
 export interface SalesInvoice {
@@ -139,7 +147,9 @@ export interface SalesInvoice {
   invoiceNumber: string;
   date: string;
   dueDate: string;
-  status: 'draft' | 'sent' | 'paid' | 'partial' | 'overdue' | 'cancelled';
+  status: 'draft' | 'posted' | 'sent' | 'paid' | 'partial' | 'overdue' | 'cancelled';
+  moveType?: 'invoice' | 'credit_note';
+  reversedInvoiceId?: string | null;
   subtotal: number;
   taxAmount: number;
   totalAmount: number;
@@ -166,7 +176,9 @@ export interface PurchaseOrder {
   supplierId: string;
   orderNumber: string;
   date: string;
-  status: 'draft' | 'confirmed' | 'received' | 'cancelled';
+  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  warehouseId?: string | null;
+  billStatus?: 'nothing' | 'to_bill' | 'partial' | 'billed';
   subtotal: number;
   taxAmount: number;
   totalAmount: number;
@@ -180,6 +192,8 @@ export interface PurchaseInvoice {
   date: string;
   dueDate: string;
   status: 'draft' | 'approved' | 'paid' | 'partial' | 'overdue' | 'cancelled';
+  moveType?: 'bill' | 'refund';
+  supplierReference?: string | null;
   subtotal: number;
   taxAmount: number;
   totalAmount: number;
@@ -248,4 +262,42 @@ export interface Tenant {
   plan: string;
   isActive: boolean;
   country: string;
+}
+
+// Payments
+export interface Payment {
+  id: string;
+  paymentNumber: string;
+  partnerType: 'customer' | 'supplier';
+  partnerId: string;
+  direction: 'inbound' | 'outbound';
+  date: string;
+  amount: number;
+  allocatedAmount: number;
+  method: 'cash' | 'bank' | 'card' | 'cheque';
+  reference: string | null;
+  status: 'posted' | 'cancelled';
+}
+
+export interface CreatePaymentInput {
+  partnerType: 'customer' | 'supplier';
+  partnerId: string;
+  amount: number;
+  date: string;
+  method?: Payment['method'];
+  reference?: string;
+  allocations?: { invoiceId: string; amount: number }[];
+  autoAllocate?: boolean;
+}
+
+export interface AgedReport {
+  asOf: string;
+  partners: {
+    partnerId: string;
+    partnerName: string;
+    buckets: Record<'current' | '1-30' | '31-60' | '61-90' | '90+', number>;
+    total: number;
+  }[];
+  totals: Record<'current' | '1-30' | '31-60' | '61-90' | '90+', number>;
+  total: number;
 }

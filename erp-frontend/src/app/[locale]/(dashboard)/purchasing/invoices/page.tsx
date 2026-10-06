@@ -5,6 +5,8 @@ import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { usePurchaseInvoices, useApprovePurchaseInvoice, useMarkPurchaseInvoicePaid } from '@/hooks/use-purchasing';
+import { useDocumentAction } from '@/hooks/use-document-action';
+import { purchasingService } from '@/services/purchasing.service';
 import type { PurchaseInvoice } from '@/types';
 
 export default function PurchaseInvoicesPage() {
@@ -14,6 +16,13 @@ export default function PurchaseInvoicesPage() {
   const { data: invoices = [], isLoading } = usePurchaseInvoices();
   const approveMutation = useApprovePurchaseInvoice();
   const payMutation = useMarkPurchaseInvoicePaid();
+  const cancelMutation = useDocumentAction((id: string) => purchasingService.cancelPurchaseInvoice(id), {
+    invalidate: ['purchase-invoices', 'suppliers'], success: t('billCancelled'), error: tc('error'),
+  });
+  const refundMutation = useDocumentAction(
+    (id: string) => purchasingService.refundPurchaseInvoice(id, { post: true }),
+    { invalidate: ['purchase-invoices', 'suppliers'], success: t('refundCreated'), error: tc('error') },
+  );
 
   const columns = [
     { key: 'invoiceNumber', header: t('invoiceNumber') },
@@ -34,13 +43,31 @@ export default function PurchaseInvoicesPage() {
               {t('approveInvoice')}
             </button>
           )}
-          {['approved', 'partial'].includes(item.status) && (
+          {['approved', 'partial'].includes(item.status) && item.moveType !== 'refund' && (
             <button
               onClick={(e) => { e.stopPropagation(); payMutation.mutate(item.id); }}
               disabled={payMutation.isPending}
               className="text-sm text-green-600 hover:underline disabled:opacity-50"
             >
               {t('markPaid')}
+            </button>
+          )}
+          {!['draft', 'cancelled'].includes(item.status) && item.moveType !== 'refund' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); refundMutation.mutate(item.id); }}
+              disabled={refundMutation.isPending}
+              className="text-sm text-amber-600 hover:underline disabled:opacity-50"
+            >
+              {t('refund')}
+            </button>
+          )}
+          {item.status !== 'cancelled' && Number(item.paidAmount) === 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); cancelMutation.mutate(item.id); }}
+              disabled={cancelMutation.isPending}
+              className="text-sm text-red-600 hover:underline disabled:opacity-50"
+            >
+              {tc('cancel')}
             </button>
           )}
         </div>

@@ -28,6 +28,15 @@ export class SalesOrderLine extends BaseEntity {
   @Column({ nullable: true })
   description: string;
 
+  @Column({ name: 'qty_delivered', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  qtyDelivered: number;
+
+  @Column({ name: 'qty_invoiced', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  qtyInvoiced: number;
+
+  @Column({ name: 'qty_reserved', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  qtyReserved: number;
+
   @ManyToOne(() => SalesOrder, (order) => order.lines)
   @JoinColumn({ name: 'order_id' })
   order: SalesOrder;

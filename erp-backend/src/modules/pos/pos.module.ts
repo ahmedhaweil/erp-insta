@@ -6,6 +6,8 @@ import { PosOrder } from './entities/pos-order.entity';
 import { PosOrderLine } from './entities/pos-order-line.entity';
 import { PosService } from './services/pos.service';
 import { PosController } from './controllers/pos.controller';
+import { AccountingModule } from '@modules/accounting/accounting.module';
+import { InventoryModule } from '@modules/inventory/inventory.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { PosController } from './controllers/pos.controller';
       PosOrder,
       PosOrderLine,
     ]),
+    AccountingModule,
+    InventoryModule,
   ],
   controllers: [PosController],
   providers: [PosService],

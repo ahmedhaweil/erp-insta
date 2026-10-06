@@ -28,6 +28,9 @@ export class SalesInvoiceLine extends BaseEntity {
   @Column({ nullable: true })
   description: string;
 
+  @Column({ name: 'order_line_id', type: 'uuid', nullable: true })
+  orderLineId: string;
+
   @ManyToOne(() => SalesInvoice, (invoice) => invoice.lines)
   @JoinColumn({ name: 'invoice_id' })
   invoice: SalesInvoice;

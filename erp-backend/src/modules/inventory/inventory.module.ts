@@ -10,6 +10,9 @@ import { ProductsService } from './services/products.service';
 import { StockService } from './services/stock.service';
 import { ProductsController } from './controllers/products.controller';
 import { StockController } from './controllers/stock.controller';
+import { MasterDataController } from './controllers/master-data.controller';
+import { MasterDataService } from './services/master-data.service';
+import { AccountingModule } from '@modules/accounting/accounting.module';
 
 @Module({
   imports: [
@@ -21,9 +24,10 @@ import { StockController } from './controllers/stock.controller';
       Stock,
       StockMovement,
     ]),
+    AccountingModule,
   ],
-  controllers: [ProductsController, StockController],
-  providers: [ProductsService, StockService],
+  controllers: [ProductsController, StockController, MasterDataController],
+  providers: [ProductsService, StockService, MasterDataService],
   exports: [ProductsService, StockService],
 })
 export class InventoryModule {}

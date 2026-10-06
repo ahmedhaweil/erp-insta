@@ -46,4 +46,22 @@ export const purchasingService = {
 
   markPurchaseInvoicePaid: (id: string) =>
     api.post<ApiResponse<PurchaseInvoice>>(`/purchasing/invoices/${id}/pay`).then((r) => r.data.data),
+
+  receivePurchaseOrder: (id: string, data: { warehouseId?: string; lines?: { lineId: string; quantity: number }[] } = {}) =>
+    api.post<ApiResponse<PurchaseOrder>>(`/purchasing/orders/${id}/receive`, data).then((r) => r.data.data),
+
+  billPurchaseOrder: (id: string, data: { supplierReference?: string; post?: boolean } = {}) =>
+    api.post<ApiResponse<PurchaseInvoice>>(`/purchasing/orders/${id}/bill`, data).then((r) => r.data.data),
+
+  cancelPurchaseInvoice: (id: string) =>
+    api.post<ApiResponse<PurchaseInvoice>>(`/purchasing/invoices/${id}/cancel`).then((r) => r.data.data),
+
+  refundPurchaseInvoice: (id: string, data: { reason?: string; post?: boolean } = {}) =>
+    api.post<ApiResponse<PurchaseInvoice>>(`/purchasing/invoices/${id}/refund`, data).then((r) => r.data.data),
+
+  getReplenishment: () =>
+    api.get<ApiResponse<any[]>>('/purchasing/replenishment').then((r) => r.data.data),
+
+  generateReplenishment: (data: { warehouseId?: string; productIds?: string[] } = {}) =>
+    api.post<ApiResponse<{ orders: PurchaseOrder[]; skipped: any[] }>>('/purchasing/replenishment/generate', data).then((r) => r.data.data),
 };

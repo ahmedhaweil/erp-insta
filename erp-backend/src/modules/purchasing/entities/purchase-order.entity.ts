@@ -3,8 +3,16 @@ import { TenantBaseEntity } from '@shared/entities/tenant-base.entity';
 import { Supplier } from './supplier.entity';
 import { PurchaseOrderLine } from './purchase-order-line.entity';
 
+export enum PurchaseOrderBillStatus {
+  NOTHING = 'nothing',
+  TO_BILL = 'to_bill',
+  PARTIAL = 'partial',
+  BILLED = 'billed',
+}
+
 export enum PurchaseOrderStatus {
   DRAFT = 'draft',
+  SENT = 'sent',
   CONFIRMED = 'confirmed',
   RECEIVED = 'received',
   CANCELLED = 'cancelled',
@@ -47,6 +55,16 @@ export class PurchaseOrder extends TenantBaseEntity {
 
   @Column({ name: 'branch_id', type: 'uuid', nullable: true })
   branchId: string;
+
+  /** Warehouse goods are received into. */
+  @Column({ name: 'warehouse_id', type: 'uuid', nullable: true })
+  warehouseId: string;
+
+  @Column({ name: 'expected_date', type: 'date', nullable: true })
+  expectedDate: string;
+
+  @Column({ name: 'bill_status', default: PurchaseOrderBillStatus.NOTHING })
+  billStatus: PurchaseOrderBillStatus;
 
   @ManyToOne(() => Supplier)
   @JoinColumn({ name: 'supplier_id' })

@@ -32,22 +32,32 @@ export class DashboardService {
       .split('T')[0];
     const today = now.toISOString().split('T')[0];
 
-    // Total revenue this month (paid sales invoices)
+    // Revenue this month: untaxed amount of posted invoices net of credit notes
     const revenueResult = await this.salesInvoiceRepo
       .createQueryBuilder('inv')
-      .select('COALESCE(SUM(inv.totalAmount), 0)', 'total')
+      .select(
+        `COALESCE(SUM(CASE WHEN inv.moveType = 'credit_note' THEN -inv.subtotal ELSE inv.subtotal END), 0)`,
+        'total',
+      )
       .where('inv.tenantId = :tenantId', { tenantId })
-      .andWhere('inv.status = :status', { status: SalesInvoiceStatus.PAID })
+      .andWhere('inv.status NOT IN (:...excluded)', {
+        excluded: [SalesInvoiceStatus.DRAFT, SalesInvoiceStatus.CANCELLED],
+      })
       .andWhere('inv.date >= :from', { from: startOfMonth })
       .andWhere('inv.date <= :to', { to: today })
       .getRawOne();
 
-    // Total expenses this month (paid purchase invoices)
+    // Expenses this month: untaxed amount of approved bills net of vendor refunds
     const expensesResult = await this.purchaseInvoiceRepo
       .createQueryBuilder('inv')
-      .select('COALESCE(SUM(inv.totalAmount), 0)', 'total')
+      .select(
+        `COALESCE(SUM(CASE WHEN inv.moveType = 'refund' THEN -inv.subtotal ELSE inv.subtotal END), 0)`,
+        'total',
+      )
       .where('inv.tenantId = :tenantId', { tenantId })
-      .andWhere('inv.status = :status', { status: PurchaseInvoiceStatus.PAID })
+      .andWhere('inv.status NOT IN (:...excluded)', {
+        excluded: [PurchaseInvoiceStatus.DRAFT, PurchaseInvoiceStatus.CANCELLED],
+      })
       .andWhere('inv.date >= :from', { from: startOfMonth })
       .andWhere('inv.date <= :to', { to: today })
       .getRawOne();
@@ -56,7 +66,7 @@ export class DashboardService {
     const pendingOrders = await this.salesOrderRepo.count({
       where: {
         tenantId,
-        status: In([SalesOrderStatus.DRAFT, SalesOrderStatus.CONFIRMED]),
+        status: In([SalesOrderStatus.DRAFT, SalesOrderStatus.SENT, SalesOrderStatus.CONFIRMED]),
       },
     });
 

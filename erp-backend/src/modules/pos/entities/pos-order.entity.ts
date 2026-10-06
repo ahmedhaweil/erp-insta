@@ -50,6 +50,14 @@ export class PosOrder extends TenantBaseEntity {
   @Column({ name: 'change_amount', type: 'decimal', precision: 18, scale: 4, nullable: true })
   changeAmount: number;
 
+  /** Portion of the total paid in cash (drives the expected drawer amount). */
+  @Column({ name: 'cash_amount', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  cashAmount: number;
+
+  /** On a refund: the order being refunded. */
+  @Column({ name: 'refunded_order_id', type: 'uuid', nullable: true })
+  refundedOrderId: string;
+
   @Column({ name: 'created_by', type: 'uuid' })
   createdBy: string;
 

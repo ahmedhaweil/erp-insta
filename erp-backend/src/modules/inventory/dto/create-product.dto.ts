@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, IsBoolean, IsUUID, IsNumber } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsBoolean, IsUUID, IsNumber, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProductType } from '../entities/product.entity';
 
@@ -67,4 +67,35 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Minimum on-hand quantity before replenishment' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderLevel?: number;
+
+  @ApiPropertyOptional({ description: 'Quantity to order when replenishing' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderQty?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  preferredSupplierId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  salesTaxRate?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  purchaseTaxRate?: number;
 }

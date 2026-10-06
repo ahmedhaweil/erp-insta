@@ -36,6 +36,10 @@ export class StockMovement extends TenantBaseEntity {
   @Column({ nullable: true })
   description: string;
 
+  /** Unit cost at the time of the move (AVCO valuation). */
+  @Column({ name: 'unit_cost', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  unitCost: number;
+
   @ManyToOne(() => Product)
   @JoinColumn({ name: 'product_id' })
   product: Product;

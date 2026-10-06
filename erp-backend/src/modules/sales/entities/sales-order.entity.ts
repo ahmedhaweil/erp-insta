@@ -3,8 +3,22 @@ import { TenantBaseEntity } from '@shared/entities/tenant-base.entity';
 import { Customer } from './customer.entity';
 import { SalesOrderLine } from './sales-order-line.entity';
 
+export enum SalesOrderInvoiceStatus {
+  NOTHING = 'nothing',
+  TO_INVOICE = 'to_invoice',
+  PARTIAL = 'partial',
+  INVOICED = 'invoiced',
+}
+
+export enum SalesOrderDeliveryStatus {
+  PENDING = 'pending',
+  PARTIAL = 'partial',
+  DELIVERED = 'delivered',
+}
+
 export enum SalesOrderStatus {
   DRAFT = 'draft',
+  SENT = 'sent',
   CONFIRMED = 'confirmed',
   DELIVERED = 'delivered',
   CANCELLED = 'cancelled',
@@ -47,6 +61,20 @@ export class SalesOrder extends TenantBaseEntity {
 
   @Column({ name: 'branch_id', type: 'uuid', nullable: true })
   branchId: string;
+
+  /** Warehouse goods are reserved in and delivered from. */
+  @Column({ name: 'warehouse_id', type: 'uuid', nullable: true })
+  warehouseId: string;
+
+  /** Quotation expiry date; expired quotations cannot be confirmed. */
+  @Column({ name: 'validity_date', type: 'date', nullable: true })
+  validityDate: string;
+
+  @Column({ name: 'invoice_status', default: SalesOrderInvoiceStatus.NOTHING })
+  invoiceStatus: SalesOrderInvoiceStatus;
+
+  @Column({ name: 'delivery_status', default: SalesOrderDeliveryStatus.PENDING })
+  deliveryStatus: SalesOrderDeliveryStatus;
 
   @ManyToOne(() => Customer)
   @JoinColumn({ name: 'customer_id' })

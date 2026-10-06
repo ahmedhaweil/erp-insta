@@ -54,4 +54,10 @@ export class JournalEntriesController {
   ) {
     return this.journalEntriesService.reverse(tenantId, user.sub, id);
   }
+
+  @RequirePermissions({ module: 'accounting', screen: 'journal-entries', action: 'update' })
+  @Post(':id/cancel')
+  cancel(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.journalEntriesService.cancel(tenantId, id);
+  }
 }

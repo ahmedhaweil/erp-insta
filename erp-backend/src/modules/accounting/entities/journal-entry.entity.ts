@@ -38,6 +38,17 @@ export class JournalEntry extends TenantBaseEntity {
   @Column({ name: 'posted_at', type: 'timestamptz', nullable: true })
   postedAt: Date;
 
+  /** Business document that generated this entry (e.g. sales_invoice, payment). */
+  @Column({ name: 'source_type', nullable: true })
+  sourceType: string;
+
+  @Column({ name: 'source_id', type: 'uuid', nullable: true })
+  sourceId: string;
+
+  /** On a reversal entry: the entry it reverses. */
+  @Column({ name: 'reversed_entry_id', type: 'uuid', nullable: true })
+  reversedEntryId: string;
+
   @ManyToOne(() => Journal)
   @JoinColumn({ name: 'journal_id' })
   journal: Journal;

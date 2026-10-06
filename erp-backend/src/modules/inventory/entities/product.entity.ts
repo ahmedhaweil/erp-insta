@@ -58,6 +58,18 @@ export class Product extends TenantBaseEntity {
   @Column({ name: 'image_url', nullable: true })
   imageUrl: string;
 
+  /** Vendor used by replenishment to generate draft RFQs. */
+  @Column({ name: 'preferred_supplier_id', type: 'uuid', nullable: true })
+  preferredSupplierId: string;
+
+  /** Default sales tax rate (%) proposed on order lines. */
+  @Column({ name: 'sales_tax_rate', type: 'decimal', precision: 5, scale: 2, default: 0 })
+  salesTaxRate: number;
+
+  /** Default purchase tax rate (%) proposed on purchase lines. */
+  @Column({ name: 'purchase_tax_rate', type: 'decimal', precision: 5, scale: 2, default: 0 })
+  purchaseTaxRate: number;
+
   @ManyToOne(() => Category)
   @JoinColumn({ name: 'category_id' })
   category: Category;

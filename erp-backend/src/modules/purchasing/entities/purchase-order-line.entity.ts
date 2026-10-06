@@ -28,6 +28,12 @@ export class PurchaseOrderLine extends BaseEntity {
   @Column({ nullable: true })
   description: string;
 
+  @Column({ name: 'qty_received', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  qtyReceived: number;
+
+  @Column({ name: 'qty_billed', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  qtyBilled: number;
+
   @ManyToOne(() => PurchaseOrder, (order) => order.lines)
   @JoinColumn({ name: 'order_id' })
   order: PurchaseOrder;

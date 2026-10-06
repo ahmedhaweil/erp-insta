@@ -36,6 +36,11 @@ export class Supplier extends TenantBaseEntity {
   @Column({ name: 'credit_limit', type: 'decimal', precision: 18, scale: 4, default: 0 })
   creditLimit: number;
 
+  /** Outstanding payable (posted bills minus refunds and payments). */
   @Column({ type: 'decimal', precision: 18, scale: 4, default: 0 })
   balance: number;
+
+  /** Payment terms in days; drives the default bill due date. */
+  @Column({ name: 'payment_term_days', type: 'int', default: 0 })
+  paymentTermDays: number;
 }

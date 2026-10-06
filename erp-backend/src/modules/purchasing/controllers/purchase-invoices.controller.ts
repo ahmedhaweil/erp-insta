@@ -2,6 +2,7 @@ import { Controller, Get, Post, Param, Body } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { PurchaseInvoicesService } from '../services/purchase-invoices.service';
 import { CreatePurchaseInvoiceDto } from '../dto/create-purchase-invoice.dto';
+import { CreateVendorRefundDto } from '../dto/purchase-actions.dto';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { JwtPayload } from '@common/interfaces/request-with-user.interface';
@@ -37,13 +38,42 @@ export class PurchaseInvoicesController {
 
   @RequirePermissions({ module: 'purchasing', screen: 'invoices', action: 'update' })
   @Post(':id/approve')
-  approve(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.invoicesService.approve(tenantId, id);
+  approve(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.invoicesService.approve(tenantId, id, user.sub);
   }
 
   @RequirePermissions({ module: 'purchasing', screen: 'invoices', action: 'update' })
   @Post(':id/pay')
-  markPaid(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.invoicesService.markPaid(tenantId, id);
+  markPaid(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.invoicesService.markPaid(tenantId, id, user.sub);
+  }
+
+  @RequirePermissions({ module: 'purchasing', screen: 'invoices', action: 'update' })
+  @Post(':id/cancel')
+  cancel(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.invoicesService.cancel(tenantId, user.sub, id);
+  }
+
+  @RequirePermissions({ module: 'purchasing', screen: 'invoices', action: 'create' })
+  @Post(':id/refund')
+  createRefund(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: CreateVendorRefundDto,
+  ) {
+    return this.invoicesService.createRefund(tenantId, user.sub, id, dto);
   }
 }

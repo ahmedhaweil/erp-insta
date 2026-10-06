@@ -33,9 +33,10 @@ export class CreateSalesInvoiceLineDto {
   @IsNumber()
   taxRate?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Ignored: recomputed server-side' })
+  @IsOptional()
   @IsNumber()
-  lineTotal: number;
+  lineTotal?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -57,9 +58,10 @@ export class CreateSalesInvoiceDto {
   @IsString()
   date: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Defaults to date + customer payment terms' })
+  @IsOptional()
   @IsString()
-  dueDate: string;
+  dueDate?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

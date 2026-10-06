@@ -2,6 +2,7 @@ import { Controller, Get, Post, Param, Body } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { PurchaseOrdersService } from '../services/purchase-orders.service';
 import { CreatePurchaseOrderDto } from '../dto/create-purchase-order.dto';
+import { CreateBillFromOrderDto, ReceiveOrderDto } from '../dto/purchase-actions.dto';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { JwtPayload } from '@common/interfaces/request-with-user.interface';
@@ -49,5 +50,33 @@ export class PurchaseOrdersController {
   @Post(':id/cancel')
   cancel(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.ordersService.cancel(tenantId, id);
+  }
+
+  @RequirePermissions({ module: 'purchasing', screen: 'orders', action: 'update' })
+  @Post(':id/send')
+  markSent(@CurrentTenant() tenantId: string, @Param('id') id: string) {
+    return this.ordersService.markSent(tenantId, id);
+  }
+
+  @RequirePermissions({ module: 'purchasing', screen: 'orders', action: 'update' })
+  @Post(':id/receive')
+  receive(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: ReceiveOrderDto,
+  ) {
+    return this.ordersService.receive(tenantId, user.sub, id, dto);
+  }
+
+  @RequirePermissions({ module: 'purchasing', screen: 'invoices', action: 'create' })
+  @Post(':id/bill')
+  createBill(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Body() dto: CreateBillFromOrderDto,
+  ) {
+    return this.ordersService.createBill(tenantId, user.sub, id, dto);
   }
 }
