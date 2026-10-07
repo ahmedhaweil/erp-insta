@@ -20,4 +20,8 @@ export class PosTerminal extends TenantBaseEntity {
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
+
+  /** Warehouse stock is deducted from when orders are paid. */
+  @Column({ name: 'warehouse_id', type: 'uuid', nullable: true })
+  warehouseId: string;
 }

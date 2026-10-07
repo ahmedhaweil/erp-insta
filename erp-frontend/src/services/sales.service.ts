@@ -43,4 +43,22 @@ export const salesService = {
 
   markInvoicePaid: (id: string) =>
     api.post<ApiResponse<SalesInvoice>>(`/sales/invoices/${id}/pay`).then((r) => r.data.data),
+
+  sendQuotation: (id: string) =>
+    api.post<ApiResponse<SalesOrder>>(`/sales/orders/${id}/send`).then((r) => r.data.data),
+
+  deliverSalesOrder: (id: string, data: { warehouseId?: string; lines?: { lineId: string; quantity: number }[] } = {}) =>
+    api.post<ApiResponse<SalesOrder>>(`/sales/orders/${id}/deliver`, data).then((r) => r.data.data),
+
+  invoiceSalesOrder: (id: string, data: { policy?: 'ordered' | 'delivered'; post?: boolean } = {}) =>
+    api.post<ApiResponse<SalesInvoice>>(`/sales/orders/${id}/invoice`, data).then((r) => r.data.data),
+
+  postInvoice: (id: string) =>
+    api.post<ApiResponse<SalesInvoice>>(`/sales/invoices/${id}/post`).then((r) => r.data.data),
+
+  cancelInvoice: (id: string) =>
+    api.post<ApiResponse<SalesInvoice>>(`/sales/invoices/${id}/cancel`).then((r) => r.data.data),
+
+  createCreditNote: (id: string, data: { reason?: string; post?: boolean } = {}) =>
+    api.post<ApiResponse<SalesInvoice>>(`/sales/invoices/${id}/credit-note`, data).then((r) => r.data.data),
 };

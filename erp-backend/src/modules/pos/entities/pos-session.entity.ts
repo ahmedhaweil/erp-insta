@@ -21,6 +21,14 @@ export class PosSession extends TenantBaseEntity {
   @Column({ name: 'closing_cash', type: 'decimal', precision: 18, scale: 4, nullable: true })
   closingCash: number;
 
+  /** Opening cash + cash sales - cash refunds, computed at closing. */
+  @Column({ name: 'expected_cash', type: 'decimal', precision: 18, scale: 4, nullable: true })
+  expectedCash: number;
+
+  /** Counted closing cash minus expected cash (negative = shortage). */
+  @Column({ name: 'cash_difference', type: 'decimal', precision: 18, scale: 4, nullable: true })
+  cashDifference: number;
+
   @Column({ default: 'open' })
   status: 'open' | 'closed';
 }

@@ -33,14 +33,20 @@ export class PurchaseInvoiceLineDto {
   @IsNumber()
   taxRate?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Ignored: recomputed server-side' })
+  @IsOptional()
   @IsNumber()
-  lineTotal: number;
+  lineTotal?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Purchase order line being billed' })
+  @IsOptional()
+  @IsUUID()
+  orderLineId?: string;
 }
 
 export class CreatePurchaseInvoiceDto {
@@ -57,21 +63,30 @@ export class CreatePurchaseInvoiceDto {
   @IsString()
   date: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Defaults to date + supplier payment terms' })
+  @IsOptional()
   @IsString()
-  dueDate: string;
+  dueDate?: string;
 
-  @ApiProperty()
-  @IsNumber()
-  subtotal: number;
+  @ApiPropertyOptional({ description: 'Vendor bill number' })
+  @IsOptional()
+  @IsString()
+  supplierReference?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Ignored: recomputed server-side' })
+  @IsOptional()
   @IsNumber()
-  taxAmount: number;
+  subtotal?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Ignored: recomputed server-side' })
+  @IsOptional()
   @IsNumber()
-  totalAmount: number;
+  taxAmount?: number;
+
+  @ApiPropertyOptional({ description: 'Ignored: recomputed server-side' })
+  @IsOptional()
+  @IsNumber()
+  totalAmount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

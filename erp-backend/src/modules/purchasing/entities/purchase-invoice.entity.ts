@@ -12,6 +12,11 @@ export enum PurchaseInvoiceStatus {
   CANCELLED = 'cancelled',
 }
 
+export enum PurchaseInvoiceType {
+  BILL = 'bill',
+  REFUND = 'refund',
+}
+
 @Entity('purchase_invoices')
 export class PurchaseInvoice extends TenantBaseEntity {
   @Column({ name: 'supplier_id', type: 'uuid' })
@@ -58,6 +63,20 @@ export class PurchaseInvoice extends TenantBaseEntity {
 
   @Column({ name: 'branch_id', type: 'uuid', nullable: true })
   branchId: string;
+
+  @Column({ name: 'move_type', default: PurchaseInvoiceType.BILL })
+  moveType: PurchaseInvoiceType;
+
+  /** On a vendor refund: the bill it reverses. */
+  @Column({ name: 'reversed_invoice_id', type: 'uuid', nullable: true })
+  reversedInvoiceId: string;
+
+  /** Vendor's own bill number, used to detect duplicate bills. */
+  @Column({ name: 'supplier_reference', nullable: true })
+  supplierReference: string;
+
+  @Column({ name: 'posted_at', type: 'timestamptz', nullable: true })
+  postedAt: Date;
 
   @ManyToOne(() => Supplier)
   @JoinColumn({ name: 'supplier_id' })

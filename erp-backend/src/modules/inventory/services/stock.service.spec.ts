@@ -7,6 +7,7 @@ import { Stock } from '../entities/stock.entity';
 import { StockMovement } from '../entities/stock-movement.entity';
 import { Product } from '../entities/product.entity';
 import { Warehouse } from '../entities/warehouse.entity';
+import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
 
 describe('StockService', () => {
   let service: StockService;
@@ -57,6 +58,7 @@ describe('StockService', () => {
         { provide: getRepositoryToken(Product), useValue: productRepo },
         { provide: getRepositoryToken(Warehouse), useValue: warehouseRepo },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: AutoPostingService, useValue: { post: jest.fn().mockResolvedValue(null), preflight: jest.fn() } },
       ],
     }).compile();
 

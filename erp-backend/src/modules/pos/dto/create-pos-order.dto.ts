@@ -54,6 +54,11 @@ export class CreatePosOrderDto {
   @IsNumber()
   cashReceived?: number;
 
+  @ApiPropertyOptional({ description: 'Cash part of a split payment (rest is card)' })
+  @IsOptional()
+  @IsNumber()
+  cashAmount?: number;
+
   @ApiProperty({ type: [PosOrderLineDto] })
   @IsArray()
   @ArrayMinSize(1)

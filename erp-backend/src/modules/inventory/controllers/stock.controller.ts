@@ -45,4 +45,26 @@ export class StockController {
   ) {
     return this.stockService.transfer(tenantId, user.sub, dto);
   }
+
+  @RequirePermissions({ module: 'inventory', screen: 'stock', action: 'read' })
+  @Get('movements')
+  @ApiQuery({ name: 'productId', required: false })
+  @ApiQuery({ name: 'warehouseId', required: false })
+  getMovements(
+    @CurrentTenant() tenantId: string,
+    @Query('productId') productId?: string,
+    @Query('warehouseId') warehouseId?: string,
+  ) {
+    return this.stockService.getMovements(tenantId, productId, warehouseId);
+  }
+
+  @RequirePermissions({ module: 'inventory', screen: 'stock', action: 'read' })
+  @Get('valuation')
+  @ApiQuery({ name: 'warehouseId', required: false })
+  getValuation(
+    @CurrentTenant() tenantId: string,
+    @Query('warehouseId') warehouseId?: string,
+  ) {
+    return this.stockService.getValuation(tenantId, warehouseId);
+  }
 }

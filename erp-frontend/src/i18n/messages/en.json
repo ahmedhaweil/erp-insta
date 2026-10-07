@@ -61,7 +61,10 @@
     "overdue": "Overdue",
     "confirmDelete": "Are you sure you want to delete this item? This action cannot be undone.",
     "deleteSuccess": "Deleted successfully",
-    "approved": "Approved"
+    "approved": "Approved",
+    "sent": "Sent",
+    "delivered": "Delivered",
+    "received": "Received"
   },
   "auth": {
     "login": "Login",
@@ -194,7 +197,29 @@
     "product": "Product",
     "unitPrice": "Unit Price",
     "taxRate": "Tax Rate",
-    "lineTotal": "Line Total"
+    "lineTotal": "Line Total",
+    "sendQuotation": "Send Quotation",
+    "quotationSent": "Quotation marked as sent",
+    "deliver": "Deliver",
+    "deliveryValidated": "Delivery validated",
+    "createInvoice": "Create Invoice",
+    "invoiceCreated": "Draft invoice created",
+    "invoiceStatus": "Invoicing",
+    "invoiceStatuses": {
+      "to_invoice": "To invoice",
+      "partial": "Partially invoiced",
+      "invoiced": "Fully invoiced"
+    },
+    "postInvoice": "Post",
+    "invoicePosted": "Invoice posted",
+    "invoiceCancelled": "Invoice cancelled",
+    "registerPayment": "Register Payment",
+    "paymentRegistered": "Payment registered",
+    "paymentAmountPrompt": "Payment amount",
+    "creditNote": "Credit Note",
+    "creditNoteCreated": "Credit note issued",
+    "invoice": "Invoice",
+    "type": "Type"
   },
   "purchasing": {
     "title": "Purchasing",
@@ -213,7 +238,17 @@
     "confirmOrder": "Confirm Order",
     "cancelOrder": "Cancel Order",
     "approveInvoice": "Approve Invoice",
-    "markPaid": "Mark as Paid"
+    "markPaid": "Mark as Paid",
+    "receive": "Receive",
+    "receiptValidated": "Receipt validated",
+    "createBill": "Create Bill",
+    "billCreated": "Draft bill created",
+    "orderCancelled": "Order cancelled",
+    "generateRfqs": "Replenish (Generate RFQs)",
+    "rfqsGenerated": "Draft RFQs generated",
+    "refund": "Refund",
+    "refundCreated": "Vendor refund issued",
+    "billCancelled": "Bill cancelled"
   },
   "pos": {
     "title": "Point of Sale",

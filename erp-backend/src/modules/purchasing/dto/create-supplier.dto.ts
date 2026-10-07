@@ -54,4 +54,9 @@ export class CreateSupplierDto {
   @IsOptional()
   @IsNumber()
   balance?: number;
+
+  @ApiPropertyOptional({ description: 'Payment terms in days' })
+  @IsOptional()
+  @IsNumber()
+  paymentTermDays?: number;
 }

@@ -14,6 +14,8 @@ interface CachedPermission {
   effect: 'allow' | 'deny';
 }
 
+const SUPERUSER_MODULE = '*';
+
 @Injectable()
 export class RbacService {
   constructor(
@@ -64,6 +66,9 @@ export class RbacService {
     cached: CachedPermission,
     required: PermissionRequirement,
   ): boolean {
+    // System roles (e.g. the seeded Admin) hold a module wildcard
+    if (cached.module === SUPERUSER_MODULE) return true;
+
     // Module must match
     if (cached.module !== required.module) return false;
 
@@ -96,18 +101,27 @@ export class RbacService {
     // Get user's active roles
     const userRoles = await this.userRoleRepo.find({
       where: { userId },
+      relations: ['role'],
     });
 
     const now = new Date();
-    const activeRoleIds = userRoles
-      .filter((ur) => {
-        if (ur.validFrom && ur.validFrom > now) return false;
-        if (ur.validTo && ur.validTo < now) return false;
-        return true;
-      })
-      .map((ur) => ur.roleId);
+    const activeRoles = userRoles.filter((ur) => {
+      if (ur.validFrom && ur.validFrom > now) return false;
+      if (ur.validTo && ur.validTo < now) return false;
+      return true;
+    });
+    const activeRoleIds = activeRoles.map((ur) => ur.roleId);
 
     if (activeRoleIds.length === 0) return [];
+
+    // System roles have every permission (Odoo administrator / superuser)
+    if (activeRoles.some((ur) => ur.role?.isSystemRole && ur.role?.tenantId === tenantId)) {
+      const all: CachedPermission[] = [
+        { module: SUPERUSER_MODULE, screen: null, action: null, field: null, effect: 'allow' },
+      ];
+      await this.cacheService.set(tenantId, cacheKey, all, 300);
+      return all;
+    }
 
     // Get all permissions for these roles
     const rolePermissions = await this.rolePermissionRepo

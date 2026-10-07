@@ -10,6 +10,9 @@ import { JournalEntriesService } from './journal-entries.service';
 import { JournalEntry, JournalEntryStatus } from '../entities/journal-entry.entity';
 import { JournalLine } from '../entities/journal-line.entity';
 import { FiscalYear } from '../entities/fiscal-year.entity';
+import { Account } from '../entities/account.entity';
+import { AccountingSettings } from '../entities/accounting-settings.entity';
+import { SequenceService } from '@shared/services/sequence.service';
 
 describe('JournalEntriesService', () => {
   let service: JournalEntriesService;
@@ -17,6 +20,9 @@ describe('JournalEntriesService', () => {
   let lineRepo: Record<string, jest.Mock>;
   let fiscalYearRepo: Record<string, jest.Mock>;
   let eventEmitter: Record<string, jest.Mock>;
+  let accountRepo: Record<string, jest.Mock>;
+  let settingsRepo: Record<string, jest.Mock>;
+  let sequence: Record<string, jest.Mock>;
 
   const mockEntry = {
     id: 'entry-1',
@@ -53,6 +59,14 @@ describe('JournalEntriesService', () => {
     eventEmitter = {
       emit: jest.fn(),
     };
+    accountRepo = {
+      find: jest.fn().mockResolvedValue([
+        { id: 'acc-1', code: '1000', isActive: true, allowPosting: true },
+        { id: 'acc-2', code: '2000', isActive: true, allowPosting: true },
+      ]),
+    };
+    settingsRepo = { findOne: jest.fn().mockResolvedValue(null) };
+    sequence = { next: jest.fn().mockResolvedValue('JE-000001') };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -61,6 +75,9 @@ describe('JournalEntriesService', () => {
         { provide: getRepositoryToken(JournalLine), useValue: lineRepo },
         { provide: getRepositoryToken(FiscalYear), useValue: fiscalYearRepo },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: getRepositoryToken(Account), useValue: accountRepo },
+        { provide: getRepositoryToken(AccountingSettings), useValue: settingsRepo },
+        { provide: SequenceService, useValue: sequence },
       ],
     }).compile();
 
@@ -89,11 +106,23 @@ describe('JournalEntriesService', () => {
     });
 
     it('should generate sequential ref numbers', async () => {
-      entryRepo.count.mockResolvedValue(42);
+      sequence.next.mockResolvedValue('JE-000043');
 
       const result = await service.create('tenant-1', 'user-1', createDto);
 
       expect(result).toHaveProperty('refNumber', 'JE-000043');
+    });
+
+    it('should reject a line with both a debit and a credit', async () => {
+      await expect(
+        service.create('tenant-1', 'user-1', {
+          ...createDto,
+          lines: [
+            { accountId: 'acc-1', debit: 100, credit: 100 },
+            { accountId: 'acc-2', debit: 0, credit: 0 },
+          ],
+        }),
+      ).rejects.toThrow(UnprocessableEntityException);
     });
 
     it('should throw UnprocessableEntityException if debits != credits', async () => {
@@ -166,6 +195,27 @@ describe('JournalEntriesService', () => {
       );
     });
 
+    it('should refuse to post into a locked period', async () => {
+      entryRepo.findOne.mockResolvedValue({ ...mockEntry });
+      fiscalYearRepo.findOne.mockResolvedValue({ id: 'fy-1', status: 'open' });
+      settingsRepo.findOne.mockResolvedValue({ lockDate: '2024-01-31' });
+
+      await expect(service.post('tenant-1', 'user-1', 'entry-1')).rejects.toThrow(ConflictException);
+    });
+
+    it('should refuse to post on view or inactive accounts', async () => {
+      entryRepo.findOne.mockResolvedValue({ ...mockEntry });
+      fiscalYearRepo.findOne.mockResolvedValue({ id: 'fy-1', status: 'open' });
+      accountRepo.find.mockResolvedValue([
+        { id: 'acc-1', code: '1000', isActive: true, allowPosting: false },
+        { id: 'acc-2', code: '2000', isActive: true, allowPosting: true },
+      ]);
+
+      await expect(service.post('tenant-1', 'user-1', 'entry-1')).rejects.toThrow(
+        UnprocessableEntityException,
+      );
+    });
+
     it('should throw ConflictException if no open fiscal year', async () => {
       entryRepo.findOne.mockResolvedValue({ ...mockEntry });
       fiscalYearRepo.findOne.mockResolvedValue(null);
@@ -173,6 +223,24 @@ describe('JournalEntriesService', () => {
       await expect(service.post('tenant-1', 'user-1', 'entry-1')).rejects.toThrow(
         ConflictException,
       );
+    });
+  });
+
+  describe('createAndPost', () => {
+    it('should not leave a draft entry behind when the period is closed', async () => {
+      fiscalYearRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.createAndPost('tenant-1', 'user-1', {
+          journalId: 'journal-1',
+          date: '2024-01-15',
+          lines: [
+            { accountId: 'acc-1', debit: 10, credit: 0 },
+            { accountId: 'acc-2', debit: 0, credit: 10 },
+          ],
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(entryRepo.save).not.toHaveBeenCalled();
     });
   });
 
@@ -186,12 +254,25 @@ describe('JournalEntriesService', () => {
           { accountId: 'acc-2', debit: 0, credit: 1000, costCenterId: null, branchId: null },
         ],
       };
-      entryRepo.findOne.mockResolvedValue(postedEntry);
-      entryRepo.count.mockResolvedValue(1);
+      entryRepo.findOne
+        .mockResolvedValueOnce(postedEntry) // original
+        .mockResolvedValueOnce(null); // no existing reversal
+      fiscalYearRepo.findOne.mockResolvedValue({ id: 'fy-1', status: 'open' });
 
-      await service.reverse('tenant-1', 'user-1', 'entry-1');
+      await service.reverse('tenant-1', 'user-1', 'entry-1', '2024-02-01');
 
-      expect(entryRepo.save).toHaveBeenCalled();
+      expect(entryRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reversedEntryId: 'entry-1',
+          lines: [
+            expect.objectContaining({ accountId: 'acc-1', debit: 0, credit: 1000 }),
+            expect.objectContaining({ accountId: 'acc-2', debit: 1000, credit: 0 }),
+          ],
+        }),
+      );
+      expect(entryRepo.save).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status: JournalEntryStatus.POSTED }),
+      );
     });
 
     it('should throw ConflictException if entry is not posted', async () => {

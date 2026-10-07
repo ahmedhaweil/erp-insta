@@ -10,10 +10,16 @@ import { FiscalYear } from './entities/fiscal-year.entity';
 import { Currency } from './entities/currency.entity';
 import { ExchangeRate } from './entities/exchange-rate.entity';
 import { Budget } from './entities/budget.entity';
+import { AccountingSettings } from './entities/accounting-settings.entity';
 import { AccountsService } from './services/accounts.service';
 import { JournalEntriesService } from './services/journal-entries.service';
+import { AccountingSettingsService } from './services/accounting-settings.service';
+import { AutoPostingService } from './services/auto-posting.service';
+import { FixedAssetsService } from './services/fixed-assets.service';
+import { FiscalYearsService } from './services/fiscal-years.service';
 import { AccountsController } from './controllers/accounts.controller';
 import { JournalEntriesController } from './controllers/journal-entries.controller';
+import { AccountingConfigController } from './controllers/accounting-config.controller';
 
 @Module({
   imports: [
@@ -28,10 +34,23 @@ import { JournalEntriesController } from './controllers/journal-entries.controll
       Currency,
       ExchangeRate,
       Budget,
+      AccountingSettings,
     ]),
   ],
-  controllers: [AccountsController, JournalEntriesController],
-  providers: [AccountsService, JournalEntriesService],
-  exports: [AccountsService, JournalEntriesService],
+  controllers: [AccountsController, JournalEntriesController, AccountingConfigController],
+  providers: [
+    AccountsService,
+    JournalEntriesService,
+    AccountingSettingsService,
+    AutoPostingService,
+    FixedAssetsService,
+    FiscalYearsService,
+  ],
+  exports: [
+    AccountsService,
+    JournalEntriesService,
+    AccountingSettingsService,
+    AutoPostingService,
+  ],
 })
 export class AccountingModule {}

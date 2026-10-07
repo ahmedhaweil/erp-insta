@@ -33,9 +33,10 @@ export class CreateSalesOrderLineDto {
   @IsNumber()
   taxRate?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Ignored: recomputed server-side' })
+  @IsOptional()
   @IsNumber()
-  lineTotal: number;
+  lineTotal?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -71,6 +72,16 @@ export class CreateSalesOrderDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Warehouse to reserve and deliver from' })
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
+
+  @ApiPropertyOptional({ description: 'Quotation expiry date' })
+  @IsOptional()
+  @IsString()
+  validityDate?: string;
 
   @ApiProperty({ type: [CreateSalesOrderLineDto] })
   @IsArray()

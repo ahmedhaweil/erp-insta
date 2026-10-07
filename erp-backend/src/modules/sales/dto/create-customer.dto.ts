@@ -52,4 +52,9 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsNumber()
   creditLimit?: number;
+
+  @ApiPropertyOptional({ description: 'Payment terms in days' })
+  @IsOptional()
+  @IsNumber()
+  paymentTermDays?: number;
 }

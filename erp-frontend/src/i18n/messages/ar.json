@@ -61,7 +61,10 @@
     "overdue": "متأخر",
     "confirmDelete": "هل أنت متأكد من حذف هذا العنصر؟ لا يمكن التراجع عن هذا الإجراء.",
     "deleteSuccess": "تم الحذف بنجاح",
-    "approved": "معتمد"
+    "approved": "معتمد",
+    "sent": "مرسل",
+    "delivered": "تم التسليم",
+    "received": "تم الاستلام"
   },
   "auth": {
     "login": "تسجيل الدخول",
@@ -194,7 +197,29 @@
     "product": "المنتج",
     "unitPrice": "سعر الوحدة",
     "taxRate": "نسبة الضريبة",
-    "lineTotal": "إجمالي البند"
+    "lineTotal": "إجمالي البند",
+    "sendQuotation": "إرسال عرض السعر",
+    "quotationSent": "تم تعليم عرض السعر كمرسل",
+    "deliver": "تسليم",
+    "deliveryValidated": "تم تأكيد التسليم",
+    "createInvoice": "إنشاء فاتورة",
+    "invoiceCreated": "تم إنشاء مسودة الفاتورة",
+    "invoiceStatus": "الفوترة",
+    "invoiceStatuses": {
+      "to_invoice": "بانتظار الفوترة",
+      "partial": "مفوتر جزئياً",
+      "invoiced": "مفوتر بالكامل"
+    },
+    "postInvoice": "ترحيل",
+    "invoicePosted": "تم ترحيل الفاتورة",
+    "invoiceCancelled": "تم إلغاء الفاتورة",
+    "registerPayment": "تسجيل دفعة",
+    "paymentRegistered": "تم تسجيل الدفعة",
+    "paymentAmountPrompt": "مبلغ الدفعة",
+    "creditNote": "إشعار دائن",
+    "creditNoteCreated": "تم إصدار الإشعار الدائن",
+    "invoice": "فاتورة",
+    "type": "النوع"
   },
   "purchasing": {
     "title": "المشتريات",
@@ -213,7 +238,17 @@
     "confirmOrder": "تأكيد الأمر",
     "cancelOrder": "إلغاء الأمر",
     "approveInvoice": "اعتماد الفاتورة",
-    "markPaid": "تحديد كمدفوع"
+    "markPaid": "تحديد كمدفوع",
+    "receive": "استلام",
+    "receiptValidated": "تم تأكيد الاستلام",
+    "createBill": "إنشاء فاتورة مورد",
+    "billCreated": "تم إنشاء مسودة فاتورة المورد",
+    "orderCancelled": "تم إلغاء الأمر",
+    "generateRfqs": "إعادة التزويد (إنشاء طلبات عروض أسعار)",
+    "rfqsGenerated": "تم إنشاء طلبات عروض الأسعار",
+    "refund": "مرتجع",
+    "refundCreated": "تم إصدار مرتجع المورد",
+    "billCancelled": "تم إلغاء فاتورة المورد"
   },
   "pos": {
     "title": "نقاط البيع",

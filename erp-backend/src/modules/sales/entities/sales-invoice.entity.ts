@@ -5,11 +5,17 @@ import { SalesInvoiceLine } from './sales-invoice-line.entity';
 
 export enum SalesInvoiceStatus {
   DRAFT = 'draft',
+  POSTED = 'posted',
   SENT = 'sent',
   PAID = 'paid',
   PARTIAL = 'partial',
   OVERDUE = 'overdue',
   CANCELLED = 'cancelled',
+}
+
+export enum SalesInvoiceType {
+  INVOICE = 'invoice',
+  CREDIT_NOTE = 'credit_note',
 }
 
 @Entity('sales_invoices')
@@ -58,6 +64,16 @@ export class SalesInvoice extends TenantBaseEntity {
 
   @Column({ name: 'branch_id', type: 'uuid', nullable: true })
   branchId: string;
+
+  @Column({ name: 'move_type', default: SalesInvoiceType.INVOICE })
+  moveType: SalesInvoiceType;
+
+  /** On a credit note: the invoice it reverses. */
+  @Column({ name: 'reversed_invoice_id', type: 'uuid', nullable: true })
+  reversedInvoiceId: string;
+
+  @Column({ name: 'posted_at', type: 'timestamptz', nullable: true })
+  postedAt: Date;
 
   @ManyToOne(() => Customer)
   @JoinColumn({ name: 'customer_id' })

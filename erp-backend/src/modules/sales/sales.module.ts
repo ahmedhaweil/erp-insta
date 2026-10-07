@@ -11,6 +11,8 @@ import { SalesInvoicesService } from './services/sales-invoices.service';
 import { CustomersController } from './controllers/customers.controller';
 import { SalesOrdersController } from './controllers/sales-orders.controller';
 import { SalesInvoicesController } from './controllers/sales-invoices.controller';
+import { AccountingModule } from '@modules/accounting/accounting.module';
+import { InventoryModule } from '@modules/inventory/inventory.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { SalesInvoicesController } from './controllers/sales-invoices.controller
       SalesInvoice,
       SalesInvoiceLine,
     ]),
+    AccountingModule,
+    InventoryModule,
   ],
   controllers: [CustomersController, SalesOrdersController, SalesInvoicesController],
   providers: [CustomersService, SalesOrdersService, SalesInvoicesService],

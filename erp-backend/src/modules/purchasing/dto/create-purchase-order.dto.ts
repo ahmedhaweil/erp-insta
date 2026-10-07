@@ -33,9 +33,10 @@ export class PurchaseOrderLineDto {
   @IsNumber()
   taxRate?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Ignored: recomputed server-side' })
+  @IsOptional()
   @IsNumber()
-  lineTotal: number;
+  lineTotal?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -52,17 +53,20 @@ export class CreatePurchaseOrderDto {
   @IsString()
   date: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Ignored: recomputed server-side' })
+  @IsOptional()
   @IsNumber()
-  subtotal: number;
+  subtotal?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Ignored: recomputed server-side' })
+  @IsOptional()
   @IsNumber()
-  taxAmount: number;
+  taxAmount?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Ignored: recomputed server-side' })
+  @IsOptional()
   @IsNumber()
-  totalAmount: number;
+  totalAmount?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -83,6 +87,16 @@ export class CreatePurchaseOrderDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Warehouse to receive into' })
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  expectedDate?: string;
 
   @ApiProperty({ type: [PurchaseOrderLineDto] })
   @IsArray()

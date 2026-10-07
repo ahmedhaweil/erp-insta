@@ -5,12 +5,22 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import { PurchaseOrder, PurchaseOrderStatus } from '../entities/purchase-order.entity';
 import { PurchaseOrderLine } from '../entities/purchase-order-line.entity';
+import { Supplier } from '../entities/supplier.entity';
+import { Product, ProductType } from '@modules/inventory/entities/product.entity';
+import { PurchaseInvoicesService } from './purchase-invoices.service';
+import { StockService } from '@modules/inventory/services/stock.service';
+import { SequenceService } from '@shared/services/sequence.service';
 
 describe('PurchaseOrdersService', () => {
   let service: PurchaseOrdersService;
   let orderRepo: Record<string, jest.Mock>;
   let lineRepo: Record<string, jest.Mock>;
   let eventEmitter: Record<string, jest.Mock>;
+  let supplierRepo: Record<string, jest.Mock>;
+  let productRepo: Record<string, jest.Mock>;
+  let sequence: Record<string, jest.Mock>;
+  let stockService: Record<string, jest.Mock>;
+  let invoicesService: Record<string, jest.Mock>;
 
   const mockOrder = {
     id: 'po-1',
@@ -36,6 +46,22 @@ describe('PurchaseOrdersService', () => {
     eventEmitter = {
       emit: jest.fn(),
     };
+    lineRepo.save = jest.fn((lines) => lines);
+    supplierRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 'sup-1', isActive: true }),
+    };
+    productRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+    sequence = { next: jest.fn().mockResolvedValue('PO-000001') };
+    stockService = {
+      isStockable: jest.fn().mockResolvedValue(true),
+      receive: jest.fn().mockResolvedValue({}),
+    };
+    invoicesService = {
+      create: jest.fn((_t, _u, dto) => ({ id: 'bill-1', ...dto })),
+      approve: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -43,6 +69,11 @@ describe('PurchaseOrdersService', () => {
         { provide: getRepositoryToken(PurchaseOrder), useValue: orderRepo },
         { provide: getRepositoryToken(PurchaseOrderLine), useValue: lineRepo },
         { provide: EventEmitter2, useValue: eventEmitter },
+        { provide: getRepositoryToken(Supplier), useValue: supplierRepo },
+        { provide: getRepositoryToken(Product), useValue: productRepo },
+        { provide: SequenceService, useValue: sequence },
+        { provide: StockService, useValue: stockService },
+        { provide: PurchaseInvoicesService, useValue: invoicesService },
       ],
     }).compile();
 
@@ -56,7 +87,6 @@ describe('PurchaseOrdersService', () => {
     } as any;
 
     it('should create an order with auto-generated number', async () => {
-      orderRepo.count.mockResolvedValue(0);
 
       const result = await service.create('tenant-1', 'user-1', createDto);
 
@@ -71,16 +101,37 @@ describe('PurchaseOrdersService', () => {
       expect(orderRepo.save).toHaveBeenCalled();
     });
 
-    it('should increment order number based on existing count', async () => {
-      orderRepo.count.mockResolvedValue(42);
+    it('should take the order number from the tenant sequence', async () => {
+      sequence.next.mockResolvedValue('PO-000043');
 
       await service.create('tenant-1', 'user-1', createDto);
 
+      expect(sequence.next).toHaveBeenCalledWith('tenant-1', 'purchase_order', 'PO');
       expect(orderRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           orderNumber: 'PO-000043',
         }),
       );
+    });
+
+    it('should ignore client totals and recompute them from the lines', async () => {
+      await service.create('tenant-1', 'user-1', {
+        supplierId: 'sup-1',
+        subtotal: 1,
+        taxAmount: 1,
+        totalAmount: 1,
+        lines: [{ productId: 'prod-1', quantity: 10, unitPrice: 50, discount: 50, taxRate: 14 }],
+      } as any);
+
+      expect(orderRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ subtotal: 450, taxAmount: 63, totalAmount: 513 }),
+      );
+    });
+
+    it('should reject archived suppliers', async () => {
+      supplierRepo.findOne.mockResolvedValue({ id: 'sup-1', isActive: false });
+
+      await expect(service.create('tenant-1', 'user-1', createDto)).rejects.toThrow();
     });
   });
 
@@ -155,6 +206,87 @@ describe('PurchaseOrdersService', () => {
       orderRepo.findOne.mockResolvedValue({ ...mockOrder, status: PurchaseOrderStatus.RECEIVED });
 
       await expect(service.cancel('tenant-1', 'po-1')).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('receive', () => {
+    const confirmed = () => ({
+      ...mockOrder,
+      status: PurchaseOrderStatus.CONFIRMED,
+      warehouseId: 'wh-1',
+      exchangeRate: 1,
+      lines: [
+        { id: 'l1', productId: 'prod-1', quantity: 10, lineTotal: 450, qtyReceived: 0, qtyBilled: 0, discount: 50, unitPrice: 50, taxRate: 0 },
+      ],
+    });
+
+    it('should receive remaining quantities at net unit cost and close the order', async () => {
+      orderRepo.findOne.mockResolvedValue(confirmed());
+      orderRepo.save.mockImplementation((e) => e);
+
+      const result = await service.receive('tenant-1', 'user-1', 'po-1');
+
+      expect(stockService.receive).toHaveBeenCalledWith(
+        'tenant-1',
+        'user-1',
+        expect.objectContaining({ productId: 'prod-1', warehouseId: 'wh-1', quantity: 10, unitCost: 45 }),
+      );
+      expect(result.status).toBe(PurchaseOrderStatus.RECEIVED);
+    });
+
+    it('should support partial receipts', async () => {
+      orderRepo.findOne.mockResolvedValue(confirmed());
+      orderRepo.save.mockImplementation((e) => e);
+
+      const result = await service.receive('tenant-1', 'user-1', 'po-1', {
+        lines: [{ lineId: 'l1', quantity: 4 }],
+      });
+
+      expect(result.status).toBe(PurchaseOrderStatus.CONFIRMED);
+      expect(result.lines[0].qtyReceived).toBe(4);
+    });
+
+    it('should reject receiving more than ordered', async () => {
+      orderRepo.findOne.mockResolvedValue(confirmed());
+
+      await expect(
+        service.receive('tenant-1', 'user-1', 'po-1', { lines: [{ lineId: 'l1', quantity: 11 }] }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('createBill', () => {
+    it('should bill goods on received quantities only', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        ...mockOrder,
+        status: PurchaseOrderStatus.CONFIRMED,
+        exchangeRate: 1,
+        lines: [
+          { id: 'l1', productId: 'prod-1', quantity: 10, qtyReceived: 4, qtyBilled: 0, unitPrice: 50, discount: 0, taxRate: 14 },
+        ],
+      });
+      productRepo.find.mockResolvedValue([{ id: 'prod-1', type: ProductType.GOODS }]);
+
+      await service.createBill('tenant-1', 'user-1', 'po-1');
+
+      expect(invoicesService.create).toHaveBeenCalledWith(
+        'tenant-1',
+        'user-1',
+        expect.objectContaining({
+          lines: [expect.objectContaining({ productId: 'prod-1', quantity: 4, orderLineId: 'l1' })],
+        }),
+      );
+    });
+
+    it('should refuse to bill goods that were not received', async () => {
+      orderRepo.findOne.mockResolvedValue({
+        ...mockOrder,
+        status: PurchaseOrderStatus.CONFIRMED,
+        lines: [{ id: 'l1', productId: 'prod-1', quantity: 10, qtyReceived: 0, qtyBilled: 0 }],
+      });
+      productRepo.find.mockResolvedValue([{ id: 'prod-1', type: ProductType.GOODS }]);
+
+      await expect(service.createBill('tenant-1', 'user-1', 'po-1')).rejects.toThrow();
     });
   });
 });

@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RbacGuard } from './common/guards/rbac.guard';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { BullModule } from '@nestjs/bullmq';
@@ -17,6 +20,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { EventsModule } from './modules/events/events.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 function buildImports() {
   const imports: any[] = [
@@ -52,6 +56,7 @@ function buildImports() {
     SalesModule,
     PurchasingModule,
     PosModule,
+    PaymentsModule,
     ComplianceModule,
     NotificationsModule,
     RealtimeModule,
@@ -80,5 +85,11 @@ function buildImports() {
 
 @Module({
   imports: buildImports(),
+  providers: [
+    // Authenticate every route except those marked @Public(), then enforce
+    // @RequirePermissions. Guards run in registration order.
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RbacGuard },
+  ],
 })
 export class AppModule {}

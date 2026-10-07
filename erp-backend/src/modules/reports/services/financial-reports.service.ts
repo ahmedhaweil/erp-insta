@@ -31,6 +31,7 @@ export class FinancialReportsService {
     tenantId: string,
     from?: string,
     to?: string,
+    excludeClosingEntries = false,
   ): Promise<{
     accounts: AccountBalance[];
     totalDebit: number;
@@ -61,6 +62,9 @@ export class FinancialReportsService {
 
     if (from) qb.andWhere('entry.date >= :from', { from });
     if (to) qb.andWhere('entry.date <= :to', { to });
+    if (excludeClosingEntries) {
+      qb.andWhere("(entry.sourceType IS NULL OR entry.sourceType <> 'fiscal_year_closing')");
+    }
 
     const results = await qb.getRawMany();
 
@@ -92,14 +96,16 @@ export class FinancialReportsService {
     totalExpenses: number;
     netIncome: number;
   }> {
-    const { accounts } = await this.getTrialBalance(tenantId, from, to);
+    // Year-end closing entries zero income/expense accounts; the P&L ignores them
+    const { accounts } = await this.getTrialBalance(tenantId, from, to, true);
 
     const revenue = accounts.filter((a) => a.type === AccountType.REVENUE);
     const expenses = accounts.filter((a) => a.type === AccountType.EXPENSE);
 
-    // Revenue is normally credit, so balance is negative; use absolute value
-    const totalRevenue = revenue.reduce((sum, a) => sum + Math.abs(a.balance), 0);
-    const totalExpenses = expenses.reduce((sum, a) => sum + Math.abs(a.balance), 0);
+    // Revenue is normally a credit balance and expenses a debit balance; keep
+    // the sign so contra entries (returns, refunds) reduce the totals
+    const totalRevenue = revenue.reduce((sum, a) => sum - a.balance, 0);
+    const totalExpenses = expenses.reduce((sum, a) => sum + a.balance, 0);
     const netIncome = totalRevenue - totalExpenses;
 
     return { revenue, expenses, totalRevenue, totalExpenses, netIncome };
@@ -115,6 +121,7 @@ export class FinancialReportsService {
     totalAssets: number;
     totalLiabilities: number;
     totalEquity: number;
+    currentEarnings: number;
     totalLiabilitiesAndEquity: number;
   }> {
     const { accounts } = await this.getTrialBalance(tenantId, undefined, asOf);
@@ -123,9 +130,16 @@ export class FinancialReportsService {
     const liabilities = accounts.filter((a) => a.type === AccountType.LIABILITY);
     const equity = accounts.filter((a) => a.type === AccountType.EQUITY);
 
-    const totalAssets = assets.reduce((sum, a) => sum + Math.abs(a.balance), 0);
-    const totalLiabilities = liabilities.reduce((sum, a) => sum + Math.abs(a.balance), 0);
-    const totalEquity = equity.reduce((sum, a) => sum + Math.abs(a.balance), 0);
+    // Signed balances: contra accounts (e.g. accumulated depreciation) reduce totals
+    const totalAssets = assets.reduce((sum, a) => sum + a.balance, 0);
+    const totalLiabilities = liabilities.reduce((sum, a) => sum - a.balance, 0);
+    const totalEquity = equity.reduce((sum, a) => sum - a.balance, 0);
+
+    // Unclosed profit/loss (Odoo "current year unallocated earnings") so the
+    // balance sheet balances before the year is closed
+    const currentEarnings = accounts
+      .filter((a) => a.type === AccountType.REVENUE || a.type === AccountType.EXPENSE)
+      .reduce((sum, a) => sum - a.balance, 0);
 
     return {
       assets,
@@ -134,7 +148,8 @@ export class FinancialReportsService {
       totalAssets,
       totalLiabilities,
       totalEquity,
-      totalLiabilitiesAndEquity: totalLiabilities + totalEquity,
+      currentEarnings,
+      totalLiabilitiesAndEquity: totalLiabilities + totalEquity + currentEarnings,
     };
   }
 
