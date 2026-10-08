@@ -98,6 +98,7 @@ import { AccountingDepthController } from './controllers/accounting-depth.contro
     AccountingSettingsService,
     AutoPostingService,
     AccountingSetupService,
+    OpeningBalancesService,
   ],
 })
 export class AccountingModule {}

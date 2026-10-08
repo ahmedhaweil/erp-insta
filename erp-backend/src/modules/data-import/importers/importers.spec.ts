@@ -166,99 +166,89 @@ describe('AccountsImporter', () => {
 });
 
 describe('Opening balances', () => {
-  const settings = { retainedEarningsAccountId: 're', salesReturnAccountId: null, purchaseReturnAccountId: 'pr' };
+  const settings = { retainedEarningsAccountId: 're' };
   const accountRepo = () => ({
     ...repo([{ id: 'eq', code: '330201', isActive: true, allowPosting: true }]),
     findOne: jest.fn().mockResolvedValue({ id: 're', code: '330101' }),
   });
-  const autoPosting = () => ({ preflight: jest.fn(), post: jest.fn().mockResolvedValue({ id: 'je1' }) });
-
-  it('customers: credit limit and e-invoice auto submission block the import; offset defaults to retained earnings', async () => {
-    const dataSource = { query: jest.fn().mockResolvedValue([{ auto: true }]) };
-    const customers = repo([{ id: 'c1', code: 'C-1', balance: 100, creditLimit: 1000 }]);
-    const importer = new OpeningCustomerBalancesImporter(
-      dataSource as any,
-      repo() as any,
-      repo() as any,
-      repo() as any,
-      accountRepo() as any,
-      customers as any,
-      {} as any,
-      autoPosting() as any,
-      { find: jest.fn().mockResolvedValue(settings) } as any,
-      {} as any,
-    );
-    const out = await importer.validate(ctx(), [row({ partnerCode: 'C-1', amount: 950 }), row({ partnerCode: 'X', amount: 1 })]);
-    expect(out.issues.map((i) => i.code)).toEqual(
-      expect.arrayContaining(['offset_default', 'not_found', 'credit_limit', 'einvoice_auto_submit']),
-    );
-    expect((out as any).offset.accountId).toBe('re');
+  const autoPosting = () => ({ preflight: jest.fn() });
+  const openingApi = () => ({
+    postPartners: jest.fn(async (_t: string, _u: string, dto: any) =>
+      dto.documents.map((d: any, i: number) => ({ id: `ob-${i}`, documentNumber: `OB-${d.amount}` })),
+    ),
   });
 
-  it('customers: posts invoices / credit notes then moves sales to the offset account', async () => {
-    const invoices = {
-      create: jest.fn(async (_t, _u, dto, extra) => ({ id: `inv-${dto.lines[0].unitPrice}`, invoiceNumber: extra.moveType ?? 'INV', ...dto })),
-      post: jest.fn(),
-    };
-    const posting = autoPosting();
-    const products = repo();
-    products.findOne.mockResolvedValue({ id: 'opening-product' });
+  it('customers: refuses unknown partners and missing accounting setup; offset defaults to retained earnings', async () => {
     const importer = new OpeningCustomerBalancesImporter(
-      { query: jest.fn().mockResolvedValue([]) } as any,
-      products as any,
-      repo() as any,
-      repo() as any,
+      { query: jest.fn() } as any,
       accountRepo() as any,
-      repo([{ id: 'c1', code: 'C-1', balance: 0, creditLimit: 0 }]) as any,
-      {} as any,
-      posting as any,
+      repo([{ id: 'c1', code: 'C-1' }]) as any,
+      autoPosting() as any,
       { find: jest.fn().mockResolvedValue(settings) } as any,
-      invoices as any,
+      openingApi() as any,
+    );
+    const out = await importer.validate(ctx(), [row({ partnerCode: 'C-1', amount: 950 }), row({ partnerCode: 'X', amount: 1 })]);
+    expect(out.issues.map((i) => i.code)).toEqual(expect.arrayContaining(['offset_default', 'not_found']));
+    expect((out as any).offset.accountId).toBe('re');
+
+    const unconfigured = new OpeningCustomerBalancesImporter(
+      { query: jest.fn() } as any,
+      accountRepo() as any,
+      repo([{ id: 'c1', code: 'C-1' }]) as any,
+      autoPosting() as any,
+      { find: jest.fn().mockResolvedValue(null) } as any,
+      openingApi() as any,
+    );
+    const blocked = await unconfigured.validate(ctx(), [row({ partnerCode: 'C-1', amount: 5 })]);
+    expect(blocked.issues.map((i) => i.code)).toContain('accounting_not_configured');
+  });
+
+  it('customers: posts opening documents through the accounting opening API, one call per date', async () => {
+    const api = openingApi();
+    const importer = new OpeningCustomerBalancesImporter(
+      { query: jest.fn() } as any,
+      accountRepo() as any,
+      repo([{ id: 'c1', code: 'C-1' }]) as any,
+      autoPosting() as any,
+      { find: jest.fn().mockResolvedValue(settings) } as any,
+      api as any,
     );
     const context = ctx({ offsetAccountCode: '330201', date: '2026-01-01' });
-    const out = await importer.validate(context, [row({ partnerCode: 'C-1', amount: 500 }), row({ partnerCode: 'C-1', amount: -50 })]);
+    const out = await importer.validate(context, [
+      row({ partnerCode: 'C-1', amount: 500 }),
+      row({ partnerCode: 'C-1', amount: -50, reference: 'R1', notes: 'old credit' }),
+      row({ partnerCode: 'C-1', amount: 70, date: '2025-12-31' }),
+    ]);
     expect(out.issues).toEqual([]);
     const result = await importer.commit(context, out);
 
-    expect(invoices.create.mock.calls[0][2]).toMatchObject({ customerId: 'c1', date: '2026-01-01', lines: [{ productId: 'opening-product', unitPrice: 500, taxRate: 0 }] });
-    expect(invoices.create.mock.calls[1][3]).toEqual({ moveType: 'credit_note' });
-    expect(invoices.post).toHaveBeenCalledTimes(2);
-    const request = posting.post.mock.calls[0][0];
-    const lines = request.buildLines(settings, (k: string) => `acc:${k}`);
-    expect(lines).toEqual([
-      { accountId: 'acc:salesAccountId', debit: 500 },
-      { accountId: 'eq', credit: 500 },
-      { accountId: 'eq', debit: 50 },
-      { accountId: 'acc:salesAccountId', credit: 50 },
-    ]);
-    expect(result).toMatchObject({ positive: 500, negative: 50, journalEntryId: 'je1' });
+    expect(api.postPartners).toHaveBeenCalledTimes(2);
+    expect(api.postPartners.mock.calls[0][2]).toEqual({
+      date: '2026-01-01',
+      equityAccountId: 'eq',
+      documents: [
+        { partnerType: 'customer', partnerId: 'c1', amount: 500, dueDate: undefined, reference: undefined },
+        { partnerType: 'customer', partnerId: 'c1', amount: -50, dueDate: undefined, reference: 'R1 - old credit' },
+      ],
+    });
+    expect(api.postPartners.mock.calls[1][2]).toMatchObject({ date: '2025-12-31' });
+    expect(result).toEqual({ documents: ['OB-500', 'OB--50', 'OB-70'], positive: 570, negative: 50 });
   });
 
-  it('suppliers: refunds for negative balances and duplicate vendor references', async () => {
+  it('suppliers: duplicate vendor references are refused', async () => {
     const dataSource = { query: jest.fn().mockResolvedValue([{ supplier_id: 's1', supplier_reference: 'B-1' }]) };
     const importer = new OpeningSupplierBalancesImporter(
       dataSource as any,
-      repo() as any,
-      repo() as any,
-      repo() as any,
       accountRepo() as any,
       repo([{ id: 's1', code: 'S-1' }]) as any,
-      {} as any,
       autoPosting() as any,
       { find: jest.fn().mockResolvedValue(settings) } as any,
-      {} as any,
+      openingApi() as any,
     );
     const out = await importer.validate(ctx({ offsetAccountCode: '330201' }), [
       row({ partnerCode: 'S-1', amount: 10, reference: 'b-1' }),
     ]);
     expect(out.issues.map((i) => i.code)).toEqual(['duplicate_reference']);
-    const lines = (importer as any).correctionLines(settings, (k: string) => k, 'eq', 100, 30);
-    expect(lines).toEqual([
-      { accountId: 'eq', debit: 100 },
-      { accountId: 'purchaseAccountId', credit: 100 },
-      { accountId: 'pr', debit: 30 },
-      { accountId: 'eq', credit: 30 },
-    ]);
   });
 });
 
