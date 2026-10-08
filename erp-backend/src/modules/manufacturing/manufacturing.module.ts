@@ -18,6 +18,7 @@ import {
 } from './controllers/production-orders.controller';
 import { AccountingModule } from '@modules/accounting/accounting.module';
 import { InventoryModule } from '@modules/inventory/inventory.module';
+import { PurchasingModule } from '@modules/purchasing/purchasing.module';
 
 /** Manufacturing / industrial costing (التصنيع والمحاسبة الصناعية). */
 @Module({
@@ -34,6 +35,7 @@ import { InventoryModule } from '@modules/inventory/inventory.module';
     ]),
     AccountingModule,
     InventoryModule,
+    PurchasingModule,
   ],
   controllers: [BomsController, ProductionOrdersController, ManufacturingController],
   providers: [BomsService, ProductionOrdersService, ManufacturingReportsService],

@@ -1,5 +1,6 @@
 import { Entity, Column } from 'typeorm';
 import { TenantBaseEntity } from '@shared/entities/tenant-base.entity';
+import type { DocumentLot } from '@modules/inventory/services/document-lots.util';
 
 export interface ProductionRecordMove {
   productId: string;
@@ -9,6 +10,8 @@ export interface ProductionRecordMove {
   quantity: number;
   unitCost: number;
   cost: number;
+  /** Lots/serials consumed or produced (base unit). */
+  lots?: DocumentLot[];
 }
 
 /** One (partial) production run of a production order: what was consumed and produced. */
@@ -45,4 +48,19 @@ export class ProductionRecord extends TenantBaseEntity {
 
   @Column({ name: 'created_by', type: 'uuid' })
   createdBy: string;
+
+  /** Lots/serial numbers of the finished product received by this run. */
+  @Column({ name: 'output_lots', type: 'jsonb', default: () => "'[]'" })
+  outputLots: DocumentLot[];
+
+  /** Set when the run was reversed (un-built). */
+  @Column({ name: 'reversed_at', type: 'timestamptz', nullable: true })
+  reversedAt: Date | null;
+
+  @Column({ name: 'reversed_by', type: 'uuid', nullable: true })
+  reversedBy: string | null;
+
+  /** Difference between the stock value taken out on reversal and the recorded run cost. */
+  @Column({ name: 'reversal_difference', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  reversalDifference: number;
 }

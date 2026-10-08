@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProductionOrder, ProductionOrderStatus } from '../entities/production-order.entity';
@@ -13,6 +13,7 @@ import {
   CreateScrapDto,
   ProduceDto,
   ProductionOrderQueryDto,
+  ReverseRunDto,
 } from '../dto/production.dto';
 import { BomsService } from './boms.service';
 import { Warehouse } from '@modules/inventory/entities/warehouse.entity';
@@ -24,6 +25,13 @@ import {
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { SequenceService } from '@shared/services/sequence.service';
 import { round, today } from '@shared/utils/document-totals.util';
+import type { StockLotInput } from '@modules/inventory/services/lots.service';
+import {
+  DocumentLot,
+  addLots,
+  asLots,
+  lotsOrUndefined,
+} from '@modules/inventory/services/document-lots.util';
 
 export interface ComponentAvailability {
   productId: string;
@@ -253,11 +261,13 @@ export class ProductionOrdersService {
     const ratio = quantity / Number(order.plannedQuantity);
 
     const overrides = new Map<string, number>();
+    const lotsOf = new Map<string, StockLotInput[] | undefined>();
     for (const c of dto.consumption ?? []) {
       if (!order.lines.some((l) => l.productId === c.productId)) {
         throw new BadRequestException(`Product ${c.productId} is not part of this production order`);
       }
       overrides.set(c.productId, Number(c.quantity));
+      lotsOf.set(c.productId, lotsOrUndefined(c.lots));
     }
 
     const components = order.lines.filter((l) => l.type === BomLineType.COMPONENT);
@@ -289,6 +299,7 @@ export class ProductionOrdersService {
     for (const { line, expected, actual, stockable } of plan) {
       let unitCost = 0;
       let cost = 0;
+      let consumedLots: DocumentLot[] = [];
       if (actual > 0) {
         if (stockable) {
           const releasable = Math.min(Number(line.reservedQuantity), actual);
@@ -300,7 +311,9 @@ export class ProductionOrdersService {
             referenceType: 'production_order',
             referenceId: order.id,
             description: `Consumed by ${order.orderNumber}`,
+            lots: lotsOf.get(line.productId),
           });
+          consumedLots = addLots(issued.lots);
           unitCost = issued.unitCost;
           cost = issued.cost;
           line.reservedQuantity = round(Number(line.reservedQuantity) - releasable, 4);
@@ -313,7 +326,15 @@ export class ProductionOrdersService {
       }
       line.doneQuantity = round(Number(line.doneQuantity) + actual, 4);
       line.actualCost = round(Number(line.actualCost) + cost, 4);
-      moves.push({ productId: line.productId, type: 'component', expectedQuantity: expected, quantity: actual, unitCost, cost });
+      moves.push({
+        productId: line.productId,
+        type: 'component',
+        expectedQuantity: expected,
+        quantity: actual,
+        unitCost,
+        cost,
+        lots: consumedLots,
+      });
     }
     componentCost = round(componentCost, 4);
     serviceCost = round(serviceCost, 4);
@@ -351,12 +372,21 @@ export class ProductionOrdersService {
           referenceType: 'production_order',
           referenceId: order.id,
           description: `By-product of ${order.orderNumber}`,
+          lots: lotsOf.get(line.productId),
         });
         byProductCost += cost;
       }
       line.doneQuantity = round(Number(line.doneQuantity) + actual, 4);
       line.actualCost = round(Number(line.actualCost) + cost, 4);
-      moves.push({ productId: line.productId, type: 'by_product', expectedQuantity: expected, quantity: actual, unitCost, cost });
+      moves.push({
+        productId: line.productId,
+        type: 'by_product',
+        expectedQuantity: expected,
+        quantity: actual,
+        unitCost,
+        cost,
+        lots: addLots(lotsOf.get(line.productId)),
+      });
     }
     byProductCost = round(byProductCost, 4);
     const finishedCost = round(totalCost - byProductCost, 4);
@@ -370,6 +400,7 @@ export class ProductionOrdersService {
       referenceType: 'production_order',
       referenceId: order.id,
       description: `Produced by ${order.orderNumber}`,
+      lots: lotsOrUndefined(dto.lots),
     });
 
     const absorbed = round(labourCost + overheadCost + serviceCost, 4);
@@ -391,6 +422,7 @@ export class ProductionOrdersService {
     });
 
     record.moves = moves;
+    record.outputLots = addLots(dto.lots);
     record.byProductCost = byProductCost;
     record.unitCost = unitCost;
     await this.recordRepo.save(record);
@@ -411,6 +443,144 @@ export class ProductionOrdersService {
     );
     if (done) await this.close(tenantId, order.id, date);
     return { order: await this.findById(tenantId, id), record };
+  }
+
+  /**
+   * Reverses (un-builds) a recorded production run: the finished product and
+   * by-products leave the destination warehouse (with the lots/serials the
+   * run produced), the components go back into the source warehouse with
+   * their lots at the cost they were consumed at, and the run's journal entry
+   * is reversed. Refused when the produced goods are no longer available
+   * (already sold, consumed or reserved), whatever the negative-stock policy.
+   * A difference between the current average cost of the goods taken out and
+   * the recorded run cost is posted inventory <-> stock adjustment.
+   */
+  async reverseRun(tenantId: string, userId: string, orderId: string, recordId: string, dto: ReverseRunDto = {}) {
+    const order = await this.findById(tenantId, orderId);
+    const record = await this.recordRepo.findOne({ where: { id: recordId, tenantId, orderId } });
+    if (!record) throw new NotFoundException('Production run not found');
+    if (record.reversedAt) throw new ConflictException('This production run is already reversed');
+    const date = dto.date ?? today();
+
+    const moves = record.moves ?? [];
+    const outputs = [
+      { productId: order.productId, quantity: Number(record.quantity), lots: asLots(record.outputLots), cost: 0 },
+      ...moves
+        .filter((m) => m.type === 'by_product' && Number(m.quantity) > 0)
+        .map((m) => ({ productId: m.productId, quantity: Number(m.quantity), lots: asLots(m.lots), cost: 0 })),
+    ];
+    // Un-build rule: the produced goods must still be in stock
+    for (const out of outputs) {
+      if (!(await this.stockService.isStockable(tenantId, out.productId))) continue;
+      const { available } = await this.stockService.availableQuantity(
+        tenantId,
+        out.productId,
+        order.destinationWarehouseId,
+      );
+      if (available + 0.0001 < out.quantity) {
+        throw new ConflictException(
+          `The produced goods were already consumed: ${out.quantity} needed, ${available} available in the destination warehouse`,
+        );
+      }
+    }
+
+    const totalCost = round(
+      Number(record.componentCost) + Number(record.labourCost) + Number(record.overheadCost),
+      4,
+    );
+    await this.autoPosting.preflight(tenantId, date, ['inventoryAccountId']);
+
+    // 1. Finished goods and by-products leave stock
+    let issuedValue = 0;
+    for (const out of outputs) {
+      const issued = await this.stockService.issue(
+        tenantId,
+        userId,
+        {
+          productId: out.productId,
+          warehouseId: order.destinationWarehouseId,
+          quantity: out.quantity,
+          referenceType: 'production_unbuild',
+          referenceId: record.id,
+          description: `Un-build ${order.orderNumber}`,
+          lots: out.lots.length ? out.lots : undefined,
+        },
+        { includeExpiredLots: true },
+      );
+      issuedValue += issued.cost;
+    }
+
+    // 2. Components come back with their lots, at the cost they were consumed at
+    for (const move of moves.filter((m) => m.type === 'component' && Number(m.quantity) > 0)) {
+      if (!(await this.stockService.isStockable(tenantId, move.productId))) continue;
+      const lots = asLots(move.lots);
+      await this.stockService.receive(tenantId, userId, {
+        productId: move.productId,
+        warehouseId: order.sourceWarehouseId,
+        quantity: Number(move.quantity),
+        unitCost: Number(move.unitCost),
+        referenceType: 'production_unbuild',
+        referenceId: record.id,
+        description: `Un-build ${order.orderNumber}`,
+        lots: lots.length ? lots : undefined,
+      });
+    }
+
+    // 3. Accounting: reverse the run entry, align inventory with the value taken out
+    await this.autoPosting.reverseSource(tenantId, userId, 'production_order', record.id, date);
+    const difference = round(issuedValue - totalCost, 4);
+    if (Math.abs(difference) > 0.0001) {
+      const amount = Math.abs(difference);
+      await this.autoPosting.post({
+        tenantId,
+        userId,
+        journalType: JournalType.GENERAL,
+        date,
+        description: `Un-build ${order.orderNumber} - valuation difference`,
+        sourceType: 'production_unbuild',
+        sourceId: record.id,
+        buildLines: (s, account) => {
+          if (!s.stockAdjustmentAccountId) return [];
+          return difference > 0
+            ? [
+                { accountId: s.stockAdjustmentAccountId, debit: amount },
+                { accountId: account('inventoryAccountId'), credit: amount },
+              ]
+            : [
+                { accountId: account('inventoryAccountId'), debit: amount },
+                { accountId: s.stockAdjustmentAccountId, credit: amount },
+              ];
+        },
+      });
+    }
+
+    // 4. Order quantities and costs
+    for (const move of moves) {
+      const type = move.type === 'by_product' ? BomLineType.BY_PRODUCT : BomLineType.COMPONENT;
+      const line = order.lines.find((l) => l.productId === move.productId && l.type === type);
+      if (!line) continue;
+      line.doneQuantity = Math.max(round(Number(line.doneQuantity) - Number(move.quantity), 4), 0);
+      line.actualCost = round(Number(line.actualCost) - Number(move.cost), 4);
+    }
+    await this.lineRepo.save(order.lines);
+    const produced = Math.max(round(Number(order.producedQuantity) - Number(record.quantity), 4), 0);
+    await this.orderRepo.update(
+      { id: order.id, tenantId },
+      {
+        producedQuantity: produced,
+        actualComponentCost: round(Number(order.actualComponentCost) - Number(record.componentCost), 4),
+        actualLabourCost: round(Number(order.actualLabourCost) - Number(record.labourCost), 4),
+        actualOverheadCost: round(Number(order.actualOverheadCost) - Number(record.overheadCost), 4),
+        status: produced > 0 ? ProductionOrderStatus.IN_PROGRESS : ProductionOrderStatus.CONFIRMED,
+        completedDate: null as unknown as string,
+      },
+    );
+
+    record.reversedAt = new Date();
+    record.reversedBy = userId;
+    record.reversalDifference = difference;
+    await this.recordRepo.save(record);
+    return { order: await this.findById(tenantId, orderId), record };
   }
 
   /** Marks a partially produced order as done and releases leftover reservations. */
@@ -574,7 +744,10 @@ export class ProductionOrdersService {
     const actualTotal = round(actualMaterial + actualLabour + actualOverhead, 4);
     const share = this.byProductShare(order) / 100;
     const records = await this.getRecords(tenantId, id);
-    const byProductCost = round(records.reduce((s, r) => s + Number(r.byProductCost), 0), 4);
+    const byProductCost = round(
+      records.filter((r) => !r.reversedAt).reduce((s, r) => s + Number(r.byProductCost), 0),
+      4,
+    );
 
     return {
       orderId: order.id,

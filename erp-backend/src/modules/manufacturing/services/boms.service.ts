@@ -31,7 +31,18 @@ export interface ExplosionNode {
   scrapPercent: number;
   level: number;
   bomId?: string;
+  /** Part of a sub-assembly requirement covered by its own available stock (MRP netting). */
+  fromStock?: number;
   children?: ExplosionNode[];
+}
+
+export interface ExplodeOptions {
+  /**
+   * MRP netting: free stock of a sub-assembly. The covered part is taken from
+   * stock and only the remainder is exploded into components. The pool is
+   * consumed as the tree is walked, so shared sub-assemblies are netted once.
+   */
+  availableStock?: (productId: string) => Promise<number>;
 }
 
 export interface Explosion {
@@ -40,8 +51,10 @@ export interface Explosion {
   quantity: number;
   /** Leaf components (purchased / without own BOM), aggregated per product. */
   components: ExplodedRequirement[];
-  /** Sub-assemblies replaced by their components. */
+  /** Sub-assemblies replaced by their components (quantity actually exploded). */
   subAssemblies: ExplodedRequirement[];
+  /** Sub-assembly quantities covered by available stock instead of being exploded (netting). */
+  fromStock: ExplodedRequirement[];
   /** Direct by-products of the top BOM for this quantity. */
   byProducts: { productId: string; quantity: number; costSharePercent: number }[];
   /** Labour and overhead of the top BOM and every exploded sub-assembly. */
@@ -251,9 +264,19 @@ export class BomsService {
     bom: Bom,
     quantity: number,
     explode = true,
+    options: ExplodeOptions = {},
   ): Promise<Explosion> {
     const leaves = new Map<string, ExplodedRequirement>();
     const subs = new Map<string, ExplodedRequirement>();
+    const covered = new Map<string, ExplodedRequirement>();
+    const pool = new Map<string, number>();
+    const takeFromStock = async (productId: string, required: number): Promise<number> => {
+      if (!options.availableStock) return 0;
+      if (!pool.has(productId)) pool.set(productId, Math.max(Number(await options.availableStock(productId)) || 0, 0));
+      const take = round(Math.min(pool.get(productId)!, required), 4);
+      pool.set(productId, round(pool.get(productId)! - take, 4));
+      return take;
+    };
     const totals = { labour: 0, overhead: 0 };
 
     const walk = async (
@@ -284,8 +307,16 @@ export class BomsService {
             throw new BadRequestException('Circular BOM structure detected');
           }
           node.bomId = sub.id;
-          node.children = await walk(sub, required, level + 1, [...path, line.productId]);
-          this.accumulate(subs, line.productId, required, level);
+          const fromStock = await takeFromStock(line.productId, required);
+          const toMake = round(required - fromStock, 4);
+          if (fromStock > 0) {
+            node.fromStock = fromStock;
+            this.accumulate(covered, line.productId, fromStock, level);
+          }
+          if (toMake > 0) {
+            node.children = await walk(sub, toMake, level + 1, [...path, line.productId]);
+            this.accumulate(subs, line.productId, toMake, level);
+          }
         } else {
           this.accumulate(leaves, line.productId, required, level);
         }
@@ -302,6 +333,7 @@ export class BomsService {
       quantity,
       components: [...leaves.values()],
       subAssemblies: [...subs.values()],
+      fromStock: [...covered.values()],
       byProducts: (bom.lines ?? [])
         .filter((l) => l.type === BomLineType.BY_PRODUCT)
         .map((l) => ({

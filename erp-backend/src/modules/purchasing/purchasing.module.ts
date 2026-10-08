@@ -77,6 +77,7 @@ import { InventoryModule } from '@modules/inventory/inventory.module';
     PurchaseInvoicesService,
     PurchasingSettingsService,
     PurchaseReturnsService,
+    PurchaseRequisitionsService,
   ],
 })
 export class PurchasingModule {}

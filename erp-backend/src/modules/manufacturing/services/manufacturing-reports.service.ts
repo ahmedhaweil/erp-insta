@@ -1,10 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Bom } from '../entities/bom.entity';
 import { ProductionOrder, ProductionOrderStatus } from '../entities/production-order.entity';
 import { BomLineType } from '../entities/bom-line.entity';
-import { RequirementsQueryDto } from '../dto/production.dto';
+import { MrpRequisitionDto, RequirementsQueryDto } from '../dto/production.dto';
+import { PurchaseRequisitionsService } from '@modules/purchasing/services/purchase-requisitions.service';
 import { BomsService } from './boms.service';
 import { StockService } from '@modules/inventory/services/stock.service';
 import { round } from '@shared/utils/document-totals.util';
@@ -20,6 +21,7 @@ export class ManufacturingReportsService {
     private readonly orderRepo: Repository<ProductionOrder>,
     private readonly bomsService: BomsService,
     private readonly stockService: StockService,
+    @Optional() private readonly requisitions?: PurchaseRequisitionsService,
   ) {}
 
   /**
@@ -36,12 +38,20 @@ export class ManufacturingReportsService {
     else throw new BadRequestException('bomId or productId is required');
     if (!bom) throw new NotFoundException('The product has no active bill of materials');
 
-    const explosion = await this.bomsService.explode(
-      tenantId,
-      bom,
-      Number(query.quantity),
-      query.explode ?? true,
-    );
+    const explode = query.explode ?? true;
+    const net = explode && query.netSubAssemblies !== false;
+    // MRP netting: free sub-assembly stock (minus open production demand) is used before exploding
+    const explosion = await this.bomsService.explode(tenantId, bom, Number(query.quantity), explode, {
+      availableStock: net
+        ? async (productId) => {
+            if (!(await this.stockService.isStockable(tenantId, productId))) return 0;
+            const stocks = await this.stockService.getStock(tenantId, productId, query.warehouseId);
+            const free = stocks.reduce((s, st) => s + Number(st.quantity) - Number(st.reservedQty), 0);
+            const demand = (await this.openOrderDemand(tenantId, [productId], query.warehouseId)).get(productId) ?? 0;
+            return round(Math.max(free - demand, 0), 4);
+          }
+        : undefined,
+    });
     const ids = explosion.components.map((c) => c.productId);
     const products = await this.bomsService.productMap(tenantId, ids);
     const openDemand = await this.openOrderDemand(tenantId, ids, query.warehouseId);
@@ -88,7 +98,9 @@ export class ManufacturingReportsService {
       productId: bom.productId,
       quantity: Number(query.quantity),
       warehouseId: query.warehouseId ?? null,
-      exploded: query.explode ?? true,
+      exploded: explode,
+      nettedSubAssemblies: net,
+      subAssembliesFromStock: explosion.fromStock,
       lines,
       shortages,
       canProduce: shortages.length === 0,
@@ -96,6 +108,37 @@ export class ManufacturingReportsService {
       labourCost: explosion.labourCost,
       overheadCost: explosion.overheadCost,
     };
+  }
+
+  /**
+   * Turns the MRP shortages into a draft purchase requisition (one line per
+   * component to buy, at the suggested quantity, estimated at the current
+   * average cost, with the product's preferred supplier). Optionally submits it.
+   */
+  async createRequisition(tenantId: string, userId: string, dto: MrpRequisitionDto) {
+    if (!this.requisitions) throw new BadRequestException('Purchasing is not available');
+    const plan = await this.requirements(tenantId, dto);
+    const toBuy = plan.shortages.filter((l) => l.toBuy > 0);
+    if (!toBuy.length) {
+      throw new BadRequestException('No shortages: every component is available for this quantity');
+    }
+    const product = (await this.bomsService.productMap(tenantId, [plan.productId])).get(plan.productId);
+    const label = product?.code ?? plan.productId;
+    let requisition = await this.requisitions.create(tenantId, userId, {
+      departmentName: dto.departmentName || 'Manufacturing',
+      requiredDate: dto.requiredDate,
+      warehouseId: dto.warehouseId,
+      notes: dto.notes ?? `MRP shortages for ${plan.quantity} x ${label}`,
+      lines: toBuy.map((l) => ({
+        productId: l.productId,
+        quantity: l.toBuy,
+        estimatedPrice: l.unitCost > 0 ? l.unitCost : undefined,
+        supplierId: l.preferredSupplierId ?? undefined,
+        description: `MRP: required ${l.required}, available ${l.netAvailable}, short ${l.shortage}`,
+      })),
+    });
+    if (dto.submit) requisition = await this.requisitions.submit(tenantId, requisition.id);
+    return { requisition, requirements: plan };
   }
 
   /** Production cost summary per order for a period. */
