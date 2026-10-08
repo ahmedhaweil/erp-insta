@@ -149,7 +149,7 @@ export default function JournalEntriesPage() {
           </Btn>
         </>
       )}
-      {e.status === 'posted' && !reversedIds.has(e.id) && !e.reversedEntryId && (
+      {e.status === 'posted' && !e.sourceType && !reversedIds.has(e.id) && !e.reversedEntryId && (
         <Btn size="sm" variant="ghost" onClick={() => setConfirm({ kind: 'reverse', entry: e })}>
           {t('reverseEntry')}
         </Btn>

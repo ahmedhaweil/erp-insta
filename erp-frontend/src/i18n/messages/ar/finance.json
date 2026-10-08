@@ -201,7 +201,22 @@
       "activities": "الأنشطة",
       "e_invoices": "الفواتير الإلكترونية",
       "e_receipts": "الإيصالات الإلكترونية",
-      "lots": "التشغيلات"
+      "lots": "التشغيلات",
+      "reports": "التقارير",
+      "stocktaking": "الجرد",
+      "units": "وحدات القياس",
+      "boms": "قوائم المكونات",
+      "production": "أوامر الإنتاج",
+      "my": "إشعاراتي",
+      "sessions": "الورديات",
+      "terminals": "نقاط البيع",
+      "po_approval": "اعتماد أوامر الشراء",
+      "requisitions": "طلبات الشراء",
+      "returns": "المرتجعات",
+      "commissions": "العمولات",
+      "installments": "التقسيط",
+      "price_lists": "قوائم الأسعار",
+      "reps": "المندوبون"
     }
   },
   "acct": {

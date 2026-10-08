@@ -201,7 +201,22 @@
       "activities": "Activities",
       "e_invoices": "E-invoices",
       "e_receipts": "E-receipts",
-      "lots": "Lots"
+      "lots": "Lots",
+      "reports": "Reports",
+      "stocktaking": "Stocktaking",
+      "units": "Units of measure",
+      "boms": "Bills of materials",
+      "production": "Production orders",
+      "my": "My notifications",
+      "sessions": "Sessions",
+      "terminals": "Terminals",
+      "po_approval": "PO approval",
+      "requisitions": "Requisitions",
+      "returns": "Returns",
+      "commissions": "Commissions",
+      "installments": "Installments",
+      "price_lists": "Price lists",
+      "reps": "Sales reps"
     }
   },
   "acct": {

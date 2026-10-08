@@ -60,8 +60,8 @@ function AgingCard({
               <span className={`w-2 h-2 rounded-full ${BUCKET_COLORS[i]}`} />
               {t(`bucket.${b}`)}
             </dt>
-            <dd className="font-medium tabular-nums" dir="ltr">
-              {fmtMoney(data?.buckets?.[b] ?? 0)}
+            <dd className="font-medium tabular-nums">
+              <span dir="ltr">{fmtMoney(data?.buckets?.[b] ?? 0)}</span>
             </dd>
           </div>
         ))}
