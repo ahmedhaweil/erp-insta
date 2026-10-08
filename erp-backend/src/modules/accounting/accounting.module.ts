@@ -1,3 +1,4 @@
+import { AccountingMastersController } from './controllers/accounting-masters.controller';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Account } from './entities/account.entity';
@@ -75,8 +76,7 @@ import { AccountingDepthController } from './controllers/accounting-depth.contro
     AccountsController,
     JournalEntriesController,
     AccountingConfigController,
-    AccountingDepthController,
-  ],
+    AccountingDepthController, AccountingMastersController],
   providers: [
     AccountsService,
     JournalEntriesService,

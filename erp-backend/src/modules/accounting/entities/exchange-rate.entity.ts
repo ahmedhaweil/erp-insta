@@ -1,9 +1,17 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { BaseEntity } from '@shared/entities/base.entity';
 import { Currency } from './currency.entity';
 
 @Entity('exchange_rates')
 export class ExchangeRate extends BaseEntity {
+  /**
+   * Company the rate belongs to. Rates are entered per tenant; rows without
+   * a tenant are shared defaults that a tenant's own rate overrides.
+   */
+  @Column({ name: 'tenant_id', type: 'uuid', nullable: true })
+  @Index()
+  tenantId: string | null;
+
   @Column({ name: 'currency_id', type: 'uuid' })
   currencyId: string;
 

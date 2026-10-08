@@ -313,13 +313,13 @@ export class FxRevaluationService {
     const rates: Record<string, number> = {};
     const rows: { currency_id: string; rate: string }[] = await this.revaluationRepo.query(
       `SELECT DISTINCT ON (currency_id) currency_id, rate
-         FROM exchange_rates WHERE date <= $1
-        ORDER BY currency_id, date DESC, created_at DESC`,
-      [dto.date],
+         FROM exchange_rates
+        WHERE date <= $1 AND (tenant_id = $2 OR tenant_id IS NULL)
+        ORDER BY currency_id, date DESC, (tenant_id IS NULL), created_at DESC`,
+      [dto.date, tenantId],
     );
     rows.forEach((r) => (rates[r.currency_id] = Number(r.rate)));
     (dto.rates ?? []).forEach((r) => (rates[r.currencyId] = Number(r.rate)));
-    void tenantId;
     return rates;
   }
 

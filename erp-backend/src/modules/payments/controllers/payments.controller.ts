@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Optional, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Optional, Param, ParseEnumPipe, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
@@ -61,6 +61,27 @@ export class PaymentsController {
     @Query('treasuryId') treasuryId?: string,
   ) {
     return this.paymentsService.findAll(tenantId, partnerId, treasuryId);
+  }
+
+  /** Open invoices / credit notes / bills / refunds a payment of this partner can settle. */
+  @RequirePermissions({ module: 'accounting', screen: 'payments', action: 'read' })
+  @Get('open-documents')
+  @ApiQuery({ name: 'partnerType', enum: PaymentPartnerType })
+  @ApiQuery({ name: 'partnerId' })
+  @ApiQuery({ name: 'direction', enum: PaymentDirection, required: false })
+  openDocuments(
+    @CurrentTenant() tenantId: string,
+    @Query('partnerType', new ParseEnumPipe(PaymentPartnerType)) partnerType: PaymentPartnerType,
+    @Query('partnerId', ParseUUIDPipe) partnerId: string,
+    @Query('direction', new ParseEnumPipe(PaymentDirection, { optional: true })) direction?: PaymentDirection,
+  ) {
+    return this.paymentsService.openDocuments(tenantId, {
+      partnerType,
+      partnerId,
+      direction:
+        direction ??
+        (partnerType === PaymentPartnerType.CUSTOMER ? PaymentDirection.INBOUND : PaymentDirection.OUTBOUND),
+    });
   }
 
   @RequirePermissions({ module: 'accounting', screen: 'payments', action: 'read' })
