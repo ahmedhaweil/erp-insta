@@ -21,6 +21,7 @@ import { AutoPostingService } from '@modules/accounting/services/auto-posting.se
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { SalesPricingService } from './sales-pricing.service';
 import { InstallmentScheduleService } from './installment-schedule.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   addDays,
   computeLine,
@@ -71,6 +72,7 @@ export class SalesInvoicesService {
     private readonly autoPosting: AutoPostingService,
     @Optional() private readonly pricing?: SalesPricingService,
     @Optional() private readonly installments?: InstallmentScheduleService,
+    @Optional() private readonly eventEmitter?: EventEmitter2,
   ) {}
 
   /**
@@ -235,6 +237,8 @@ export class SalesInvoicesService {
       }
     }
 
+    // Delivered after commit: e.g. automatic ETA/ZATCA submission
+    this.eventEmitter?.emit('sales_invoice.posted', { tenantId, userId, invoiceId: saved.id });
     return saved;
   }
 

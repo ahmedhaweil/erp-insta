@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -28,6 +29,7 @@ import { StockService } from '@modules/inventory/services/stock.service';
 import { AutoPostingService, SettingsAccountKey } from '@modules/accounting/services/auto-posting.service';
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { computeLine, computeTotals, round, today } from '@shared/utils/document-totals.util';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 /** What the acting user may do beyond the normal cashier permissions. */
 export interface PosActor {
@@ -56,6 +58,7 @@ export class PosService {
     private readonly sequenceService: SequenceService,
     private readonly stockService: StockService,
     private readonly autoPosting: AutoPostingService,
+    @Optional() private readonly eventEmitter?: EventEmitter2,
   ) {}
 
   createTerminal(tenantId: string, dto: CreateTerminalDto): Promise<PosTerminal> {
@@ -276,6 +279,7 @@ export class PosService {
     await this.orderLineRepo.save(lines);
 
     await this.postOrder(tenantId, actor.userId, savedOrder, round(cost, 4), false);
+    this.eventEmitter?.emit('pos_order.completed', { tenantId, userId: actor.userId, posOrderId: savedOrder.id });
 
     return this.orderRepo.findOne({
       where: { id: savedOrder.id },
@@ -395,6 +399,7 @@ export class PosService {
     await this.orderLineRepo.save([...refundRows, ...original.lines]);
 
     await this.postOrder(tenantId, actor.userId, refund, round(cost, 4), true);
+    this.eventEmitter?.emit('pos_order.completed', { tenantId, userId: actor.userId, posOrderId: refund.id });
 
     if (original.lines.every((l) => Number(l.refundedQty) >= Number(l.quantity) - 0.0001)) {
       original.status = PosOrderStatus.REFUNDED;
