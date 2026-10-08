@@ -1,6 +1,6 @@
 import { IsString, IsEnum, IsOptional, IsBoolean, IsUUID, IsNumber, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ProductType } from '../entities/product.entity';
+import { ProductType, TrackingType } from '../entities/product.entity';
 
 export class CreateProductDto {
   @ApiProperty()
@@ -98,4 +98,14 @@ export class CreateProductDto {
   @Min(0)
   @Max(100)
   purchaseTaxRate?: number;
+
+  @ApiPropertyOptional({ enum: TrackingType, description: 'Lot/serial tracking (default none)' })
+  @IsOptional()
+  @IsEnum(TrackingType)
+  trackingType?: TrackingType;
+
+  @ApiPropertyOptional({ description: 'Lots carry an expiry date (requires lot or serial tracking)' })
+  @IsOptional()
+  @IsBoolean()
+  hasExpiry?: boolean;
 }

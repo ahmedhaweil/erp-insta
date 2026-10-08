@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Query } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Put, Body, Query } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiQuery, ApiOperation } from '@nestjs/swagger';
 import { StockService } from '../services/stock.service';
+import { InventorySettingsService } from '../services/inventory-settings.service';
 import { StockAdjustmentDto } from '../dto/stock-adjustment.dto';
 import { StockTransferDto } from '../dto/stock-transfer.dto';
+import { InventorySettingsDto, StockReceiptDto } from '../dto/stock-receipt.dto';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { JwtPayload } from '@common/interfaces/request-with-user.interface';
@@ -10,12 +12,15 @@ import { RequirePermissions } from '@common/decorators/require-permissions.decor
 
 @ApiTags('inventory')
 @ApiBearerAuth()
-@Controller('inventory/stock')
+@Controller('inventory')
 export class StockController {
-  constructor(private readonly stockService: StockService) {}
+  constructor(
+    private readonly stockService: StockService,
+    private readonly settingsService: InventorySettingsService,
+  ) {}
 
   @RequirePermissions({ module: 'inventory', screen: 'stock', action: 'read' })
-  @Get()
+  @Get('stock')
   @ApiQuery({ name: 'productId', required: false })
   @ApiQuery({ name: 'warehouseId', required: false })
   getStock(
@@ -27,7 +32,7 @@ export class StockController {
   }
 
   @RequirePermissions({ module: 'inventory', screen: 'stock', action: 'create' })
-  @Post('adjust')
+  @Post('stock/adjust')
   adjust(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: JwtPayload,
@@ -37,7 +42,7 @@ export class StockController {
   }
 
   @RequirePermissions({ module: 'inventory', screen: 'stock', action: 'create' })
-  @Post('transfer')
+  @Post('stock/transfer')
   transfer(
     @CurrentTenant() tenantId: string,
     @CurrentUser() user: JwtPayload,
@@ -46,8 +51,19 @@ export class StockController {
     return this.stockService.transfer(tenantId, user.sub, dto);
   }
 
+  @RequirePermissions({ module: 'inventory', screen: 'lots', action: 'create' })
+  @Post('stock/receive')
+  @ApiOperation({ summary: 'Manual receipt with explicit lots/serials (rejects tracked products without lots)' })
+  receive(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: StockReceiptDto,
+  ) {
+    return this.stockService.manualReceipt(tenantId, user.sub, dto);
+  }
+
   @RequirePermissions({ module: 'inventory', screen: 'stock', action: 'read' })
-  @Get('movements')
+  @Get('stock/movements')
   @ApiQuery({ name: 'productId', required: false })
   @ApiQuery({ name: 'warehouseId', required: false })
   getMovements(
@@ -59,12 +75,25 @@ export class StockController {
   }
 
   @RequirePermissions({ module: 'inventory', screen: 'stock', action: 'read' })
-  @Get('valuation')
+  @Get('stock/valuation')
   @ApiQuery({ name: 'warehouseId', required: false })
   getValuation(
     @CurrentTenant() tenantId: string,
     @Query('warehouseId') warehouseId?: string,
   ) {
     return this.stockService.getValuation(tenantId, warehouseId);
+  }
+
+  @RequirePermissions({ module: 'inventory', screen: 'stock', action: 'read' })
+  @Get('settings')
+  getSettings(@CurrentTenant() tenantId: string) {
+    return this.settingsService.get(tenantId);
+  }
+
+  @RequirePermissions({ module: 'inventory', screen: 'stock', action: 'update' })
+  @Put('settings')
+  @ApiOperation({ summary: 'Tenant inventory options (negative stock, expiry alert horizon)' })
+  updateSettings(@CurrentTenant() tenantId: string, @Body() dto: InventorySettingsDto) {
+    return this.settingsService.update(tenantId, dto);
   }
 }
