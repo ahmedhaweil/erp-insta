@@ -16,6 +16,20 @@ import { Budget } from '@modules/accounting/entities/budget.entity';
 import { FiscalYear } from '@modules/accounting/entities/fiscal-year.entity';
 import { FinancialReportsController } from './controllers/financial-reports.controller';
 import { DashboardController } from './controllers/dashboard.controller';
+import { AnalysisReportsController } from './controllers/analysis-reports.controller';
+import { LedgerReportsService } from './services/ledger-reports.service';
+import { PartnerStatementService } from './services/partner-statement.service';
+import { SalesAnalysisService } from './services/sales-analysis.service';
+import { VatReturnService } from './services/vat-return.service';
+import { ReportExportService } from './export/report-export.service';
+import { AccountingSettings } from '@modules/accounting/entities/accounting-settings.entity';
+import { CostCenter } from '@modules/accounting/entities/cost-center.entity';
+import { Branch } from '@modules/tenants/entities/branch.entity';
+import { Tenant } from '@modules/tenants/entities/tenant.entity';
+import { Payment } from '@modules/payments/entities/payment.entity';
+import { PaymentAllocation } from '@modules/payments/entities/payment-allocation.entity';
+import { Customer } from '@modules/sales/entities/customer.entity';
+import { Supplier } from '@modules/purchasing/entities/supplier.entity';
 
 @Module({
   imports: [
@@ -31,10 +45,27 @@ import { DashboardController } from './controllers/dashboard.controller';
       Notification,
       Budget,
       FiscalYear,
+      AccountingSettings,
+      CostCenter,
+      Branch,
+      Tenant,
+      Payment,
+      PaymentAllocation,
+      Customer,
+      Supplier,
     ]),
   ],
-  controllers: [FinancialReportsController, DashboardController],
-  providers: [FinancialReportsService, DashboardService, ManagementReportsService],
-  exports: [FinancialReportsService, DashboardService],
+  controllers: [FinancialReportsController, AnalysisReportsController, DashboardController],
+  providers: [
+    FinancialReportsService,
+    DashboardService,
+    ManagementReportsService,
+    LedgerReportsService,
+    PartnerStatementService,
+    SalesAnalysisService,
+    VatReturnService,
+    ReportExportService,
+  ],
+  exports: [FinancialReportsService, DashboardService, ReportExportService],
 })
 export class ReportsModule {}
