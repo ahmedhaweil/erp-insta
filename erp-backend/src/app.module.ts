@@ -23,6 +23,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { EventsModule } from './modules/events/events.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { HrModule } from './modules/hr/hr.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 
 function buildImports() {
@@ -65,6 +66,7 @@ function buildImports() {
     RealtimeModule,
     EventsModule,
     ReportsModule,
+    HrModule,
   ];
 
   // BullMQ for background jobs – only when Redis is available
