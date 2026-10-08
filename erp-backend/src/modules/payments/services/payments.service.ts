@@ -3,8 +3,11 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { RbacService } from '@modules/auth/services/rbac.service';
+import { enforceTreasuryRules } from '@modules/treasury/services/treasury-access.util';
 import { In, Repository } from 'typeorm';
 import {
   Payment,
@@ -105,6 +108,7 @@ export class PaymentsService {
     private readonly purchaseInvoices: PurchaseInvoicesService,
     private readonly autoPosting: AutoPostingService,
     private readonly sequenceService: SequenceService,
+    @Optional() private readonly rbac?: RbacService,
   ) {}
 
   findAll(tenantId: string, partnerId?: string, treasuryId?: string): Promise<Payment[]> {
@@ -186,6 +190,18 @@ export class PaymentsService {
       : null;
     if (method === PaymentMethod.CHEQUE && treasury && treasury.type !== TreasuryType.BANK) {
       throw new BadRequestException('Cheques are drawn on / deposited into bank treasuries only');
+    }
+    if (treasury) {
+      // Treasury rules: custodians only; cash paid out cannot take a cash box below zero.
+      await enforceTreasuryRules({
+        tenantId,
+        userId,
+        treasury,
+        rbac: this.rbac,
+        query: (sql, params) => this.treasuryRepo.query(sql, params),
+        outflow: !inbound && method !== PaymentMethod.CHEQUE ? amount : 0,
+        date: dto.date,
+      });
     }
 
     const draft = this.paymentRepo.create({
