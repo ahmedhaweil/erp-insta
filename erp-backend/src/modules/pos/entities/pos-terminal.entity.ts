@@ -24,4 +24,11 @@ export class PosTerminal extends TenantBaseEntity {
   /** Warehouse stock is deducted from when orders are paid. */
   @Column({ name: 'warehouse_id', type: 'uuid', nullable: true })
   warehouseId: string;
+
+  /**
+   * Largest discount (% below the product sale price) a cashier may give
+   * without the pos/discounts/override permission. Null = no limit.
+   */
+  @Column({ name: 'max_discount_percent', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  maxDiscountPercent: number | null;
 }

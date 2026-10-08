@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RbacGuard } from './common/guards/rbac.guard';
+import { TenantGuard } from './common/guards/tenant.guard';
+import { TransactionInterceptor } from './common/interceptors/transaction.interceptor';
+import { HealthController } from './health.controller';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { BullModule } from '@nestjs/bullmq';
@@ -20,7 +23,11 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { EventsModule } from './modules/events/events.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { HrModule } from './modules/hr/hr.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { ManufacturingModule } from './modules/manufacturing/manufacturing.module';
+import { CrmModule } from './modules/crm/crm.module';
+import { TreasuryModule } from './modules/treasury/treasury.module';
 
 function buildImports() {
   const imports: any[] = [
@@ -57,11 +64,15 @@ function buildImports() {
     PurchasingModule,
     PosModule,
     PaymentsModule,
+    TreasuryModule,
     ComplianceModule,
     NotificationsModule,
     RealtimeModule,
     EventsModule,
     ReportsModule,
+    ManufacturingModule,
+    CrmModule,
+    HrModule,
   ];
 
   // BullMQ for background jobs – only when Redis is available
@@ -85,11 +96,16 @@ function buildImports() {
 
 @Module({
   imports: buildImports(),
+  controllers: [HealthController],
   providers: [
-    // Authenticate every route except those marked @Public(), then enforce
-    // @RequirePermissions. Guards run in registration order.
+    // Authenticate every route except those marked @Public(), reject users of
+    // suspended tenants, then enforce @RequirePermissions. Guards run in
+    // registration order.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: RbacGuard },
+    // One database transaction per request.
+    { provide: APP_INTERCEPTOR, useClass: TransactionInterceptor },
   ],
 })
 export class AppModule {}

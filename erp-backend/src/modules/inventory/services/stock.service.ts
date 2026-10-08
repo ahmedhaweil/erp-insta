@@ -16,6 +16,13 @@ import { StockAdjustedEvent } from '../events/stock-adjusted.event';
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { round, today } from '@shared/utils/document-totals.util';
+import { LotAllocation, LotsService, StockLotInput } from './lots.service';
+import { InventorySettingsService } from './inventory-settings.service';
+import { ProductsService } from './products.service';
+
+export type { StockLotInput, LotAllocation } from './lots.service';
+
+const EPS = 0.00005;
 
 export interface StockMoveRequest {
   productId: string;
@@ -24,6 +31,12 @@ export interface StockMoveRequest {
   referenceType: string;
   referenceId?: string;
   description?: string;
+  /**
+   * Optional lots/serial numbers moved. Receipts of tracked products without
+   * lots get an automatic lot named after the reference; issues without lots
+   * consume lots first-expiry-first-out.
+   */
+  lots?: StockLotInput[];
 }
 
 export interface StockReceiptRequest extends StockMoveRequest {
@@ -34,6 +47,43 @@ export interface StockReceiptRequest extends StockMoveRequest {
 export interface StockIssueRequest extends StockMoveRequest {
   /** Quantity previously reserved for this document that the issue consumes. */
   releaseReserved?: number;
+}
+
+export interface StockReceiveOptions {
+  /** Reject tracked products without lots (explicit lot APIs). */
+  strictLots?: boolean;
+  /** Movement type recorded (default IN). */
+  movementType?: StockMovementType;
+  /** Already validated lot quantities (e.g. lots shipped by a transfer). */
+  lotAllocations?: LotAllocation[];
+  /** Recompute the average cost (default true). */
+  updateAverageCost?: boolean;
+}
+
+export interface StockIssueOptions {
+  /** Movement type recorded (default OUT). */
+  movementType?: StockMovementType;
+  /** FEFO may pick expired lots (default false: expired lots are not sold). */
+  includeExpiredLots?: boolean;
+}
+
+export interface StockAdjustOptions {
+  /** Post the inventory gain/loss entry (default true). */
+  post?: boolean;
+  referenceType?: string;
+  referenceId?: string;
+  /**
+   * Adjust only the untracked part of a tracked product's stock (stock not
+   * covered by any lot): lots are left untouched.
+   */
+  untrackedOnly?: boolean;
+}
+
+export interface StockIssueResult {
+  unitCost: number;
+  cost: number;
+  /** Lots/serial numbers consumed (empty for untracked products). */
+  lots: LotAllocation[];
 }
 
 @Injectable()
@@ -49,6 +99,9 @@ export class StockService {
     private readonly warehouseRepo: Repository<Warehouse>,
     private readonly eventEmitter: EventEmitter2,
     private readonly autoPosting: AutoPostingService,
+    private readonly lotsService: LotsService,
+    private readonly settings: InventorySettingsService,
+    private readonly productsService: ProductsService,
   ) {}
 
   async getStock(tenantId: string, productId?: string, warehouseId?: string): Promise<Stock[]> {
@@ -70,12 +123,16 @@ export class StockService {
     return this.movementRepo.find({ where, order: { createdAt: 'DESC' }, take: 500 });
   }
 
+  /**
+   * Inventory adjustment (positive = gain, negative = loss) posted to the
+   * stock adjustment account at the current average cost.
+   */
   async adjust(
     tenantId: string,
     userId: string,
     dto: StockAdjustmentDto,
+    options: StockAdjustOptions = {},
   ): Promise<Stock> {
-    // Validate product exists
     const product = await this.productRepo.findOne({
       where: { id: dto.productId, tenantId },
     });
@@ -83,42 +140,47 @@ export class StockService {
     if (product.type === ProductType.SERVICE) {
       throw new BadRequestException('Services are not stockable');
     }
+    const quantity = Number(dto.quantity);
+    if (!quantity) throw new BadRequestException('Adjustment quantity cannot be zero');
 
-    // Validate warehouse exists
     const warehouse = await this.warehouseRepo.findOne({
       where: { id: dto.warehouseId, tenantId },
     });
     if (!warehouse) throw new NotFoundException('Warehouse not found');
 
-    // Find or create stock record
-    let stock = await this.stockRepo.findOne({
-      where: { tenantId, productId: dto.productId, warehouseId: dto.warehouseId },
-    });
-
-    if (!stock) {
-      stock = this.stockRepo.create({
-        tenantId,
-        productId: dto.productId,
-        warehouseId: dto.warehouseId,
-        quantity: 0,
-        reservedQty: 0,
-      });
+    const stock = await this.findOrCreateStock(tenantId, dto.productId, dto.warehouseId);
+    const onHand = Number(stock.quantity);
+    const newQty = round(onHand + quantity, 4);
+    if (newQty < -EPS || newQty < Number(stock.reservedQty) - EPS) {
+      if (!(await this.settings.allowNegativeStock(tenantId))) {
+        throw new BadRequestException(
+          newQty < 0
+            ? 'Adjustment would result in negative stock'
+            : 'Adjustment would leave less stock than is reserved',
+        );
+      }
     }
-
-    const newQty = Number(stock.quantity) + dto.quantity;
-    if (newQty < 0) {
-      throw new BadRequestException('Adjustment would result in negative stock');
+    if (options.untrackedOnly && quantity < 0) {
+      const lotted = await this.lotsService.lottedQuantity(tenantId, dto.productId, dto.warehouseId);
+      if (round(onHand - lotted, 4) + quantity < -EPS) {
+        throw new BadRequestException('Adjustment exceeds the stock not assigned to any lot');
+      }
     }
-    if (newQty < Number(stock.reservedQty)) {
-      throw new BadRequestException('Adjustment would leave less stock than is reserved');
-    }
-    stock.quantity = newQty;
+    const allocations =
+      quantity > 0 && !options.untrackedOnly
+        ? this.lotsService.prepareIncoming(product, quantity, dto.lots, {
+            strict: false,
+            fallbackName: `ADJ-${today()}`,
+          })
+        : [];
 
     const unitCost = Number(product.costPrice || 0);
-    if (unitCost > 0) {
+    const post = options.post !== false;
+    if (post && unitCost > 0) {
       await this.autoPosting.preflight(tenantId, today(), ['inventoryAccountId', 'stockAdjustmentAccountId']);
     }
 
+    stock.quantity = newQty;
     const saved = await this.stockRepo.save(stock);
 
     const movement = await this.movementRepo.save(
@@ -127,17 +189,40 @@ export class StockService {
         productId: dto.productId,
         warehouseId: dto.warehouseId,
         type: StockMovementType.ADJUSTMENT,
-        quantity: dto.quantity,
+        quantity,
         unitCost,
-        referenceType: 'adjustment',
+        referenceType: options.referenceType ?? 'adjustment',
+        referenceId: options.referenceId,
         createdBy: userId,
         description: dto.reason,
       }),
     );
 
+    const lotCtx = {
+      tenantId,
+      userId,
+      productId: dto.productId,
+      warehouseId: dto.warehouseId,
+      referenceType: options.referenceType ?? 'adjustment',
+      referenceId: options.referenceId,
+      movementId: movement?.id,
+    };
+    if (options.untrackedOnly) {
+      // lots unchanged: the untracked remainder (stock - lots) absorbs the change
+    } else if (quantity > 0) {
+      await this.lotsService.addLots(lotCtx, product, allocations, unitCost);
+    } else {
+      await this.lotsService.consume(lotCtx, product, -quantity, {
+        lots: dto.lots,
+        includeExpired: true,
+        onHand,
+        allowShortage: true,
+      });
+    }
+
     // Inventory gain/loss valuation entry (Odoo inventory adjustment posting)
-    const value = round(Math.abs(dto.quantity) * unitCost, 4);
-    if (value > 0) {
+    const value = round(Math.abs(quantity) * unitCost, 4);
+    if (post && value > 0) {
       await this.autoPosting.post({
         tenantId,
         userId,
@@ -147,7 +232,7 @@ export class StockService {
         sourceType: 'stock_adjustment',
         sourceId: movement?.id ?? saved.id,
         buildLines: (_s, account) =>
-          dto.quantity > 0
+          quantity > 0
             ? [
                 { accountId: account('inventoryAccountId'), debit: value },
                 { accountId: account('stockAdjustmentAccountId'), credit: value },
@@ -159,7 +244,6 @@ export class StockService {
       });
     }
 
-    // Emit event
     this.eventEmitter.emit(
       'stock.adjusted',
       new StockAdjustedEvent(
@@ -167,7 +251,7 @@ export class StockService {
         userId,
         dto.productId,
         dto.warehouseId,
-        dto.quantity,
+        quantity,
         StockMovementType.ADJUSTMENT,
       ),
     );
@@ -175,12 +259,17 @@ export class StockService {
     return saved;
   }
 
+  /**
+   * Immediate warehouse-to-warehouse move of one product at the current
+   * average cost (no accounting impact). Lots move along (FEFO unless given).
+   * For multi-line, two-step transfers use the transfer documents.
+   */
   async transfer(
     tenantId: string,
     userId: string,
     dto: StockTransferDto,
   ): Promise<{ from: Stock; to: Stock }> {
-    if (dto.quantity <= 0) {
+    if (!(dto.quantity > 0)) {
       throw new BadRequestException('Transfer quantity must be positive');
     }
 
@@ -188,13 +277,14 @@ export class StockService {
       throw new BadRequestException('Source and destination warehouses must be different');
     }
 
-    // Validate product exists
     const product = await this.productRepo.findOne({
       where: { id: dto.productId, tenantId },
     });
     if (!product) throw new NotFoundException('Product not found');
+    if (product.type === ProductType.SERVICE) {
+      throw new BadRequestException('Services are not stockable');
+    }
 
-    // Validate warehouses exist
     const fromWarehouse = await this.warehouseRepo.findOne({
       where: { id: dto.fromWarehouseId, tenantId },
     });
@@ -205,26 +295,34 @@ export class StockService {
     });
     if (!toWarehouse) throw new NotFoundException('Destination warehouse not found');
 
-    // Get source stock
-    const fromStock = await this.stockRepo.findOne({
+    let fromStock = await this.stockRepo.findOne({
       where: { tenantId, productId: dto.productId, warehouseId: dto.fromWarehouseId },
     });
-    if (!fromStock) throw new NotFoundException('No stock found in source warehouse');
+    const allowNegative = async () => this.settings.allowNegativeStock(tenantId);
+    if (!fromStock) {
+      if (!(await allowNegative())) throw new NotFoundException('No stock found in source warehouse');
+      fromStock = this.stockRepo.create({
+        tenantId,
+        productId: dto.productId,
+        warehouseId: dto.fromWarehouseId,
+        quantity: 0,
+        reservedQty: 0,
+      });
+    }
 
-    const availableQty = Number(fromStock.quantity) - Number(fromStock.reservedQty);
-    if (availableQty < dto.quantity) {
+    const onHand = Number(fromStock.quantity);
+    const availableQty = onHand - Number(fromStock.reservedQty);
+    const short = availableQty + EPS < dto.quantity;
+    if (short && !(await allowNegative())) {
       throw new BadRequestException('Insufficient available stock in source warehouse');
     }
 
-    // Deduct from source
-    fromStock.quantity = Number(fromStock.quantity) - dto.quantity;
+    fromStock.quantity = round(onHand - dto.quantity, 4);
     await this.stockRepo.save(fromStock);
 
-    // Add to destination
     let toStock = await this.stockRepo.findOne({
       where: { tenantId, productId: dto.productId, warehouseId: dto.toWarehouseId },
     });
-
     if (!toStock) {
       toStock = this.stockRepo.create({
         tenantId,
@@ -234,13 +332,11 @@ export class StockService {
         reservedQty: 0,
       });
     }
-
-    toStock.quantity = Number(toStock.quantity) + dto.quantity;
+    toStock.quantity = round(Number(toStock.quantity) + dto.quantity, 4);
     await this.stockRepo.save(toStock);
 
-    // Record movements
     const unitCost = Number(product.costPrice || 0);
-    await this.movementRepo.save([
+    const [outMove, inMove] = (await this.movementRepo.save([
       this.movementRepo.create({
         tenantId,
         productId: dto.productId,
@@ -263,7 +359,34 @@ export class StockService {
         createdBy: userId,
         description: `Transfer from ${fromWarehouse.nameEn || fromWarehouse.nameAr}`,
       }),
-    ]);
+    ])) as unknown as StockMovement[];
+
+    const moved = await this.lotsService.consume(
+      {
+        tenantId,
+        userId,
+        productId: dto.productId,
+        warehouseId: dto.fromWarehouseId,
+        referenceType: 'transfer',
+        movementId: outMove?.id,
+      },
+      product,
+      dto.quantity,
+      { lots: dto.lots, includeExpired: false, onHand, allowShortage: short },
+    );
+    await this.lotsService.addLots(
+      {
+        tenantId,
+        userId,
+        productId: dto.productId,
+        warehouseId: dto.toWarehouseId,
+        referenceType: 'transfer',
+        movementId: inMove?.id,
+      },
+      product,
+      moved,
+      unitCost,
+    );
 
     return { from: fromStock, to: toStock };
   }
@@ -272,35 +395,51 @@ export class StockService {
    * Goods receipt (Odoo incoming picking validation). Increases on-hand stock
    * and recomputes the product's average cost.
    */
-  async receive(tenantId: string, userId: string, req: StockReceiptRequest): Promise<Stock | null> {
+  async receive(
+    tenantId: string,
+    userId: string,
+    req: StockReceiptRequest,
+    options: StockReceiveOptions = {},
+  ): Promise<Stock | null> {
     if (!(req.quantity > 0)) throw new BadRequestException('Received quantity must be positive');
     const product = await this.getStockableProduct(tenantId, req.productId);
     if (!product) return null;
     await this.assertWarehouse(tenantId, req.warehouseId);
 
+    // Validate lots before anything is changed
+    const allocations =
+      options.lotAllocations ??
+      this.lotsService.prepareIncoming(product, req.quantity, req.lots, {
+        strict: options.strictLots === true,
+        fallbackName: this.fallbackLotName(req),
+      });
+
     // AVCO: new cost = (on-hand value + received value) / (on-hand qty + received qty)
-    const onHand = await this.totalOnHand(tenantId, req.productId);
-    const currentCost = Number(product.costPrice || 0);
-    const newQty = onHand + req.quantity;
-    if (newQty > 0) {
-      product.costPrice = round(
-        (Math.max(onHand, 0) * currentCost + req.quantity * Number(req.unitCost)) /
-          (Math.max(onHand, 0) + req.quantity),
-        4,
-      );
-      await this.productRepo.save(product);
+    if (options.updateAverageCost !== false) {
+      const onHand = await this.totalOnHand(tenantId, req.productId);
+      const currentCost = Number(product.costPrice || 0);
+      const newQty = onHand + req.quantity;
+      if (newQty > 0) {
+        product.costPrice = round(
+          (Math.max(onHand, 0) * currentCost + req.quantity * Number(req.unitCost)) /
+            (Math.max(onHand, 0) + req.quantity),
+          4,
+        );
+        await this.productRepo.save(product);
+      }
     }
 
     const stock = await this.findOrCreateStock(tenantId, req.productId, req.warehouseId);
-    stock.quantity = Number(stock.quantity) + req.quantity;
+    stock.quantity = round(Number(stock.quantity) + req.quantity, 4);
     const saved = await this.stockRepo.save(stock);
 
-    await this.movementRepo.save(
+    const type = options.movementType ?? StockMovementType.IN;
+    const movement = await this.movementRepo.save(
       this.movementRepo.create({
         tenantId,
         productId: req.productId,
         warehouseId: req.warehouseId,
-        type: StockMovementType.IN,
+        type,
         quantity: req.quantity,
         unitCost: Number(req.unitCost),
         referenceType: req.referenceType,
@@ -310,46 +449,82 @@ export class StockService {
       }),
     );
 
+    await this.lotsService.addLots(
+      {
+        tenantId,
+        userId,
+        productId: req.productId,
+        warehouseId: req.warehouseId,
+        referenceType: req.referenceType,
+        referenceId: req.referenceId,
+        movementId: movement?.id,
+      },
+      product,
+      allocations,
+      Number(req.unitCost),
+    );
+
     this.eventEmitter.emit(
       'stock.adjusted',
-      new StockAdjustedEvent(tenantId, userId, req.productId, req.warehouseId, req.quantity, StockMovementType.IN),
+      new StockAdjustedEvent(tenantId, userId, req.productId, req.warehouseId, req.quantity, type),
     );
     return saved;
   }
 
   /**
    * Goods issue (Odoo outgoing picking validation). Returns the cost of the
-   * goods issued at the current average cost (0 for services).
+   * goods issued at the current average cost (0 for services) and the lots
+   * consumed (FEFO unless lots are given).
    */
-  async issue(tenantId: string, userId: string, req: StockIssueRequest): Promise<{ unitCost: number; cost: number }> {
+  async issue(
+    tenantId: string,
+    userId: string,
+    req: StockIssueRequest,
+    options: StockIssueOptions = {},
+  ): Promise<StockIssueResult> {
     if (!(req.quantity > 0)) throw new BadRequestException('Issued quantity must be positive');
     const product = await this.getStockableProduct(tenantId, req.productId);
-    if (!product) return { unitCost: 0, cost: 0 };
+    if (!product) return { unitCost: 0, cost: 0, lots: [] };
 
-    const stock = await this.stockRepo.findOne({
+    let stock = await this.stockRepo.findOne({
       where: { tenantId, productId: req.productId, warehouseId: req.warehouseId },
     });
     const quantity = Number(stock?.quantity ?? 0);
     const reserved = Number(stock?.reservedQty ?? 0);
     const releasable = Math.min(Number(req.releaseReserved ?? 0), reserved);
     const available = quantity - (reserved - releasable);
-    if (!stock || available < req.quantity) {
-      throw new BadRequestException(
-        `Insufficient stock for ${product.code}: available ${round(available, 4)}, requested ${req.quantity}`,
-      );
+    let allowNegative = false;
+    if (!stock || available + EPS < req.quantity) {
+      allowNegative = await this.settings.allowNegativeStock(tenantId);
+      if (!allowNegative) {
+        throw new BadRequestException(
+          `Insufficient stock for ${product.code}: available ${round(available, 4)}, requested ${req.quantity}`,
+        );
+      }
+      if (!stock) {
+        await this.assertWarehouse(tenantId, req.warehouseId);
+        stock = this.stockRepo.create({
+          tenantId,
+          productId: req.productId,
+          warehouseId: req.warehouseId,
+          quantity: 0,
+          reservedQty: 0,
+        });
+      }
     }
 
-    stock.quantity = quantity - req.quantity;
-    stock.reservedQty = reserved - Math.min(releasable, req.quantity);
+    stock.quantity = round(quantity - req.quantity, 4);
+    stock.reservedQty = round(reserved - Math.min(releasable, req.quantity), 4);
     await this.stockRepo.save(stock);
 
     const unitCost = Number(product.costPrice || 0);
-    await this.movementRepo.save(
+    const type = options.movementType ?? StockMovementType.OUT;
+    const movement = await this.movementRepo.save(
       this.movementRepo.create({
         tenantId,
         productId: req.productId,
         warehouseId: req.warehouseId,
-        type: StockMovementType.OUT,
+        type,
         quantity: -req.quantity,
         unitCost,
         referenceType: req.referenceType,
@@ -359,11 +534,81 @@ export class StockService {
       }),
     );
 
+    const lots = await this.lotsService.consume(
+      {
+        tenantId,
+        userId,
+        productId: req.productId,
+        warehouseId: req.warehouseId,
+        referenceType: req.referenceType,
+        referenceId: req.referenceId,
+        movementId: movement?.id,
+      },
+      product,
+      req.quantity,
+      {
+        lots: req.lots,
+        includeExpired: options.includeExpiredLots === true,
+        onHand: quantity,
+        allowShortage: allowNegative,
+      },
+    );
+
     this.eventEmitter.emit(
       'stock.adjusted',
-      new StockAdjustedEvent(tenantId, userId, req.productId, req.warehouseId, -req.quantity, StockMovementType.OUT),
+      new StockAdjustedEvent(tenantId, userId, req.productId, req.warehouseId, -req.quantity, type),
     );
-    return { unitCost, cost: round(unitCost * req.quantity, 4) };
+    return { unitCost, cost: round(unitCost * req.quantity, 4), lots };
+  }
+
+  /**
+   * Manual goods receipt with explicit lots (opening stock, goods found...).
+   * Tracked products must give their lots/serials (and expiry dates when the
+   * product has expiry). Posts Dr inventory / Cr stock adjustment.
+   */
+  async manualReceipt(
+    tenantId: string,
+    userId: string,
+    dto: { productId: string; warehouseId: string; quantity: number; unitCost?: number; reason?: string; lots?: StockLotInput[] },
+  ): Promise<Stock | null> {
+    const product = await this.getStockableProduct(tenantId, dto.productId);
+    if (!product) throw new BadRequestException('Services are not stockable');
+    const unitCost = dto.unitCost ?? Number(product.costPrice || 0);
+    if (unitCost < 0) throw new BadRequestException('Unit cost cannot be negative');
+    const value = round(Number(dto.quantity) * unitCost, 4);
+    if (value > 0) {
+      await this.autoPosting.preflight(tenantId, today(), ['inventoryAccountId', 'stockAdjustmentAccountId']);
+    }
+    const stock = await this.receive(
+      tenantId,
+      userId,
+      {
+        productId: dto.productId,
+        warehouseId: dto.warehouseId,
+        quantity: Number(dto.quantity),
+        unitCost,
+        referenceType: 'manual_receipt',
+        description: dto.reason,
+        lots: dto.lots,
+      },
+      { strictLots: true },
+    );
+    if (value > 0) {
+      await this.autoPosting.post({
+        tenantId,
+        userId,
+        journalType: JournalType.GENERAL,
+        date: today(),
+        description: `Stock receipt ${product.code}${dto.reason ? ` - ${dto.reason}` : ''}`,
+        sourceType: 'stock_receipt',
+        sourceId: stock?.id ?? product.id,
+        buildLines: (_s, account) => [
+          { accountId: account('inventoryAccountId'), debit: value },
+          { accountId: account('stockAdjustmentAccountId'), credit: value },
+        ],
+      });
+    }
+    return stock;
   }
 
   /** Reserves up to `quantity` of available stock; returns the quantity reserved. */
@@ -420,6 +665,25 @@ export class StockService {
 
   async isStockable(tenantId: string, productId: string): Promise<boolean> {
     return (await this.getStockableProduct(tenantId, productId)) !== null;
+  }
+
+  /**
+   * Converts a quantity expressed in `unitId` (base or alternate unit of the
+   * product) to the product's base unit. Same as ProductsService.toBaseQuantity.
+   */
+  toBaseQuantity(tenantId: string, productId: string, quantity: number, unitId?: string | null): Promise<number> {
+    return this.productsService.toBaseQuantity(tenantId, productId, quantity, unitId);
+  }
+
+  async allowNegativeStock(tenantId: string): Promise<boolean> {
+    return this.settings.allowNegativeStock(tenantId);
+  }
+
+  private fallbackLotName(req: StockMoveRequest): string {
+    // "Receipt PO-000012" -> "PO-000012"
+    const token = req.description?.trim().split(/\s+/).pop();
+    if (token && /\d/.test(token)) return token;
+    return `${req.referenceType || 'IN'}-${today()}`;
   }
 
   private async getStockableProduct(tenantId: string, productId: string): Promise<Product | null> {

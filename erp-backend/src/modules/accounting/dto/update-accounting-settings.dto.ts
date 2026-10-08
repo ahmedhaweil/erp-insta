@@ -17,5 +17,26 @@ export class UpdateAccountingSettingsDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() depreciationExpenseAccountId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() accumulatedDepreciationAccountId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() assetDisposalAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() notesReceivableAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() chequesUnderCollectionAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() notesPayableAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() fxGainAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() fxLossAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() bankChargesAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() withholdingTaxReceivableAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() withholdingTaxPayableAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() salesReturnAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() salesDiscountAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() salariesExpenseAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() salariesPayableAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() socialInsuranceExpenseAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() socialInsurancePayableAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() payrollTaxPayableAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() employeeAdvancesAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() commissionExpenseAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() commissionPayableAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() installmentInterestAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() manufacturingOverheadAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() purchaseReturnAccountId?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() lockDate?: string;
 }

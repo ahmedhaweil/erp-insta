@@ -6,6 +6,12 @@ import { Tenant } from '@modules/tenants/entities/tenant.entity';
 import { User } from '@modules/auth/entities/user.entity';
 import { Role } from '@modules/auth/entities/role.entity';
 import { UserRole } from '@modules/auth/entities/user-role.entity';
+import { Account } from '@modules/accounting/entities/account.entity';
+import { AccountingSettings } from '@modules/accounting/entities/accounting-settings.entity';
+import { FiscalYear } from '@modules/accounting/entities/fiscal-year.entity';
+import { Journal } from '@modules/accounting/entities/journal.entity';
+import { Currency } from '@modules/accounting/entities/currency.entity';
+import { AccountingSetupService } from '@modules/accounting/services/accounting-setup.service';
 
 dotenv.config();
 
@@ -14,6 +20,11 @@ const DEFAULT_TENANT_NAME = process.env.SEED_TENANT_NAME || 'Default Organizatio
 const DEFAULT_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || 'admin@erp.local';
 const DEFAULT_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || 'Admin@12345';
 const DEFAULT_ADMIN_NAME = process.env.SEED_ADMIN_NAME || 'System Administrator';
+/** Chart of accounts template for the default tenant: eg (default), sa, or none to skip. */
+const SEED_CHART = (process.env.SEED_CHART || 'eg').toLowerCase();
+/** First day of the open fiscal year (default: 1 January of the current year). */
+const SEED_FISCAL_YEAR_START =
+  process.env.SEED_FISCAL_YEAR_START || `${new Date().getFullYear()}-01-01`;
 
 async function run() {
   const dataSource = new DataSource({
@@ -105,12 +116,52 @@ async function run() {
     console.log('Admin role already assigned to admin user');
   }
 
+  await seedChartOfAccounts(dataSource, tenant);
+
   console.log('\nSeed complete. Login with:');
   console.log(`  Tenant slug : ${tenant.slug}`);
   console.log(`  Email       : ${DEFAULT_ADMIN_EMAIL}`);
   console.log(`  Password    : ${DEFAULT_ADMIN_PASSWORD}`);
 
   await dataSource.destroy();
+}
+
+/**
+ * Runs the accounting setup wizard for the default tenant so a fresh install
+ * posts journal entries immediately. Skipped when the tenant already has
+ * accounts or SEED_CHART=none.
+ */
+async function seedChartOfAccounts(dataSource: DataSource, tenant: Tenant) {
+  if (SEED_CHART === 'none') {
+    console.log('SEED_CHART=none: chart of accounts not created');
+    return;
+  }
+  if (SEED_CHART !== 'eg' && SEED_CHART !== 'sa') {
+    throw new Error(`SEED_CHART must be eg, sa or none (got "${SEED_CHART}")`);
+  }
+  const accountRepo = dataSource.getRepository(Account);
+  const existing = await accountRepo.count({ where: { tenantId: tenant.id } });
+  if (existing > 0) {
+    console.log(`Chart of accounts already exists (${existing} accounts); setup skipped`);
+    return;
+  }
+  const setup = new AccountingSetupService(
+    accountRepo,
+    dataSource.getRepository(AccountingSettings),
+    dataSource.getRepository(FiscalYear),
+    dataSource.getRepository(Journal),
+    dataSource.getRepository(Currency),
+    dataSource.getRepository(Tenant),
+  );
+  const result = await setup.setup(tenant.id, {
+    template: SEED_CHART,
+    fiscalYearStart: SEED_FISCAL_YEAR_START,
+  });
+  console.log(
+    `Created "${SEED_CHART}" chart of accounts (${result.accountsCreated} accounts), ` +
+      `${result.settingsKeysFilled.length} default accounts, fiscal year ${result.fiscalYear.name}, ` +
+      `base currency ${result.baseCurrency}`,
+  );
 }
 
 run().catch((err) => {

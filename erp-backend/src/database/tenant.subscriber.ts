@@ -10,8 +10,8 @@ import {
  * TypeORM subscriber that sets the PostgreSQL session variable
  * for Row Level Security (RLS) tenant isolation.
  *
- * This is used in conjunction with the TenantContextMiddleware
- * which stores the current tenant ID on the query runner.
+ * Not registered: TransactionInterceptor sets the tenant for the whole
+ * request transaction.
  */
 @EventSubscriber()
 export class TenantSubscriber implements EntitySubscriberInterface {
@@ -28,7 +28,7 @@ export class TenantSubscriber implements EntitySubscriberInterface {
   ): Promise<void> {
     const tenantId = (event.queryRunner as any)?.data?.tenantId;
     if (tenantId) {
-      await event.queryRunner.query(`SET app.current_tenant = '${tenantId}'`);
+      await event.queryRunner.query(`SELECT set_config('app.current_tenant', $1, true)`, [tenantId]);
     }
   }
 }

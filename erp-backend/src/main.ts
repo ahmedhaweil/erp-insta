@@ -3,12 +3,17 @@ import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { initializeTransactionalContext, StorageDriver } from 'typeorm-transactional';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
+  // Must run before the DataSource is created: every mutating request runs in
+  // one database transaction (see TransactionInterceptor).
+  initializeTransactionalContext({ storageDriver: StorageDriver.AUTO });
+
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
@@ -19,8 +24,8 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Global prefix
-  app.setGlobalPrefix('api/v1');
+  // Global prefix; URI versioning adds the version, so routes are /api/v1/...
+  app.setGlobalPrefix('api');
 
   // Versioning
   app.enableVersioning({

@@ -6,6 +6,8 @@ import {
   IsArray,
   ValidateNested,
   ArrayMinSize,
+  IsString,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -20,16 +22,17 @@ export class PosOrderLineDto {
   @IsNumber()
   quantity: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Defaults to the product sale price' })
+  @IsOptional()
   @IsNumber()
-  unitPrice: number;
+  unitPrice?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
   discount?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Defaults to the product sales tax rate' })
   @IsOptional()
   @IsNumber()
   taxRate?: number;
@@ -44,6 +47,12 @@ export class CreatePosOrderDto {
   @IsOptional()
   @IsUUID()
   customerId?: string;
+
+  @ApiPropertyOptional({ description: 'Till-generated id; resending the same sale is idempotent' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  clientReference?: string;
 
   @ApiProperty({ enum: PosPaymentMethod })
   @IsEnum(PosPaymentMethod)

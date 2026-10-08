@@ -22,6 +22,14 @@ export class PosOrderLine extends BaseEntity {
   @Column({ name: 'tax_rate', type: 'decimal', precision: 5, scale: 2, default: 0 })
   taxRate: number;
 
+  /** Quantity already returned through refunds (sale lines only). */
+  @Column({ name: 'refunded_qty', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  refundedQty: number;
+
+  /** Average cost of the goods when sold, used to restock refunds at that cost. */
+  @Column({ name: 'unit_cost', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  unitCost: number;
+
   @Column({ name: 'line_total', type: 'decimal', precision: 18, scale: 4 })
   lineTotal: number;
 

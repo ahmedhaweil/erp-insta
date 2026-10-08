@@ -1,15 +1,18 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { RequirePermissions } from '@common/decorators/require-permissions.decorator';
 import { DashboardService } from '../services/dashboard.service';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { JwtPayload } from '@common/interfaces/request-with-user.interface';
 
 @ApiTags('reports')
+@ApiBearerAuth()
 @Controller('reports')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
+  @RequirePermissions({ module: 'reports', screen: 'dashboard', action: 'read' })
   @Get('dashboard')
   getDashboard(
     @CurrentTenant() tenantId: string,

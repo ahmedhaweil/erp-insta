@@ -20,6 +20,8 @@ import { FiscalYearsService } from './services/fiscal-years.service';
 import { AccountsController } from './controllers/accounts.controller';
 import { JournalEntriesController } from './controllers/journal-entries.controller';
 import { AccountingConfigController } from './controllers/accounting-config.controller';
+import { AccountingSetupService } from './services/accounting-setup.service';
+import { Tenant } from '@modules/tenants/entities/tenant.entity';
 
 @Module({
   imports: [
@@ -35,6 +37,7 @@ import { AccountingConfigController } from './controllers/accounting-config.cont
       ExchangeRate,
       Budget,
       AccountingSettings,
+      Tenant,
     ]),
   ],
   controllers: [AccountsController, JournalEntriesController, AccountingConfigController],
@@ -45,12 +48,14 @@ import { AccountingConfigController } from './controllers/accounting-config.cont
     AutoPostingService,
     FixedAssetsService,
     FiscalYearsService,
+    AccountingSetupService,
   ],
   exports: [
     AccountsService,
     JournalEntriesService,
     AccountingSettingsService,
     AutoPostingService,
+    AccountingSetupService,
   ],
 })
 export class AccountingModule {}

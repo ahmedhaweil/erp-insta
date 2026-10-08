@@ -11,6 +11,7 @@ services:
     dockerfilePath: ./docker/Dockerfile
     dockerContext: .
     plan: free
+    healthCheckPath: /api/v1/health
     envVars:
       - key: APP_ENV
         value: staging

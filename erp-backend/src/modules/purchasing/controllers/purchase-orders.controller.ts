@@ -3,6 +3,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { PurchaseOrdersService } from '../services/purchase-orders.service';
 import { CreatePurchaseOrderDto } from '../dto/create-purchase-order.dto';
 import { CreateBillFromOrderDto, ReceiveOrderDto } from '../dto/purchase-actions.dto';
+import { RejectDto } from '../dto/purchasing-settings.dto';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { JwtPayload } from '@common/interfaces/request-with-user.interface';
@@ -44,6 +45,22 @@ export class PurchaseOrdersController {
     @Param('id') id: string,
   ) {
     return this.ordersService.confirm(tenantId, user.sub, id);
+  }
+
+  @RequirePermissions({ module: 'purchasing', screen: 'po_approval', action: 'approve' })
+  @Post(':id/approve')
+  approve(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.ordersService.approve(tenantId, user.sub, id);
+  }
+
+  @RequirePermissions({ module: 'purchasing', screen: 'po_approval', action: 'approve' })
+  @Post(':id/reject')
+  reject(@CurrentTenant() tenantId: string, @Param('id') id: string, @Body() dto: RejectDto) {
+    return this.ordersService.reject(tenantId, id, dto.reason);
   }
 
   @RequirePermissions({ module: 'purchasing', screen: 'orders', action: 'update' })
