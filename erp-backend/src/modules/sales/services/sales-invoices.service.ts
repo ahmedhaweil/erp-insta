@@ -31,6 +31,7 @@ import {
   residual,
   round,
   today,
+  withDefaultTaxRates,
 } from '@shared/utils/document-totals.util';
 
 const OPEN_STATUSES = [
@@ -103,6 +104,13 @@ export class SalesInvoicesService {
     }
     if (inputLines.some((l) => l.unitPrice === undefined || l.unitPrice === null)) {
       throw new BadRequestException('Every line needs a unit price');
+    }
+    const untaxed = inputLines.filter((l) => l.taxRate === undefined || l.taxRate === null);
+    if (this.pricing && untaxed.length) {
+      inputLines = withDefaultTaxRates(
+        inputLines,
+        await this.pricing.defaultTaxRates(tenantId, untaxed.map((l) => l.productId)),
+      );
     }
 
     const taxIncluded = !!dto.pricesIncludeTax;

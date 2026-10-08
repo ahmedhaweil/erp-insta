@@ -28,6 +28,7 @@ import {
   residual,
   round,
   today,
+  withDefaultTaxRates,
 } from '@shared/utils/document-totals.util';
 
 const OPEN_STATUSES = [
@@ -78,7 +79,8 @@ export class PurchaseInvoicesService {
     }
 
     const taxIncluded = !!dto.pricesIncludeTax;
-    const lines = dto.lines.map((l) => ({
+    const inputLines = await this.withPurchaseTaxDefaults(tenantId, dto.lines);
+    const lines = inputLines.map((l) => ({
       ...computeLine(l, { taxIncluded }),
       productId: l.productId,
       description: l.description,
@@ -349,5 +351,16 @@ export class PurchaseInvoicesService {
     if (!supplier) throw new NotFoundException('Supplier not found');
     if (!supplier.isActive) throw new BadRequestException('Supplier is archived');
     return supplier;
+  }
+
+  /** Lines without a tax rate take the product's default purchase tax rate. */
+  private async withPurchaseTaxDefaults<T extends { productId: string; taxRate?: number | null }>(
+    tenantId: string,
+    lines: T[],
+  ): Promise<T[]> {
+    const ids = lines.filter((l) => l.taxRate === undefined || l.taxRate === null).map((l) => l.productId);
+    if (!ids.length) return lines;
+    const products = await this.productRepo.find({ where: { tenantId, id: In([...new Set(ids)]) } });
+    return withDefaultTaxRates(lines, new Map(products.map((p) => [p.id, Number(p.purchaseTaxRate ?? 0)])));
   }
 }

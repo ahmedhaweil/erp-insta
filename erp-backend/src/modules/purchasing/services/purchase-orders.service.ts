@@ -31,7 +31,7 @@ export const PO_APPROVAL_PERMISSION = {
   screen: 'po_approval',
   action: 'approve',
 };
-import { computeLine, computeTotals, round, today } from '@shared/utils/document-totals.util';
+import { computeLine, computeTotals, round, today, withDefaultTaxRates } from '@shared/utils/document-totals.util';
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -66,7 +66,8 @@ export class PurchaseOrdersService {
 
     // Client totals are ignored: amounts are recomputed from the lines
     const taxIncluded = !!dto.pricesIncludeTax;
-    const lines = dto.lines.map((l) => ({
+    const inputLines = await this.withPurchaseTaxDefaults(tenantId, dto.lines);
+    const lines = inputLines.map((l) => ({
       ...computeLine(l, { taxIncluded }),
       productId: l.productId,
       description: l.description,
@@ -354,5 +355,16 @@ export class PurchaseOrdersService {
     order.status = PurchaseOrderStatus.CANCELLED;
     order.billStatus = PurchaseOrderBillStatus.NOTHING;
     return this.orderRepo.save(order);
+  }
+
+  /** Lines without a tax rate take the product's default purchase tax rate. */
+  private async withPurchaseTaxDefaults<T extends { productId: string; taxRate?: number | null }>(
+    tenantId: string,
+    lines: T[],
+  ): Promise<T[]> {
+    const ids = lines.filter((l) => l.taxRate === undefined || l.taxRate === null).map((l) => l.productId);
+    if (!ids.length) return lines;
+    const products = await this.productRepo.find({ where: { tenantId, id: In([...new Set(ids)]) } });
+    return withDefaultTaxRates(lines, new Map(products.map((p) => [p.id, Number(p.purchaseTaxRate ?? 0)])));
   }
 }

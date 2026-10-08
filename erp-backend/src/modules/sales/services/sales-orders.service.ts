@@ -26,7 +26,13 @@ import { SequenceService } from '@shared/services/sequence.service';
 import { StockService } from '@modules/inventory/services/stock.service';
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
 import { JournalType } from '@modules/accounting/entities/journal.entity';
-import { computeLine, computeTotals, round, today } from '@shared/utils/document-totals.util';
+import {
+  computeLine,
+  computeTotals,
+  round,
+  today,
+  withDefaultTaxRates,
+} from '@shared/utils/document-totals.util';
 
 @Injectable()
 export class SalesOrdersService {
@@ -70,6 +76,13 @@ export class SalesOrdersService {
     }
     if (inputLines.some((l) => l.unitPrice === undefined || l.unitPrice === null)) {
       throw new BadRequestException('Every line needs a unit price');
+    }
+    const untaxed = inputLines.filter((l) => l.taxRate === undefined || l.taxRate === null);
+    if (this.pricing && untaxed.length) {
+      inputLines = withDefaultTaxRates(
+        inputLines,
+        await this.pricing.defaultTaxRates(tenantId, untaxed.map((l) => l.productId)),
+      );
     }
 
     // Amounts are always recomputed server-side from quantities and prices
