@@ -44,7 +44,7 @@ No posting rules or schema changes were added.
 
 ## Still missing
 
-- PDF export.
+- ~~PDF export~~: done, `?format=pdf` on every report (see `printing.md`); the PDF has no tenant letterhead yet (controllers do not pass the company to `ReportExportService.respond`).
 - Multi-currency partner statements (shown in document currency).
 - A real salesperson dimension in sales analysis (it groups by document creator; the sales module
   now has sales representatives that the report should use).

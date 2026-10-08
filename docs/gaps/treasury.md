@@ -74,4 +74,4 @@ Permissions module `treasury`, screens `treasuries`, `vouchers`, `transfers`, `c
 - Bank charges on a bounced issued cheque have to be entered as a payment voucher.
 - Bank statement import reads JSON and simple CSV only (no MT940 or OFX). Dates must be `YYYY-MM-DD`.
 - The generic `JournalEntriesService.reverse` (accounting module) drops `amount_currency` on reversal lines. The treasury ledger works around this by deriving the currency amount as base / entry rate, and transfers are cancelled with an explicit mirror entry. Fixing `reverse` itself would be cleaner.
-- Cheque printing, promissory notes with installment schedules, and post-dated cheque reminders or notifications are not built.
+- Cheque printing is done (`GET /print/cheques/:id` with per-bank layouts, see `printing.md`). Promissory notes with installment schedules, and post-dated cheque reminders or notifications are not built.

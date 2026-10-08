@@ -124,7 +124,7 @@ Per employee and month:
 
 ## Still missing
 
-- Payslip PDF / bank salary transfer files (WPS / Mudad for KSA, bank sheets for Egypt), GOSI and
+- Payslip PDF and payroll register PDF are done (see `printing.md`). Still missing: bank salary transfer files (WPS / Mudad for KSA, bank sheets for Egypt), GOSI and
   Form 2/6 (Egypt) official filings, monthly tax return (Form 4) export.
 - Year-to-date tax true-up and an annual tax settlement for Egypt; Martyrs fund contribution.
 - Leave carry-forward and encashment, half-day leaves, leave accrual per month, leave salary
