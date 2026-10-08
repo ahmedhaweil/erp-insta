@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsBoolean, IsUUID } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 export class CreateCategoryDto {
   @ApiProperty()
@@ -21,3 +21,5 @@ export class CreateCategoryDto {
   @IsBoolean()
   isActive?: boolean;
 }
+
+export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {}

@@ -1,3 +1,8 @@
+import { LandedCost } from './entities/landed-cost.entity';
+import { LandedCostsService } from './services/landed-costs.service';
+import { LandedCostsController } from './controllers/landed-costs.controller';
+import { StockMovement } from '@modules/inventory/entities/stock-movement.entity';
+import { Account } from '@modules/accounting/entities/account.entity';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Supplier } from './entities/supplier.entity';
@@ -32,6 +37,7 @@ import { PurchaseInvoicesController } from './controllers/purchase-invoices.cont
 import { ReplenishmentController } from './controllers/replenishment.controller';
 import { AccountingModule } from '@modules/accounting/accounting.module';
 import { InventoryModule } from '@modules/inventory/inventory.module';
+import { ApprovalsModule } from '@modules/approvals/approvals.module';
 
 @Module({
   imports: [
@@ -48,12 +54,17 @@ import { InventoryModule } from '@modules/inventory/inventory.module';
       PurchaseRequisitionLine,
       PurchaseReturn,
       PurchaseReturnLine,
+      LandedCost,
+      StockMovement,
+      Account,
     ]),
     AccountingModule,
     InventoryModule,
     AuthModule,
+    ApprovalsModule,
   ],
   controllers: [
+    LandedCostsController,
     SuppliersController,
     PurchaseOrdersController,
     PurchaseInvoicesController,
@@ -63,6 +74,7 @@ import { InventoryModule } from '@modules/inventory/inventory.module';
     PurchaseReturnsController,
   ],
   providers: [
+    LandedCostsService,
     SuppliersService,
     PurchaseOrdersService,
     PurchaseInvoicesService,
@@ -77,6 +89,7 @@ import { InventoryModule } from '@modules/inventory/inventory.module';
     PurchaseInvoicesService,
     PurchasingSettingsService,
     PurchaseReturnsService,
+    PurchaseRequisitionsService,
   ],
 })
 export class PurchasingModule {}

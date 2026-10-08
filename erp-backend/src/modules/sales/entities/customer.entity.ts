@@ -9,10 +9,10 @@ export class Customer extends TenantBaseEntity {
   @Column({ name: 'name_ar' })
   nameAr: string;
 
-  @Column({ name: 'name_en' })
+  @Column({ name: 'name_en', nullable: true })
   nameEn: string;
 
-  @Column()
+  @Column({ nullable: true })
   phone: string;
 
   @Column({ nullable: true })

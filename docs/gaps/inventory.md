@@ -111,13 +111,73 @@ requests, an `options` argument on `receive`, `issue` and `adjust`, `lots` in th
 `allowNegativeStock` methods.
 
 ## Still missing
-- Sales/purchase/POS documents do not yet pass lots or units: they rely on the
-  automatic lot on receipt and FEFO on issue. POS refunds of serial products
-  get new serials instead of the original ones.
+- Lots received automatically (no explicit lots) are not recorded on the
+  purchase order line, so purchase returns of those goods use FEFO.
+- Cancelling a sales return / un-building issues the goods at the current
+  average cost (AVCO is per product); the difference to the recorded cost is
+  posted to stock adjustment only for un-builds.
 - Average cost is per product (all warehouses), not per warehouse; no FIFO.
 - No stock locking during counts (warnings only); no count approval step or
   printed count sheets.
 - Goods in transit are not on a separate GL account; the valuation report
   excludes them (see `inTransitValue` on transfers).
-- No putaway/removal rules other than FEFO, no multi-step routes, no landed costs.
+- No putaway/removal rules other than FEFO, no multi-step routes. Landed costs are built in purchasing (`/purchasing/landed-costs`, see sales-purchasing.md).
 - Lot attributes beyond number/expiry (manufacturing date, supplier lot) are not stored.
+
+## Phase 2: units and lots on documents (operations integration)
+
+### Alternate units on document lines
+Sales orders, sales invoices (and credit notes), purchase orders, vendor bills (and
+refunds), sales/purchase returns and POS lines accept an optional `unitId` (an
+alternate unit from `product_units`, or a global unit converting to the base
+unit). The line keeps `quantity` and `unitPrice` in that unit and stores
+`unit_id` and `unit_factor` (base units per line unit; 1 for the base unit).
+All tracked quantities of the line (`qty_delivered`, `qty_invoiced`,
+`qty_received`, `qty_billed`, `qty_returned`, `refunded_qty`) are in the line
+unit; `sales_order_lines.qty_reserved` is a stock reservation in base units.
+Stock moves, reservations and costs use `quantity x unit_factor`. Costs
+(`unit_cost` on return/POS lines, receipt costs) are per base unit; a receipt
+of 2 cartons at 96 updates AVCO at 8 per piece.
+- Pricing: lines without a price in an alternate unit are priced from the
+  price list on the base quantity times the factor; with no price list the
+  unit's own `sell_price` is used when set. Minimum selling prices are checked
+  per base unit.
+- Documents derived from others (order -> invoice, invoice -> credit note,
+  order -> bill, bill -> refund, invoice/bill -> return) carry the unit and
+  the stored factor.
+- POS: a line can give `barcode` instead of `productId`; the inventory barcode
+  lookup sets the product, the scanned unit and its price (unit price, else
+  product price x factor). Refund lines take `lineId`, or `productId` (+
+  `unitId`) with quantities in the unit of the sale line.
+
+### Lots/serials on documents
+Optional `lots: [{lotNumber, quantity (base unit), expiryDate?}]` on:
+sales order delivery lines (`POST /sales/orders/:id/deliver`), purchase order
+receipt lines (`POST /purchasing/orders/:id/receive`), POS lines and refund
+lines, sales/purchase return lines, production runs (`consumption[].lots` for
+components consumed and by-products produced, `lots` for the finished
+product). Without lots the previous behaviour applies (FEFO on issue,
+automatic lot named after the document on receipt).
+- The lots actually issued are stored on the document: `sales_order_lines.lots`,
+  `pos_order_lines.lots`, `purchase_order_lines.lots` (received),
+  `sales_return_lines.lots` / `purchase_return_lines.lots`,
+  `mfg_production_records.moves[].lots` and `output_lots`.
+- **Restoring the original lots**: POS refunds and sales returns of tracked
+  products put back the lots/serials recorded on the sale (sales return: the
+  sales order delivery behind the invoice line), minus those already brought
+  back (`sales_order_lines.lots_returned`, `pos_order_lines.lots_refunded`).
+  Explicit lots on a refund/return must be among them (an unknown serial is
+  refused). When nothing was recorded (sold before lots were tracked, invoice
+  not delivered through an order) the automatic lot is used as before.
+
+### Per-warehouse negative stock
+`warehouses.allow_negative_stock` (true / false / null = tenant setting) is
+honoured by every issue, transfer and adjustment (`StockService` passes the
+warehouse to `InventorySettingsService.allowNegativeStock(tenantId,
+warehouseId)`), hence by all document paths above. Un-building and cancelling
+a sales return additionally require the goods to be available regardless of
+the policy. Set it with `POST/PATCH /inventory/warehouses` (`allowNegativeStock`).
+
+New helpers: `services/document-units.util.ts` (`resolveLineUnits`, `toBaseQty`),
+`services/document-lots.util.ts` (`pickReturnLots`, `addLots`, `subtractLots`),
+`ProductsService.resolveLineUnit`, `StockService.availableQuantity`.

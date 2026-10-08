@@ -8,8 +8,10 @@ import {
   IsUUID,
   Max,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import { LotInputDto } from '@modules/inventory/dto/lot-input.dto';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
@@ -28,8 +30,35 @@ export class CreateTerminalDto {
 export class UpdateTerminalDto extends PartialType(CreateTerminalDto) {}
 
 export class RefundLineDto {
-  @ApiProperty() @IsUUID() productId: string;
-  @ApiProperty() @IsNumber() @Min(0.0001) quantity: number;
+  @ApiPropertyOptional({ description: 'Sale line to refund (or give productId)' })
+  @IsOptional()
+  @IsUUID()
+  lineId?: string;
+
+  @ApiPropertyOptional({ description: 'Product to refund, taken from its sale lines in order (or give lineId)' })
+  @ValidateIf((l) => !l.lineId)
+  @IsUUID()
+  productId?: string;
+
+  @ApiPropertyOptional({ description: 'With productId: only sale lines in this unit (default: base-unit lines)' })
+  @IsOptional()
+  @IsUUID()
+  unitId?: string;
+
+  @ApiProperty({ description: 'Quantity in the unit of the sale line' })
+  @IsNumber()
+  @Min(0.0001)
+  quantity: number;
+
+  @ApiPropertyOptional({
+    type: [LotInputDto],
+    description: 'Lots/serials returned (base units); must be among those sold. Default: the lots recorded on the sale',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LotInputDto)
+  lots?: LotInputDto[];
 }
 
 export class RefundPosOrderDto {

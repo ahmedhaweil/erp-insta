@@ -11,6 +11,7 @@ import { Treasury, TreasuryType } from '../entities/treasury.entity';
 import {
   BounceChequeDto,
   ChequeDueQueryDto,
+  ChequeReminderQueryDto,
   ChequeQueryDto,
   DepositChequeDto,
   EndorseChequeDto,
@@ -32,11 +33,59 @@ import {
   PaymentPartnerType,
 } from '@modules/payments/entities/payment.entity';
 import { SalesInvoicesService } from '@modules/sales/services/sales-invoices.service';
-import { round } from '@shared/utils/document-totals.util';
+import { addDays, round, today } from '@shared/utils/document-totals.util';
 import { TreasuriesService } from './treasuries.service';
 import { TreasuryLedgerService } from './treasury-ledger.service';
 
 export const CHEQUE_SOURCE = 'cheque';
+
+export interface ChequeSettlementInput {
+  kind: 'collect' | 'clear';
+  amount: number;
+  /** Rate the note was booked at (cheque.exchangeRate). */
+  bookedRate: number;
+  /** Rate at collection / clearing. */
+  settleRate: number;
+  foreign: boolean;
+  bankAccountId: string;
+  bankBranchId?: string;
+  notesAccountId: string;
+  fxGainAccountId?: string;
+  fxLossAccountId?: string;
+}
+
+/**
+ * Base-currency lines of a cheque collection (Dr bank / Cr notes) or
+ * clearing (Dr notes payable / Cr bank). The notes leave at the booked rate
+ * and the bank moves at the settlement rate; the difference is a realised
+ * exchange gain or loss.
+ */
+export function chequeSettlementLines(input: ChequeSettlementInput): PostingLine[] {
+  const amount = Number(input.amount);
+  const notesBase = round(amount * input.bookedRate, 2);
+  const bankBase = round(amount * input.settleRate, 2);
+  const cur = (v: number) => (input.foreign ? v : undefined);
+  const bank = { accountId: input.bankAccountId, branchId: input.bankBranchId };
+  const lines: PostingLine[] = [];
+  if (input.kind === 'collect') {
+    lines.push(
+      { ...bank, debit: bankBase, amountCurrency: cur(amount) },
+      { accountId: input.notesAccountId, credit: notesBase, amountCurrency: cur(-amount) },
+    );
+    const diff = round(bankBase - notesBase, 2);
+    if (diff > 0) lines.push({ accountId: input.fxGainAccountId as string, credit: diff });
+    if (diff < 0) lines.push({ accountId: input.fxLossAccountId as string, debit: -diff });
+  } else {
+    lines.push(
+      { accountId: input.notesAccountId, debit: notesBase, amountCurrency: cur(amount) },
+      { ...bank, credit: bankBase, amountCurrency: cur(-amount) },
+    );
+    const diff = round(bankBase - notesBase, 2);
+    if (diff > 0) lines.push({ accountId: input.fxLossAccountId as string, debit: diff });
+    if (diff < 0) lines.push({ accountId: input.fxGainAccountId as string, credit: -diff });
+  }
+  return lines;
+}
 
 /** Statuses in which a cheque is still outstanding (shown in the due calendar). */
 export const OPEN_CHEQUE_STATUSES = [
@@ -122,11 +171,92 @@ export class ChequesService {
     };
   }
 
+  /**
+   * Post-dated cheque reminders (for the alerts module): open cheques due
+   * within `days` of `asOf` (and overdue ones), grouped per treasury.
+   * Received cheques still in the portfolio have no treasury yet.
+   */
+  async reminders(tenantId: string, query: ChequeReminderQueryDto = {}) {
+    const asOf = query.asOf ?? today();
+    const days = query.days ?? 7;
+    const until = addDays(asOf, days);
+    const includeOverdue = query.includeOverdue !== 'false';
+    const where: any = { tenantId, status: In(OPEN_CHEQUE_STATUSES) };
+    if (query.type) where.type = query.type;
+    if (query.treasuryId) where.treasuryId = query.treasuryId;
+    const cheques = (
+      await this.chequeRepo.find({ where, order: { dueDate: 'ASC', createdAt: 'ASC' } })
+    ).filter((c) => String(c.dueDate) <= until && (includeOverdue || String(c.dueDate) >= asOf));
+
+    const dayDiff = (a: string, b: string) =>
+      Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86400000);
+    const treasuryIds = [...new Set(cheques.map((c) => c.treasuryId).filter(Boolean))];
+    const treasuries = new Map<string, Treasury>();
+    for (const id of treasuryIds) treasuries.set(id, await this.treasuries.findById(tenantId, id));
+
+    const groups = new Map<string, any>();
+    for (const c of cheques) {
+      const key = c.treasuryId ?? 'portfolio';
+      const t = c.treasuryId ? treasuries.get(c.treasuryId) : undefined;
+      const group =
+        groups.get(key) ??
+        {
+          treasuryId: c.treasuryId ?? null,
+          treasuryCode: t?.code ?? null,
+          treasuryName: t?.nameAr ?? null,
+          custodianUserId: t?.custodianUserId ?? null,
+          received: 0,
+          issued: 0,
+          overdue: 0,
+          count: 0,
+          cheques: [] as any[],
+        };
+      const daysToDue = dayDiff(String(c.dueDate), asOf);
+      group[c.type === ChequeType.RECEIVED ? 'received' : 'issued'] = round(
+        group[c.type === ChequeType.RECEIVED ? 'received' : 'issued'] + Number(c.amount),
+        4,
+      );
+      if (daysToDue < 0) group.overdue += 1;
+      group.count += 1;
+      group.cheques.push({
+        id: c.id,
+        type: c.type,
+        status: c.status,
+        chequeNumber: c.chequeNumber,
+        bankName: c.bankName,
+        partnerType: c.partnerType,
+        partnerId: c.partnerId,
+        amount: Number(c.amount),
+        currencyId: c.currencyId ?? null,
+        dueDate: c.dueDate,
+        daysToDue,
+        overdue: daysToDue < 0,
+      });
+      groups.set(key, group);
+    }
+    return {
+      asOf,
+      until,
+      days,
+      count: cheques.length,
+      overdue: cheques.filter((c) => String(c.dueDate) < asOf).length,
+      totalReceivable: round(
+        cheques.filter((c) => c.type === ChequeType.RECEIVED).reduce((s, c) => s + Number(c.amount), 0),
+        4,
+      ),
+      totalPayable: round(
+        cheques.filter((c) => c.type === ChequeType.ISSUED).reduce((s, c) => s + Number(c.amount), 0),
+        4,
+      ),
+      treasuries: [...groups.values()],
+    };
+  }
+
   /** Received cheque handed to the bank for collection. */
   async deposit(tenantId: string, userId: string, id: string, dto: DepositChequeDto) {
     const cheque = await this.findById(tenantId, id);
     this.expect(cheque, ChequeType.RECEIVED, [ChequeStatus.IN_PORTFOLIO], 'deposited');
-    const bank = await this.bankFor(tenantId, cheque, dto.treasuryId);
+    const bank = await this.bankFor(tenantId, cheque, dto.treasuryId, userId);
     await this.autoPosting.preflight(tenantId, dto.date, [
       'chequesUnderCollectionAccountId',
       'notesReceivableAccountId',
@@ -149,15 +279,26 @@ export class ChequesService {
       'collected',
     );
     const fromPortfolio = cheque.status === ChequeStatus.IN_PORTFOLIO;
-    const bank = await this.bankFor(tenantId, cheque, dto.treasuryId ?? cheque.treasuryId);
+    const bank = await this.bankFor(tenantId, cheque, dto.treasuryId ?? cheque.treasuryId, userId);
     const sourceKey: SettingsAccountKey = fromPortfolio
       ? 'notesReceivableAccountId'
       : 'chequesUnderCollectionAccountId';
-    await this.autoPosting.preflight(tenantId, dto.date, [sourceKey]);
-    await this.postCheque(tenantId, userId, cheque, dto.date, 'Collection', (account) => [
-      { accountId: bank.accountId, debit: Number(cheque.amount), branchId: bank.branchId ?? undefined },
-      { accountId: account(sourceKey), credit: Number(cheque.amount) },
-    ]);
+    const rates = this.settlementRates(cheque, dto.exchangeRate);
+    await this.autoPosting.preflight(tenantId, dto.date, [sourceKey, ...rates.fxKeys]);
+    await this.postSettlement(tenantId, userId, cheque, dto.date, 'Collection', (account) =>
+      chequeSettlementLines({
+        kind: 'collect',
+        amount: Number(cheque.amount),
+        bookedRate: rates.booked,
+        settleRate: rates.settle,
+        foreign: !!cheque.currencyId,
+        bankAccountId: bank.accountId,
+        bankBranchId: bank.branchId ?? undefined,
+        notesAccountId: account(sourceKey),
+        fxGainAccountId: rates.fxKeys.length ? account('fxGainAccountId') : undefined,
+        fxLossAccountId: rates.fxKeys.length ? account('fxLossAccountId') : undefined,
+      }),
+    );
     cheque.treasuryId = bank.id;
     return this.transition(cheque, ChequeStatus.COLLECTED, dto.date, 'collected', userId, dto.note);
   }
@@ -166,12 +307,24 @@ export class ChequesService {
   async clear(tenantId: string, userId: string, id: string, dto: SettleChequeDto) {
     const cheque = await this.findById(tenantId, id);
     this.expect(cheque, ChequeType.ISSUED, [ChequeStatus.ISSUED], 'cleared');
-    const bank = await this.bankFor(tenantId, cheque, dto.treasuryId ?? cheque.treasuryId);
-    await this.autoPosting.preflight(tenantId, dto.date, ['notesPayableAccountId']);
-    await this.postCheque(tenantId, userId, cheque, dto.date, 'Clearing', (account) => [
-      { accountId: account('notesPayableAccountId'), debit: Number(cheque.amount) },
-      { accountId: bank.accountId, credit: Number(cheque.amount), branchId: bank.branchId ?? undefined },
-    ]);
+    const bank = await this.bankFor(tenantId, cheque, dto.treasuryId ?? cheque.treasuryId, userId);
+    const rates = this.settlementRates(cheque, dto.exchangeRate);
+    await this.treasuries.assertFunds(tenantId, bank, Number(cheque.amount), dto.date);
+    await this.autoPosting.preflight(tenantId, dto.date, ['notesPayableAccountId', ...rates.fxKeys]);
+    await this.postSettlement(tenantId, userId, cheque, dto.date, 'Clearing', (account) =>
+      chequeSettlementLines({
+        kind: 'clear',
+        amount: Number(cheque.amount),
+        bookedRate: rates.booked,
+        settleRate: rates.settle,
+        foreign: !!cheque.currencyId,
+        bankAccountId: bank.accountId,
+        bankBranchId: bank.branchId ?? undefined,
+        notesAccountId: account('notesPayableAccountId'),
+        fxGainAccountId: rates.fxKeys.length ? account('fxGainAccountId') : undefined,
+        fxLossAccountId: rates.fxKeys.length ? account('fxLossAccountId') : undefined,
+      }),
+    );
     cheque.treasuryId = bank.id;
     return this.transition(cheque, ChequeStatus.CLEARED, dto.date, 'cleared', userId, dto.note);
   }
@@ -195,11 +348,12 @@ export class ChequesService {
     const charge = round(dto.bankCharge ?? 0, 4);
     let bank: Treasury | null = null;
     if (charge > 0) {
-      if (cheque.type !== ChequeType.RECEIVED) {
-        throw new BadRequestException('Bank charges on bounced issued cheques: use a payment voucher');
-      }
-      bank = await this.bankFor(tenantId, cheque, dto.treasuryId ?? cheque.treasuryId);
-      if (dto.chargeToCustomer && cheque.partnerType !== PaymentPartnerType.CUSTOMER) {
+      // Received: the deposit bank charges us; issued: the bank the cheque is drawn on.
+      bank = await this.bankFor(tenantId, cheque, dto.treasuryId ?? cheque.treasuryId, userId);
+      if (
+        dto.chargeToCustomer &&
+        (cheque.type !== ChequeType.RECEIVED || cheque.partnerType !== PaymentPartnerType.CUSTOMER)
+      ) {
         throw new BadRequestException('Only customer cheques can be re-charged to the partner');
       }
     }
@@ -287,13 +441,55 @@ export class ChequesService {
     }
   }
 
-  private async bankFor(tenantId: string, cheque: Cheque, treasuryId?: string): Promise<Treasury> {
+  private async bankFor(
+    tenantId: string,
+    cheque: Cheque,
+    treasuryId: string | undefined,
+    userId: string,
+  ): Promise<Treasury> {
     if (!treasuryId) throw new BadRequestException('A bank treasury is required');
-    const bank = await this.treasuries.getActive(tenantId, treasuryId, TreasuryType.BANK);
+    const bank = await this.treasuries.getUsable(tenantId, userId, treasuryId, TreasuryType.BANK);
     if ((bank.currencyId ?? null) !== (cheque.currencyId ?? null) && bank.currencyId) {
       throw new BadRequestException(`Bank ${bank.code} holds another currency than the cheque`);
     }
     return bank;
+  }
+
+  /** Booked and settlement rates; the FX accounts are needed only when they differ. */
+  private settlementRates(cheque: Cheque, rate?: number) {
+    const booked = Number(cheque.exchangeRate) || 1;
+    if (rate !== undefined && !cheque.currencyId && Number(rate) !== 1) {
+      throw new BadRequestException('The cheque is in the base currency; the exchange rate must be 1');
+    }
+    const settle = cheque.currencyId && rate ? Number(rate) : booked;
+    const fxKeys: SettingsAccountKey[] =
+      round(Number(cheque.amount) * settle, 2) !== round(Number(cheque.amount) * booked, 2)
+        ? ['fxGainAccountId', 'fxLossAccountId']
+        : [];
+    return { booked, settle, fxKeys };
+  }
+
+  /** Posts base-currency lines (amounts in currency carried explicitly). */
+  private postSettlement(
+    tenantId: string,
+    userId: string,
+    cheque: Cheque,
+    date: string,
+    label: string,
+    build: (account: (key: SettingsAccountKey) => string) => PostingLine[],
+  ) {
+    return this.autoPosting.post({
+      tenantId,
+      userId,
+      journalType: JournalType.BANK,
+      date,
+      description: `${label} of cheque ${cheque.chequeNumber}${cheque.bankName ? ` (${cheque.bankName})` : ''}`,
+      sourceType: CHEQUE_SOURCE,
+      sourceId: cheque.id,
+      currencyId: cheque.currencyId ?? undefined,
+      exchangeRate: 1,
+      buildLines: (_s, account) => build(account),
+    });
   }
 
   private postCheque(

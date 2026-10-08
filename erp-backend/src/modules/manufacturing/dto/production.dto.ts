@@ -1,3 +1,4 @@
+import { LotInputDto } from '@modules/inventory/dto/lot-input.dto';
 import {
   IsArray,
   IsBoolean,
@@ -67,6 +68,16 @@ export class ConsumptionDto {
   @IsNumber()
   @Min(0)
   quantity: number;
+
+  @ApiPropertyOptional({
+    type: [LotInputDto],
+    description: 'Lots/serials consumed (components, FEFO when omitted) or produced (by-products)',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LotInputDto)
+  lots?: LotInputDto[];
 }
 
 export class ProduceDto {
@@ -86,6 +97,16 @@ export class ProduceDto {
   @ValidateNested({ each: true })
   @Type(() => ConsumptionDto)
   consumption?: ConsumptionDto[];
+
+  @ApiPropertyOptional({
+    type: [LotInputDto],
+    description: 'Lots/serial numbers of the finished product (automatic lot named after the order when omitted)',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LotInputDto)
+  lots?: LotInputDto[];
 
   @ApiPropertyOptional({ description: 'Close the order after this run even if under-produced' })
   @IsOptional()
@@ -138,4 +159,43 @@ export class RequirementsQueryDto {
   )
   @IsBoolean()
   explode?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Net available sub-assembly stock before exploding further (default true); only the uncovered part is exploded',
+  })
+  @IsOptional()
+  @Transform(({ obj, key }) =>
+    obj[key] === undefined ? undefined : obj[key] === true || obj[key] === 'true',
+  )
+  @IsBoolean()
+  netSubAssemblies?: boolean;
+}
+
+export class MrpRequisitionDto extends RequirementsQueryDto {
+  @ApiPropertyOptional({ description: 'Requesting department name (default "Manufacturing")' })
+  @IsOptional()
+  @IsString()
+  departmentName?: string;
+
+  @ApiPropertyOptional({ description: 'Date the components are needed by' })
+  @IsOptional()
+  @IsDateString()
+  requiredDate?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+
+  @ApiPropertyOptional({ description: 'Submit the requisition for approval right away' })
+  @IsOptional()
+  @IsBoolean()
+  submit?: boolean;
+}
+
+export class ReverseRunDto {
+  @ApiPropertyOptional({ description: 'Date of the reversal (default today)' })
+  @IsOptional()
+  @IsDateString()
+  date?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() reason?: string;
 }

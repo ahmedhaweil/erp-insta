@@ -9,10 +9,10 @@ export class Supplier extends TenantBaseEntity {
   @Column({ name: 'name_ar' })
   nameAr: string;
 
-  @Column({ name: 'name_en' })
+  @Column({ name: 'name_en', nullable: true })
   nameEn: string;
 
-  @Column()
+  @Column({ nullable: true })
   phone: string;
 
   @Column({ nullable: true })
@@ -21,13 +21,13 @@ export class Supplier extends TenantBaseEntity {
   @Column({ name: 'tax_id', nullable: true })
   taxId: string;
 
-  @Column()
+  @Column({ nullable: true })
   address: string;
 
-  @Column()
+  @Column({ nullable: true })
   city: string;
 
-  @Column()
+  @Column({ nullable: true })
   country: string;
 
   @Column({ name: 'is_active', default: true })

@@ -94,4 +94,4 @@ module (events are delivered after commit, so a failure cannot roll back posting
 - The ETA token cache is in-process, so each instance fetches its own token.
 - The ZATCA issue time is derived from `postedAt` in Riyadh time (UTC+3). Foreign-currency invoices are converted to
   SAR using the invoice exchange rate.
-- No PDF/QR image rendering (the QR content and URLs are returned) and no frontend screens.
+- The printed invoice / POS receipt PDFs (see `printing.md`) render the ZATCA TLV QR or ETA print-URL QR; no frontend screens yet.

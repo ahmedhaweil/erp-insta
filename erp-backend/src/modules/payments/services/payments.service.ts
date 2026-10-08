@@ -3,8 +3,12 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { RbacService } from '@modules/auth/services/rbac.service';
+import { enforceTreasuryRules } from '@modules/treasury/services/treasury-access.util';
 import { In, Repository } from 'typeorm';
 import {
   Payment,
@@ -42,6 +46,8 @@ import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { Treasury, TreasuryType } from '@modules/treasury/entities/treasury.entity';
 import { Cheque, ChequeStatus, ChequeType } from '@modules/treasury/entities/cheque.entity';
 import { SequenceService } from '@shared/services/sequence.service';
+import { ApprovalsService } from '@modules/approvals/services/approvals.service';
+import { ApprovalDocumentType } from '@modules/approvals/entities/approval-rule.entity';
 import { residual, round } from '@shared/utils/document-totals.util';
 
 const OPEN_SALES = [
@@ -83,7 +89,7 @@ function isSettlement(payment: Pick<Payment, 'partnerType' | 'direction'>): bool
  * withholding tax accounts while the partner is settled for the gross amount.
  */
 @Injectable()
-export class PaymentsService {
+export class PaymentsService implements OnModuleInit {
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepo: Repository<Payment>,
@@ -105,7 +111,24 @@ export class PaymentsService {
     private readonly purchaseInvoices: PurchaseInvoicesService,
     private readonly autoPosting: AutoPostingService,
     private readonly sequenceService: SequenceService,
+    @Optional() private readonly approvals?: ApprovalsService,
+    @Optional() private readonly rbac?: RbacService,
   ) {}
+
+  /** Approval engine: an approved outbound payment request creates the payment. */
+  onModuleInit(): void {
+    this.approvals?.registerHandler(ApprovalDocumentType.PAYMENT, {
+      onApproved: async (request) => {
+        if (!request.payload) return;
+        const payment = await this.create(
+          request.tenantId,
+          request.requestedBy,
+          request.payload as CreatePaymentDto,
+        );
+        await this.approvals!.markExecuted(request, payment.id);
+      },
+    });
+  }
 
   findAll(tenantId: string, partnerId?: string, treasuryId?: string): Promise<Payment[]> {
     const where: any = { tenantId };
@@ -186,6 +209,18 @@ export class PaymentsService {
       : null;
     if (method === PaymentMethod.CHEQUE && treasury && treasury.type !== TreasuryType.BANK) {
       throw new BadRequestException('Cheques are drawn on / deposited into bank treasuries only');
+    }
+    if (treasury) {
+      // Treasury rules: custodians only; cash paid out cannot take a cash box below zero.
+      await enforceTreasuryRules({
+        tenantId,
+        userId,
+        treasury,
+        rbac: this.rbac,
+        query: (sql, params) => this.treasuryRepo.query(sql, params),
+        outflow: !inbound && method !== PaymentMethod.CHEQUE ? amount : 0,
+        date: dto.date,
+      });
     }
 
     const draft = this.paymentRepo.create({

@@ -1,3 +1,4 @@
+import { LotInputDto } from '@modules/inventory/dto/lot-input.dto';
 import {
   ArrayMinSize,
   IsArray,
@@ -24,6 +25,20 @@ export class ReturnLineDto {
   @IsOptional()
   @IsUUID()
   productId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Alternate unit (returns without an original document; otherwise the original line unit is used)',
+  })
+  @IsOptional()
+  @IsUUID()
+  unitId?: string;
+
+  @ApiPropertyOptional({ type: [LotInputDto], description: 'Lots/serials in base units. Sales returns: must be among the lots delivered/sold (default: the original lots); purchase returns: lots taken out (FEFO when omitted)' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LotInputDto)
+  lots?: LotInputDto[];
 
   @ApiProperty()
   @IsNumber()

@@ -180,7 +180,6 @@ New columns:
 
 ## Still missing
 
-- Posted returns cannot be cancelled. To undo one, issue a new invoice or bill.
 - A sales return against an invoice that was not delivered through a sales order still puts
   the goods back into stock, at the current average cost.
 - `CreateProductDto` (owned by inventory) does not accept `minSellPrice`. Use
@@ -191,5 +190,69 @@ New columns:
   no deferred or effective-interest recognition and no late-payment penalties.
 - Commission payout (Dr commissionPayable / Cr cash) is left to payroll or the treasury
   module.
-- There is no multi-level approval and no approval for vendor bills. Requisitions have no
+- Multi-level approvals for purchase orders and vendor bills come from the approvals module (see `accounting-approvals.md`). Requisitions have no
   department master; they use `departmentId` / `departmentName` as free text.
+
+## Phase 2: units, lots, return cancellation, POS sales reps
+
+- **Alternate units and lots** on orders, invoices, bills, returns and POS: see
+  `docs/gaps/inventory.md` ("Phase 2"). New line columns `unit_id`,
+  `unit_factor` on `sales_order_lines`, `sales_invoice_lines`,
+  `sales_return_lines`, `purchase_order_lines`, `purchase_invoice_lines`,
+  `purchase_return_lines`, `pos_order_lines`; jsonb `lots` on
+  `sales_order_lines` (+ `lots_returned`), `purchase_order_lines`,
+  `sales_return_lines`, `purchase_return_lines`, `pos_order_lines`
+  (+ `lots_refunded`).
+- **Cancelling posted returns** (`POST /sales/returns/:id/cancel`,
+  `POST /purchasing/returns/:id/cancel`, now also for posted returns):
+  - Refused when the credit note / vendor refund was settled by anything other
+    than the return itself (`paidAmount - appliedAmount - refundedAmount > 0`,
+    e.g. a payment or refund through the payments module).
+  - Sales return: the goods leave stock again with the same lots/serials
+    (refused when they are no longer available, whatever the negative-stock
+    policy), `sales_return` (Dr inventory / Cr COGS) and
+    `sales_return_refund` entries are reversed, the customer balance is
+    restored, the credit note is un-reconciled from the original invoice and
+    cancelled (its `sales_invoice` entry reversed), `qty_returned` and the
+    order line `lots_returned` are released.
+  - Purchase return: the goods come back with their lots at the cost they
+    left at, `purchase_return` (valuation difference) and
+    `purchase_return_refund` entries reversed, the vendor refund
+    un-reconciled from the bill and cancelled, `qty_returned` released.
+  - New columns on `sales_returns` / `purchase_returns`: `applied_amount`
+    (reconciled with the original document at posting), `refunded_amount`
+    (cash), `cancelled_at`. Returns posted before this change have 0 there,
+    so they can only be cancelled while their credit note is unpaid.
+- **POS sales rep**: `pos_orders.sales_rep_id`, from the request, else the
+  customer's rep, else the rep linked to the cashier's user.
+- **Rep commission vs sales**: `GET /sales/commission-statements/rep-performance?from&to&salesRepId`
+  (sales/commissions/read): per rep, untaxed invoiced sales net of credit notes
+  (base currency), POS sales net of refunds, commission and collected amounts
+  of posted statements whose period lies in the range, effective commission
+  rate; documents without a rep on an "Unassigned" row.
+- Vendor bill approval itself is unchanged (`approve()` untouched); only bill
+  creation accepts units.
+
+### Still missing (phase 2)
+- A sales return cancellation re-issues stock at the current average cost while
+  the reversed entry uses the original cost (no valuation-difference posting).
+- Purchase returns do not default to the lots received on the original bill
+  (FEFO unless lots are given).
+- Units are not converted on price list rules (rules are per base unit).
+
+## Landed costs
+
+`POST /purchasing/landed-costs {date, purchaseOrderIds[], splitMethod: by_value|by_quantity|equal, charges[{description, amount, accountId?}]}`
+creates a draft. `GET .../:id/preview` shows the split; `POST .../:id/post` posts it and `POST .../:id/cancel` reverses it.
+Permission: `purchasing/landed_costs`.
+
+- Charges are spread over the goods received on the purchase orders. The basis is the stock movements of the
+  receipts: the value or quantity received per product, or an equal share.
+- Shares are rounded to the cent, and the last share absorbs the difference.
+- Average costing: the part of a product's share matching units still on hand (capped at the received quantity)
+  raises the product's average cost. Posting: Dr inventory. The part matching units already sold or consumed
+  goes to Dr cost of goods sold. Each charge's account is credited (default: the purchase account, where a freight
+  or customs service bill was booked).
+- Cancelling reverses the entry and takes the capitalised amount back out of the average cost of the stock on hand.
+- Not built: allocation by weight or volume, landed costs in foreign currency, and per-warehouse costs (average
+  cost is per product).

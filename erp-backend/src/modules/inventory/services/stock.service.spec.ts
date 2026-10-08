@@ -226,7 +226,7 @@ describe('StockService', () => {
       stockRepo.findOne.mockResolvedValue({ ...mockStock, quantity: 3, reservedQty: 0 });
 
       await expect(service.issue('tenant-1', 'user-1', req)).rejects.toThrow(BadRequestException);
-      expect(settings.allowNegativeStock).toHaveBeenCalledWith('tenant-1');
+      expect(settings.allowNegativeStock).toHaveBeenCalledWith('tenant-1', 'wh-1');
       expect(stockRepo.save).not.toHaveBeenCalled();
     });
 

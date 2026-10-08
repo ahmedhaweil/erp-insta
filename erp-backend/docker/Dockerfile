@@ -18,6 +18,8 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 COPY --from=builder /app/dist ./dist
+# Fonts used by the PDF printing module (Amiri, SIL OFL - see assets/fonts/OFL.txt)
+COPY --from=builder /app/assets ./assets
 
 EXPOSE 3000
 

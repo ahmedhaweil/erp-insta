@@ -66,12 +66,28 @@ export class StockController {
   @Get('stock/movements')
   @ApiQuery({ name: 'productId', required: false })
   @ApiQuery({ name: 'warehouseId', required: false })
+  @ApiQuery({ name: 'from', required: false, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'to', required: false, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'referenceType', required: false })
+  @ApiQuery({ name: 'limit', required: false, description: 'Default 500, max 2000' })
+  @ApiQuery({ name: 'offset', required: false })
   getMovements(
     @CurrentTenant() tenantId: string,
     @Query('productId') productId?: string,
     @Query('warehouseId') warehouseId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('referenceType') referenceType?: string,
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
   ) {
-    return this.stockService.getMovements(tenantId, productId, warehouseId);
+    return this.stockService.getMovements(tenantId, productId, warehouseId, {
+      from,
+      to,
+      referenceType,
+      limit,
+      offset,
+    });
   }
 
   @RequirePermissions({ module: 'inventory', screen: 'stock', action: 'read' })

@@ -81,6 +81,7 @@ describe('SalesInvoicesService', () => {
         priceListId: 'pl-1',
       })),
       enforceMinPrice: jest.fn(),
+      defaultTaxRates: jest.fn(async () => new Map([['prod-1', 14]])),
     };
     installments = { syncInvoice: jest.fn() };
 

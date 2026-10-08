@@ -75,9 +75,10 @@ quantities, warehouse, statuses), invoices (`move_type`, `reversed_invoice_id`,
 entries (`source_type`, `source_id`, `reversed_entry_id`), fixed assets,
 POS terminals/sessions/orders.
 
-The project has no migrations: the schema is created by `npm run seed:run`
-(TypeORM `synchronize`). Run it after deploying this change, or generate a
-migration with `npm run migration:generate` before production use.
+The schema is now managed by migrations (`src/database/migrations`): start the
+API with `DB_RUN_MIGRATIONS=true` (or run `npm run migration:run`) and seed with
+`SEED_SYNC=false`. In development, `npm run seed:run` still synchronizes the
+schema from the entities.
 
 ## 5. Remaining gaps (not implemented)
 

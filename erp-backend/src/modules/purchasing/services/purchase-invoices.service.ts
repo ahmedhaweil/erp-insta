@@ -3,6 +3,8 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
@@ -13,12 +15,16 @@ import {
 } from '../entities/purchase-invoice.entity';
 import { PurchaseInvoiceLine } from '../entities/purchase-invoice-line.entity';
 import { Supplier } from '../entities/supplier.entity';
-import { CreatePurchaseInvoiceDto } from '../dto/create-purchase-invoice.dto';
+import { CreatePurchaseInvoiceDto, PurchaseInvoiceLineDto } from '../dto/create-purchase-invoice.dto';
+import { ProductsService } from '@modules/inventory/services/products.service';
+import { UnitLineInput, resolveLineUnits } from '@modules/inventory/services/document-units.util';
 import { CreateVendorRefundDto } from '../dto/purchase-actions.dto';
 import { Product, ProductType } from '@modules/inventory/entities/product.entity';
 import { SequenceService } from '@shared/services/sequence.service';
 import { AutoPostingService, PostingLine } from '@modules/accounting/services/auto-posting.service';
 import { JournalType } from '@modules/accounting/entities/journal.entity';
+import { ApprovalsService } from '@modules/approvals/services/approvals.service';
+import { ApprovalDocumentType } from '@modules/approvals/entities/approval-rule.entity';
 import {
   addDays,
   computeLine,
@@ -28,6 +34,7 @@ import {
   residual,
   round,
   today,
+  withDefaultTaxRates,
 } from '@shared/utils/document-totals.util';
 
 const OPEN_STATUSES = [
@@ -37,7 +44,7 @@ const OPEN_STATUSES = [
 ];
 
 @Injectable()
-export class PurchaseInvoicesService {
+export class PurchaseInvoicesService implements OnModuleInit {
   constructor(
     @InjectRepository(PurchaseInvoice)
     private readonly invoiceRepo: Repository<PurchaseInvoice>,
@@ -49,7 +56,24 @@ export class PurchaseInvoicesService {
     private readonly productRepo: Repository<Product>,
     private readonly sequenceService: SequenceService,
     private readonly autoPosting: AutoPostingService,
+    @Optional() private readonly products?: ProductsService,
+    @Optional() private readonly approvals?: ApprovalsService,
   ) {}
+
+  /** Approval engine hook: a fully approved vendor bill is posted by the last approver. */
+  onModuleInit(): void {
+    this.approvals?.registerHandler(ApprovalDocumentType.VENDOR_BILL, {
+      onApproved: async (request, userId) => {
+        if (!request.documentId) return;
+        const bill = await this.invoiceRepo.findOne({
+          where: { id: request.documentId, tenantId: request.tenantId },
+        });
+        if (bill?.status === PurchaseInvoiceStatus.DRAFT) {
+          await this.approve(request.tenantId, request.documentId, userId);
+        }
+      },
+    });
+  }
 
   /** Creates a draft vendor bill. Amounts are always recomputed from the lines. */
   async create(
@@ -78,11 +102,18 @@ export class PurchaseInvoicesService {
     }
 
     const taxIncluded = !!dto.pricesIncludeTax;
-    const lines = dto.lines.map((l) => ({
+    const inputLines = await resolveLineUnits(
+      this.products,
+      tenantId,
+      await this.withPurchaseTaxDefaults(tenantId, dto.lines as (PurchaseInvoiceLineDto & UnitLineInput)[]),
+    );
+    const lines = inputLines.map((l) => ({
       ...computeLine(l, { taxIncluded }),
       productId: l.productId,
       description: l.description,
       orderLineId: l.orderLineId,
+      unitId: l.unitId,
+      unitFactor: l.unitFactor,
       withholdingRate:
         l.withholdingRate === undefined || l.withholdingRate === null
           ? null
@@ -147,6 +178,19 @@ export class PurchaseInvoicesService {
 
     const isRefund = invoice.moveType === PurchaseInvoiceType.REFUND;
     const actor = userId ?? invoice.createdBy;
+
+    // Approval engine: no-op unless an active vendor_bill rule matches the amount;
+    // otherwise a pending request is recorded and a 409 is thrown.
+    if (!isRefund && this.approvals) {
+      await this.approvals.ensureApproved(tenantId, actor, {
+        documentType: ApprovalDocumentType.VENDOR_BILL,
+        documentId: invoice.id,
+        documentRef: invoice.invoiceNumber,
+        documentTable: 'purchase_invoices',
+        amount: round(Number(invoice.totalAmount) * (Number(invoice.exchangeRate) || 1), 4),
+        description: `Vendor bill ${invoice.invoiceNumber}`,
+      });
+    }
     const products = await this.productRepo.find({
       where: { tenantId, id: In([...new Set(invoice.lines.map((l) => l.productId))]) },
     });
@@ -306,6 +350,8 @@ export class PurchaseInvoicesService {
           taxRate: Number(line.taxRate),
           description: line.description,
           withholdingRate: line.withholdingRate ?? undefined,
+          unitId: line.unitId ?? undefined,
+          unitFactor: line.unitId ? Number(line.unitFactor) : undefined,
         };
       })
       .filter((l) => l.quantity > 0);
@@ -333,6 +379,11 @@ export class PurchaseInvoicesService {
     return dto.post ? this.approve(tenantId, refund.id, userId) : refund;
   }
 
+  /** Overwrites the reconciled amount (used when a return undoes its own reconciliation). */
+  async setPaidAmount(tenantId: string, id: string, paidAmount: number): Promise<void> {
+    await this.invoiceRepo.update({ id, tenantId }, { paidAmount: round(paidAmount, 4) });
+  }
+
   async adjustSupplierBalance(tenantId: string, supplierId: string, delta: number): Promise<void> {
     if (!supplierId || !delta) return;
     await this.supplierRepo
@@ -349,5 +400,16 @@ export class PurchaseInvoicesService {
     if (!supplier) throw new NotFoundException('Supplier not found');
     if (!supplier.isActive) throw new BadRequestException('Supplier is archived');
     return supplier;
+  }
+
+  /** Lines without a tax rate take the product's default purchase tax rate. */
+  private async withPurchaseTaxDefaults<T extends { productId: string; taxRate?: number | null }>(
+    tenantId: string,
+    lines: T[],
+  ): Promise<T[]> {
+    const ids = lines.filter((l) => l.taxRate === undefined || l.taxRate === null).map((l) => l.productId);
+    if (!ids.length) return lines;
+    const products = await this.productRepo.find({ where: { tenantId, id: In([...new Set(ids)]) } });
+    return withDefaultTaxRates(lines, new Map(products.map((p) => [p.id, Number(p.purchaseTaxRate ?? 0)])));
   }
 }

@@ -4,7 +4,9 @@ import { useTranslations, useLocale } from 'next-intl';
 import { useRouter, usePathname } from '@/i18n/navigation';
 import { useAuthStore } from '@/stores/auth.store';
 import { authService } from '@/services/auth.service';
-import { Bell, Globe, LogOut, User } from 'lucide-react';
+import { Globe, LogOut, User } from 'lucide-react';
+import NotificationBell from '@/components/platform/NotificationBell';
+import ApprovalListener from '@/components/platform/ApprovalListener';
 
 export default function Header() {
   const t = useTranslations('common');
@@ -42,9 +44,8 @@ export default function Header() {
           <span>{locale === 'ar' ? 'EN' : 'عربي'}</span>
         </button>
 
-        <button className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition">
-          <Bell size={18} />
-        </button>
+        <NotificationBell />
+        <ApprovalListener />
 
         <div className="flex items-center gap-2 text-sm text-gray-700">
           <div className="w-8 h-8 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center">

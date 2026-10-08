@@ -1,3 +1,4 @@
+import { ComplianceAutoSubmitListener } from './services/compliance-auto-submit.listener';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TaxConfig } from './entities/tax-config.entity';
@@ -53,6 +54,7 @@ import { EReceiptsController } from './controllers/e-receipts.controller';
   ],
   controllers: [ComplianceController, EInvoicesController, EReceiptsController],
   providers: [
+    ComplianceAutoSubmitListener,
     { provide: COMPLIANCE_HTTP_CLIENT, useClass: FetchComplianceHttpClient },
     TaxService,
     ComplianceSettingsService,

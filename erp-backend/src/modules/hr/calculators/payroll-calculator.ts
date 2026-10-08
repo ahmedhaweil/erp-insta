@@ -62,6 +62,48 @@ export interface PayslipInput {
   };
   /** Pending loan installments due this month, oldest first. */
   loanInstallments: LoanDue[];
+  /**
+   * Egypt: the employee's earlier payslips of the same tax year. When given
+   * the salary tax is computed cumulatively (year-to-date true-up) instead
+   * of by annualising the month alone.
+   */
+  taxYtd?: TaxYtdInput;
+}
+
+export interface TaxYtdInput {
+  /** Payroll months of the tax year BEFORE the current one. */
+  monthsBefore: number;
+  /** Recurring taxable pay (after the employee insurance share) of those months. */
+  regularTaxableBefore: number;
+  /** One-off taxable pay (bonuses, encashments...) of those months. */
+  irregularTaxableBefore: number;
+  /** Salary tax already withheld in those months. */
+  taxBefore: number;
+}
+
+export interface CumulativeTaxResult {
+  months: number;
+  regularTaxableYtd: number;
+  irregularTaxableYtd: number;
+  /** Recurring pay annualised over the months worked. */
+  projectedAnnualRegular: number;
+  annualTaxRegular: number;
+  annualTaxWithIrregular: number;
+  /** Tax due for the year to date (regular share pro rata + full tax on one-offs). */
+  taxDueYtd: number;
+  taxBefore: number;
+  /** Tax of this month = due YTD - already withheld (negative = refund). */
+  monthlyTax: number;
+}
+
+export interface MartyrsFundResult {
+  base: number;
+  rate: number;
+  bearer: 'employee' | 'employer' | null;
+  /** Deducted from the employee's net pay. */
+  employee: number;
+  /** Employer cost (not deducted). */
+  employer: number;
 }
 
 export interface SocialInsuranceResult {
@@ -79,6 +121,13 @@ export interface IncomeTaxResult {
   annualTaxable: number;
   annualTax: number;
   monthlyTax: number;
+  /** 'annualised' (month x 12) or 'cumulative' (year-to-date true-up). */
+  method?: 'annualised' | 'cumulative';
+  /** Recurring part of the month's taxable pay (after employee insurance). */
+  regularTaxable?: number;
+  /** One-off part of the month's taxable pay (taxable additions). */
+  irregularTaxable?: number;
+  cumulative?: CumulativeTaxResult;
 }
 
 export interface PayslipResult {
@@ -107,6 +156,7 @@ export interface PayslipResult {
   gross: number;
   socialInsurance: SocialInsuranceResult;
   incomeTax: IncomeTaxResult;
+  martyrsFund: MartyrsFundResult;
   loanDeduction: number;
   loanAllocations: LoanDue[];
   /** Part of the due installments that did not fit in the net pay. */
@@ -208,6 +258,70 @@ export class PayrollCalculator {
       lower = upper;
     }
     return round2(tax);
+  }
+
+  /**
+   * Egyptian salary tax with a year-to-date true-up. Recurring pay is
+   * annualised over the months worked so far (brackets and exemption are
+   * pro rata to the months worked, as the monthly method does) while one-off
+   * pay is taxed at the marginal rate on top of the projected annual income:
+   *
+   *   A   = regular YTD x 12 / n
+   *   due = tax(A - exemption) x n / 12 + [tax(A + one-offs YTD - exemption) - tax(A - exemption)]
+   *   month tax = due - tax already withheld this year
+   *
+   * With a constant salary and no bonus this equals the plain annualisation
+   * (tax / 12 per month). In the last month of the year the result is the
+   * exact annual tax on the year's income, so over- or under-withholding of
+   * earlier months is trued up (a negative month tax is a refund).
+   */
+  egyptCumulativeTax(
+    ytd: TaxYtdInput,
+    regularTaxable: number,
+    irregularTaxable: number,
+  ): CumulativeTaxResult {
+    const months = Math.max(Math.round(Number(ytd.monthsBefore) || 0), 0) + 1;
+    const regularYtd = round2(Number(ytd.regularTaxableBefore || 0) + regularTaxable);
+    const irregularYtd = round2(Number(ytd.irregularTaxableBefore || 0) + irregularTaxable);
+    const exemption = this.rules.EG.personalExemption;
+    const projected = round2((Math.max(regularYtd, 0) * 12) / months);
+    const annualTaxRegular = this.egyptAnnualTax(Math.max(projected - exemption, 0));
+    const annualTaxWithIrregular = this.egyptAnnualTax(
+      Math.max(projected + Math.max(irregularYtd, 0) - exemption, 0),
+    );
+    const taxDueYtd = round2(
+      (annualTaxRegular * months) / 12 + (annualTaxWithIrregular - annualTaxRegular),
+    );
+    const taxBefore = round2(Number(ytd.taxBefore || 0));
+    return {
+      months,
+      regularTaxableYtd: regularYtd,
+      irregularTaxableYtd: irregularYtd,
+      projectedAnnualRegular: projected,
+      annualTaxRegular,
+      annualTaxWithIrregular,
+      taxDueYtd,
+      taxBefore,
+      monthlyTax: round2(taxDueYtd - taxBefore),
+    };
+  }
+
+  /**
+   * Martyrs fund contribution (Law 4/2021): a rate (0.05%) of the gross
+   * salary, deducted from the employee or borne by the employer.
+   */
+  egyptMartyrsFund(gross: number): MartyrsFundResult {
+    const fund = this.rules.EG.martyrsFund;
+    if (!fund?.enabled) return { base: 0, rate: 0, bearer: null, employee: 0, employer: 0 };
+    const base = round2(Math.max(Number(gross) || 0, 0));
+    const amount = round2(base * fund.rate);
+    return {
+      base,
+      rate: fund.rate,
+      bearer: fund.bearer,
+      employee: fund.bearer === 'employee' ? amount : 0,
+      employer: fund.bearer === 'employer' ? amount : 0,
+    };
   }
 
   /**
@@ -320,9 +434,35 @@ export class PayrollCalculator {
     }
 
     let incomeTax: IncomeTaxResult = { monthlyTaxable: 0, annualTaxable: 0, annualTax: 0, monthlyTax: 0 };
+    let martyrsFund: MartyrsFundResult = { base: 0, rate: 0, bearer: null, employee: 0, employer: 0 };
     if (input.country === 'EG') {
       const nonTaxable = sum(additions.filter((a) => a.taxable === false).map((a) => a.amount));
-      incomeTax = this.egyptMonthlyTax(gross - nonTaxable - socialInsurance.employee);
+      const irregular = round2(sum(additions.filter((a) => a.taxable !== false).map((a) => a.amount)));
+      const taxable = round2(gross - nonTaxable - socialInsurance.employee);
+      // One-off additions are irregular; whatever remains is recurring pay.
+      const irregularTaxable = round2(Math.min(irregular, Math.max(taxable, 0)));
+      const regularTaxable = round2(taxable - irregularTaxable);
+      incomeTax = {
+        ...this.egyptMonthlyTax(taxable),
+        method: 'annualised',
+        regularTaxable,
+        irregularTaxable,
+      };
+      if (input.taxYtd) {
+        const cumulative = this.egyptCumulativeTax(input.taxYtd, regularTaxable, irregularTaxable);
+        incomeTax = {
+          ...incomeTax,
+          method: 'cumulative',
+          annualTaxable: Math.max(
+            round2(cumulative.projectedAnnualRegular + cumulative.irregularTaxableYtd - this.rules.EG.personalExemption),
+            0,
+          ),
+          annualTax: cumulative.annualTaxWithIrregular,
+          monthlyTax: cumulative.monthlyTax,
+          cumulative,
+        };
+      }
+      martyrsFund = this.egyptMartyrsFund(gross);
     }
 
     const otherDeductions = (input.deductions ?? []).map((d) => ({ ...d, amount: round2(d.amount) }));
@@ -330,7 +470,9 @@ export class PayrollCalculator {
 
     // Loan installments are deducted only up to the remaining net pay; the
     // rest stays pending for the next payroll.
-    let available = round2(gross - socialInsurance.employee - incomeTax.monthlyTax - otherDeductionsTotal);
+    let available = round2(
+      gross - socialInsurance.employee - incomeTax.monthlyTax - martyrsFund.employee - otherDeductionsTotal,
+    );
     const loanAllocations: LoanDue[] = [];
     let loanDue = 0;
     for (const installment of input.loanInstallments ?? []) {
@@ -345,7 +487,11 @@ export class PayrollCalculator {
     const loanDeduction = round2(sum(loanAllocations.map((l) => l.amount)));
 
     const totalDeductions = round2(
-      socialInsurance.employee + incomeTax.monthlyTax + loanDeduction + otherDeductionsTotal,
+      socialInsurance.employee +
+        incomeTax.monthlyTax +
+        martyrsFund.employee +
+        loanDeduction +
+        otherDeductionsTotal,
     );
 
     return {
@@ -374,6 +520,7 @@ export class PayrollCalculator {
       gross,
       socialInsurance,
       incomeTax,
+      martyrsFund,
       loanDeduction,
       loanAllocations,
       loanShortfall: round2(loanDue - loanDeduction),
@@ -409,6 +556,27 @@ export class PayrollCalculator {
     const wage = Number(input.monthlyWage) || 0;
 
     if (input.country === 'EG') {
+      const months = Number(this.rules.EG.contractualGratuityMonthsPerYear) || 0;
+      if (months > 0) {
+        const full = round2((serviceDays / 365) * wage * months);
+        let egFactor = 1;
+        if (input.reason === 'dismissal_article_80') egFactor = 0;
+        return {
+          country: 'EG',
+          serviceDays,
+          serviceYears,
+          monthlyWage: wage,
+          firstFiveYearsAward: 0,
+          afterFiveYearsAward: 0,
+          fullAward: full,
+          entitlementFactor: egFactor,
+          amount: round2(full * egFactor),
+          statutory: false,
+          notes: [
+            `Contractual end-of-service award: ${months} month(s) of wage per service year (HR settings EG.contractualGratuityMonthsPerYear).`,
+          ],
+        };
+      }
       return {
         country: 'EG',
         serviceDays,

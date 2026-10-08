@@ -13,6 +13,8 @@ import {
   ProduceDto,
   ProductionOrderQueryDto,
   RequirementsQueryDto,
+  MrpRequisitionDto,
+  ReverseRunDto,
 } from '../dto/production.dto';
 
 const read = { module: 'manufacturing', screen: 'production', action: 'read' };
@@ -111,6 +113,22 @@ export class ProductionOrdersController {
   runs(@CurrentTenant() tenantId: string, @Param('id') id: string) {
     return this.service.getRecords(tenantId, id);
   }
+
+  @RequirePermissions({ module: 'manufacturing', screen: 'production', action: 'update' })
+  @Post(':id/runs/:runId/reverse')
+  @ApiOperation({
+    summary:
+      'Reverse (un-build) a production run: finished goods and by-products leave stock, components return, the entry is reversed',
+  })
+  reverseRun(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+    @Param('runId') runId: string,
+    @Body() dto: ReverseRunDto,
+  ) {
+    return this.service.reverseRun(tenantId, user.sub, id, runId, dto);
+  }
 }
 
 @ApiTags('manufacturing')
@@ -148,6 +166,19 @@ export class ManufacturingController {
   @ApiOperation({ summary: 'Component requirements: required vs available vs to buy' })
   requirements(@CurrentTenant() tenantId: string, @Query() query: RequirementsQueryDto) {
     return this.reports.requirements(tenantId, query);
+  }
+
+  @RequirePermissions({ module: 'purchasing', screen: 'requisitions', action: 'create' })
+  @Post('reports/requirements/requisition')
+  @ApiOperation({
+    summary: 'Create a draft purchase requisition from the MRP shortages (sub-assembly stock netted first)',
+  })
+  requisitionFromShortages(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: MrpRequisitionDto,
+  ) {
+    return this.reports.createRequisition(tenantId, user.sub, dto);
   }
 
   @RequirePermissions(read)

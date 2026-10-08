@@ -66,12 +66,9 @@ accounting settings.
 ### Still missing
 - Work centers, routings/operations, capacity planning and time-based labour costing
   (labour/overhead are fixed amounts per unit).
-- Generating purchase requisitions/RFQs from MRP shortages (only the list is
-  returned; needs a purchasing hook).
-- MRP does not net sub-assembly stock before exploding, nor plan by date.
+- MRP does not plan by date (no lead times / scheduling).
 - Work-in-progress account (production posts directly from components to finished
-  goods); reversing a recorded production run; un-building.
-- Lot/serial traceability of components (depends on inventory lots).
+  goods).
 - Quality checks and subcontracting.
 
 ## CRM
@@ -114,3 +111,57 @@ No accounting postings in CRM.
 - Lead scoring, duplicate detection, merge, campaigns and web-form capture.
 - Linking the quotation outcome back automatically (won when the order is confirmed).
 - Sales teams and targets.
+
+## Manufacturing phase 2
+
+- **MRP netting**: `GET manufacturing/reports/requirements` nets the free stock
+  of each sub-assembly (on hand - reserved - open production demand, in the
+  warehouse) before exploding it; only the uncovered quantity is exploded
+  (`netSubAssemblies=false` to disable). The response lists
+  `subAssembliesFromStock`. `BomsService.explode(..., { availableStock })`.
+- **Shortages -> purchase requisition**:
+  `POST manufacturing/reports/requirements/requisition`
+  `{bomId|productId, quantity, warehouseId?, explode?, netSubAssemblies?, departmentName?, requiredDate?, notes?, submit?}`
+  (permission purchasing/requisitions/create) creates a draft requisition
+  through the purchasing `PurchaseRequisitionsService`: one line per shortage
+  at the suggested quantity (reorder quantity rounding), estimated at average
+  cost, with the preferred supplier; `submit: true` submits it.
+- **Lots on production**: `produce` accepts `consumption[].lots` and `lots`
+  (finished product); runs store the lots consumed/produced
+  (`moves[].lots`, `output_lots`).
+- **Un-build / reverse a run**: `POST manufacturing/production-orders/:id/runs/:runId/reverse {date?, reason?}`
+  (manufacturing/production/update). Refused when the produced goods (finished
+  product and by-products) are no longer available in the destination
+  warehouse (already sold/consumed/reserved), whatever the negative-stock
+  policy, or when the run is already reversed. Finished goods and by-products
+  leave stock with their recorded lots, components return to the source
+  warehouse with their lots at the cost they were consumed at, the
+  `production_order` entry of the run is reversed, and the difference between
+  the current average cost taken out and the recorded run cost is posted
+  Dr/Cr stockAdjustment vs inventory (`production_unbuild`). Order quantities
+  and actual costs are reduced; a done order reopens (in progress, or
+  confirmed when nothing is left produced). New columns on
+  `mfg_production_records`: `output_lots`, `reversed_at`, `reversed_by`,
+  `reversal_difference`.
+
+## Frontend (phase 2)
+
+Bilingual screens (Arabic RTL default, English), menu groups "Manufacturing" (order 55) and "CRM"
+(order 45) in `src/components/layout/nav/people.ts`.
+
+- Manufacturing (`/manufacturing/...`): BOM list and editor (components with scrap %, by-products
+  with cost share %, labour/overhead per unit, activate/deactivate, new version, delete), structure
+  tree (multi-level explosion) and cost roll-up tabs; production orders (create from product/BOM,
+  availability, confirm with reserve / allow shortage, start, partial production with actual
+  consumption per line and optional close, finish, cancel, delete draft, cost/variance report,
+  production runs, scrap); scrap list/entry; MRP requirements report; production cost report.
+- CRM (`/crm/...`): kanban pipeline by stage with native HTML5 drag and drop calling
+  `POST /crm/leads/:id/stage` (optimistic update, rollback on error), quick add per stage; leads list
+  with filters; lead form with won/lost (reason)/reopen, convert to opportunity, convert to customer
+  (new or existing), create quotation (lines), lead activities; my activities with
+  overdue/today/planned/done/cancelled tabs (done with result, cancel), stages admin, pipeline report.
+
+Known backend issue found by the UI: `GET /crm/leads` returns 500 ("Cannot read properties of
+undefined (reading 'databaseName')") because `CrmLeadsService.findAll` orders by the column name
+`l.created_at` together with joins and `take()`; it must order by the property path
+`l.createdAt`. The pipeline, leads list and activities lead lookup depend on it.

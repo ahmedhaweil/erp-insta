@@ -22,7 +22,8 @@
     "migration:generate": "npm run typeorm -- migration:generate -d src/config/typeorm.config.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/config/typeorm.config.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d src/config/typeorm.config.ts",
-    "seed:run": "ts-node -r tsconfig-paths/register src/database/seeds/run-seeds.ts"
+    "seed:run": "ts-node -r tsconfig-paths/register src/database/seeds/run-seeds.ts",
+    "migration:baseline": "ts-node -r tsconfig-paths/register src/database/migrations-baseline.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",
@@ -40,6 +41,7 @@
     "@nestjs/typeorm": "^10.0.2",
     "@nestjs/websockets": "^10.4.0",
     "bcrypt": "^5.1.1",
+    "bidi-js": "1.0.3",
     "bullmq": "^5.8.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
@@ -53,6 +55,7 @@
     "passport-jwt": "^4.0.1",
     "pdfkit": "^0.15.0",
     "pg": "^8.12.0",
+    "qrcode": "1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sharp": "^0.33.4",

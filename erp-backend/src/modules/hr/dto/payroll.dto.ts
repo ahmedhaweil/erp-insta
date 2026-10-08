@@ -2,6 +2,7 @@ import {
   IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -38,6 +39,11 @@ export class PayPayrollRunDto {
   @ApiProperty({ enum: HrPaymentMethod })
   @IsEnum(HrPaymentMethod)
   paymentMethod: HrPaymentMethod;
+
+  @ApiPropertyOptional({ description: 'Cash box / bank account to pay from (default: the cash or bank account of the accounting settings)' })
+  @IsOptional()
+  @IsUUID()
+  treasuryId?: string;
 }
 
 export class ReversePayrollRunDto {
@@ -81,6 +87,25 @@ export class PayrollRunQueryDto {
   @IsOptional()
   @IsEnum(PayrollRunStatus)
   status?: PayrollRunStatus;
+}
+
+export class BankFileQueryDto {
+  @ApiPropertyOptional({ enum: ['generic', 'wps'], default: 'generic' })
+  @IsOptional()
+  @IsIn(['generic', 'wps'])
+  format?: 'generic' | 'wps';
+
+  @ApiPropertyOptional({ description: 'Only employees whose bank name contains this text' })
+  @IsOptional()
+  @IsString()
+  bankName?: string;
+
+  @ApiPropertyOptional() @IsOptional() @IsDateString() valueDate?: string;
+
+  @ApiPropertyOptional({ description: 'true = stream the CSV file' })
+  @IsOptional()
+  @IsString()
+  download?: string;
 }
 
 export class PeriodQueryDto {

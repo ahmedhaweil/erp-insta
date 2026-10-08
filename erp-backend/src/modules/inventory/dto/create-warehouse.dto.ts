@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsBoolean, IsUUID } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 export class CreateWarehouseDto {
   @ApiProperty()
@@ -28,4 +28,14 @@ export class CreateWarehouseDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Negative stock in this warehouse: true allows, false blocks, null/omitted follows the tenant setting',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowNegativeStock?: boolean | null;
 }
+
+export class UpdateWarehouseDto extends PartialType(CreateWarehouseDto) {}

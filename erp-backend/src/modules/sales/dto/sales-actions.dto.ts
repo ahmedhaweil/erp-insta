@@ -1,3 +1,4 @@
+import { LotInputDto } from '@modules/inventory/dto/lot-input.dto';
 import {
   IsArray,
   IsBoolean,
@@ -15,6 +16,13 @@ import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 export class OrderLineQuantityDto {
   @ApiProperty() @IsUUID() lineId: string;
   @ApiProperty() @IsNumber() @Min(0) quantity: number;
+
+  @ApiPropertyOptional({ type: [LotInputDto], description: 'Lots/serial numbers delivered, in base units (FEFO when omitted)' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LotInputDto)
+  lots?: LotInputDto[];
 }
 
 export class DeliverOrderDto {

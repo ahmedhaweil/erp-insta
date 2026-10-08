@@ -410,4 +410,120 @@ export class CommissionsService {
     const products = await this.productRepo.find({ where: { tenantId, id: In(ids) } });
     return new Map(products.map((p) => [p.id, p.categoryId ?? null]));
   }
+
+  /**
+   * Commission vs sales per sales representative for a period: untaxed sales
+   * in base currency (posted invoices net of credit notes, POS sales net of
+   * refunds), commission accrued by posted statements whose period lies
+   * within the range, and the effective commission rate. Documents without a
+   * rep are reported on an "unassigned" row.
+   */
+  async repPerformance(tenantId: string, q: { from?: string; to?: string; salesRepId?: string }) {
+    const params: unknown[] = [tenantId];
+    const add = (v: unknown) => {
+      params.push(v);
+      return `$${params.length}`;
+    };
+    const inv = [`tenant_id = $1`, `status NOT IN ('draft', 'cancelled')`];
+    const pos = [`tenant_id = $1`, `status IN ('completed', 'refunded')`];
+    const st = [`tenant_id = $1`, `status = 'posted'`];
+    if (q.from) {
+      const p = add(q.from);
+      inv.push(`date >= ${p}`);
+      pos.push(`created_at::date >= ${p}`);
+      st.push(`period_from >= ${p}`);
+    }
+    if (q.to) {
+      const p = add(q.to);
+      inv.push(`date <= ${p}`);
+      pos.push(`created_at::date <= ${p}`);
+      st.push(`period_to <= ${p}`);
+    }
+    if (q.salesRepId) {
+      const p = add(q.salesRepId);
+      inv.push(`sales_rep_id = ${p}`);
+      pos.push(`sales_rep_id = ${p}`);
+      st.push(`sales_rep_id = ${p}`);
+    }
+    const invoiced: any[] = await this.repRepo.query(
+      `SELECT sales_rep_id AS "repId",
+              SUM(CASE WHEN move_type = 'credit_note' THEN -1 ELSE 1 END * subtotal * COALESCE(exchange_rate, 1)) AS amount,
+              COUNT(*) FILTER (WHERE move_type <> 'credit_note') AS documents
+         FROM sales_invoices WHERE ${inv.join(' AND ')} GROUP BY sales_rep_id`,
+      params,
+    );
+    const posSales: any[] = await this.repRepo.query(
+      `SELECT sales_rep_id AS "repId", SUM(subtotal) AS amount,
+              COUNT(*) FILTER (WHERE refunded_order_id IS NULL) AS documents
+         FROM pos_orders WHERE ${pos.join(' AND ')} GROUP BY sales_rep_id`,
+      params,
+    );
+    const commissions: any[] = await this.repRepo.query(
+      `SELECT sales_rep_id AS "repId", SUM(commission_amount) AS commission,
+              SUM(collected_amount) AS collected, COUNT(*) AS statements
+         FROM commission_statements WHERE ${st.join(' AND ')} GROUP BY sales_rep_id`,
+      params,
+    );
+    const reps = await this.repRepo.find({ where: { tenantId } });
+    const rows = new Map<string, any>();
+    const row = (repId: string | null) => {
+      const key = repId ?? '';
+      if (!rows.has(key)) {
+        const rep = reps.find((r) => r.id === repId);
+        rows.set(key, {
+          salesRepId: repId,
+          code: rep?.code ?? null,
+          name: rep?.name ?? (repId ? repId : 'Unassigned'),
+          invoicedSales: 0,
+          posSales: 0,
+          totalSales: 0,
+          documents: 0,
+          collected: 0,
+          commission: 0,
+          statements: 0,
+          commissionRate: null as number | null,
+        });
+      }
+      return rows.get(key);
+    };
+    for (const r of invoiced) {
+      const x = row(r.repId);
+      x.invoicedSales = round(Number(r.amount || 0), 4);
+      x.documents += Number(r.documents || 0);
+    }
+    for (const r of posSales) {
+      const x = row(r.repId);
+      x.posSales = round(Number(r.amount || 0), 4);
+      x.documents += Number(r.documents || 0);
+    }
+    for (const r of commissions) {
+      const x = row(r.repId);
+      x.commission = round(Number(r.commission || 0), 4);
+      x.collected = round(Number(r.collected || 0), 4);
+      x.statements = Number(r.statements || 0);
+    }
+    const list = [...rows.values()].map((x) => {
+      x.totalSales = round(x.invoicedSales + x.posSales, 4);
+      x.commissionRate = x.totalSales ? round((x.commission / x.totalSales) * 100, 2) : null;
+      return x;
+    });
+    list.sort((a, b) => b.totalSales - a.totalSales);
+    const sum = (k: string) => round(list.reduce((s, x) => s + Number(x[k] || 0), 0), 4);
+    const totals = {
+      invoicedSales: sum('invoicedSales'),
+      posSales: sum('posSales'),
+      totalSales: sum('totalSales'),
+      collected: sum('collected'),
+      commission: sum('commission'),
+    };
+    return {
+      from: q.from ?? null,
+      to: q.to ?? null,
+      rows: list,
+      totals: {
+        ...totals,
+        commissionRate: totals.totalSales ? round((totals.commission / totals.totalSales) * 100, 2) : null,
+      },
+    };
+  }
 }

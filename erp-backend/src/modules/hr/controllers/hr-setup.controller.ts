@@ -141,7 +141,7 @@ export class HrSetupController {
     summary: 'Replace the tenant overrides of the payroll rules (insurance rates, wage caps, tax brackets)',
   })
   updateSettings(@CurrentTenant() tenantId: string, @Body() dto: UpdateHrSettingsDto) {
-    return this.settings.update(tenantId, dto.rules as any);
+    return this.settings.update(tenantId, dto as any);
   }
 
   @RequirePermissions({ module: 'hr', screen: 'payroll', action: 'read' })

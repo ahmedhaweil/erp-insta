@@ -4,96 +4,31 @@ import { useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import { Link } from '@/i18n/navigation';
 import { clsx } from 'clsx';
-import {
-  LayoutDashboard,
-  BookOpen,
-  Package,
-  ShoppingCart,
-  Truck,
-  Monitor,
-  Shield,
-  Bell,
-  Settings,
-  ChevronDown,
-} from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { buildNav } from './nav';
 
-interface NavGroup {
-  key: string;
-  icon: React.ReactNode;
-  items: { key: string; href: string }[];
+const navGroups = buildNav();
+const allHrefs = navGroups.flatMap((g) => g.items.map((i) => i.href));
+
+/**
+ * The menu item for the current page: the longest item path that equals the
+ * path (without the locale) or is a parent of it. Substring matching marked
+ * e.g. /settings active on /hr/payroll-settings or /accounting/settings.
+ */
+function activeHref(pathname: string): string | undefined {
+  const path = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
+  return allHrefs
+    .filter((href) => path === href || (href !== '/' && path.startsWith(`${href}/`)))
+    .sort((a, b) => b.length - a.length)[0];
 }
 
 export default function Sidebar() {
   const t = useTranslations('nav');
+  const tCommon = useTranslations('common');
   const pathname = usePathname();
+  const current = activeHref(pathname);
   const [openGroups, setOpenGroups] = useState<string[]>(['dashboard']);
-
-  const navGroups: NavGroup[] = [
-    {
-      key: 'dashboard',
-      icon: <LayoutDashboard size={20} />,
-      items: [{ key: 'dashboard', href: '/' }],
-    },
-    {
-      key: 'accounting',
-      icon: <BookOpen size={20} />,
-      items: [
-        { key: 'chartOfAccounts', href: '/accounting/accounts' },
-        { key: 'journalEntries', href: '/accounting/journal-entries' },
-      ],
-    },
-    {
-      key: 'inventory',
-      icon: <Package size={20} />,
-      items: [
-        { key: 'products', href: '/inventory/products' },
-        { key: 'warehouses', href: '/inventory/warehouses' },
-        { key: 'stockMovements', href: '/inventory/stock' },
-      ],
-    },
-    {
-      key: 'sales',
-      icon: <ShoppingCart size={20} />,
-      items: [
-        { key: 'customers', href: '/sales/customers' },
-        { key: 'salesOrders', href: '/sales/orders' },
-        { key: 'salesInvoices', href: '/sales/invoices' },
-      ],
-    },
-    {
-      key: 'purchasing',
-      icon: <Truck size={20} />,
-      items: [
-        { key: 'suppliers', href: '/purchasing/suppliers' },
-        { key: 'purchaseOrders', href: '/purchasing/orders' },
-        { key: 'purchaseInvoices', href: '/purchasing/invoices' },
-      ],
-    },
-    {
-      key: 'pos',
-      icon: <Monitor size={20} />,
-      items: [{ key: 'pos', href: '/pos' }],
-    },
-    {
-      key: 'compliance',
-      icon: <Shield size={20} />,
-      items: [
-        { key: 'taxConfig', href: '/compliance/tax-config' },
-        { key: 'eInvoices', href: '/compliance/e-invoices' },
-      ],
-    },
-    {
-      key: 'notifications',
-      icon: <Bell size={20} />,
-      items: [{ key: 'notifications', href: '/notifications' }],
-    },
-    {
-      key: 'settings',
-      icon: <Settings size={20} />,
-      items: [{ key: 'settings', href: '/settings' }],
-    },
-  ];
 
   const toggleGroup = (key: string) => {
     setOpenGroups((prev) =>
@@ -104,7 +39,7 @@ export default function Sidebar() {
   return (
     <aside className="w-64 bg-sidebar text-white min-h-screen flex-shrink-0">
       <div className="p-4 border-b border-white/10">
-        <h1 className="text-lg font-bold">ERP System</h1>
+        <h1 className="text-lg font-bold">{tCommon('appName')}</h1>
       </div>
       <nav className="p-2 space-y-1">
         {navGroups.map((group) => {
@@ -113,7 +48,7 @@ export default function Sidebar() {
 
           if (!hasMultipleItems) {
             const item = group.items[0];
-            const isActive = pathname.endsWith(item.href) || (item.href === '/' && pathname.match(/\/[a-z]{2}$/));
+            const isActive = current === item.href;
             return (
               <Link
                 key={group.key}
@@ -125,7 +60,7 @@ export default function Sidebar() {
                     : 'text-gray-300 hover:bg-sidebar-hover hover:text-white',
                 )}
               >
-                {group.icon}
+                <group.icon size={20} />
                 <span>{t(item.key)}</span>
               </Link>
             );
@@ -138,7 +73,7 @@ export default function Sidebar() {
                 className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-sidebar-hover hover:text-white transition"
               >
                 <span className="flex items-center gap-3">
-                  {group.icon}
+                  <group.icon size={20} />
                   <span>{t(group.key)}</span>
                 </span>
                 <ChevronDown
@@ -149,7 +84,7 @@ export default function Sidebar() {
               {isOpen && (
                 <div className="ms-8 mt-1 space-y-1">
                   {group.items.map((item) => {
-                    const isActive = pathname.includes(item.href);
+                    const isActive = current === item.href;
                     return (
                       <Link
                         key={item.key}

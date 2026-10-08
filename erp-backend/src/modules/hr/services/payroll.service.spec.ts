@@ -14,6 +14,8 @@ import { HrSettingsService } from './hr-settings.service';
 import { PayrollCalculator } from '../calculators/payroll-calculator';
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
 import { SequenceService } from '@shared/services/sequence.service';
+import { OvertimeService } from './overtime.service';
+import { mergeRules } from '../calculators/payroll-rules';
 
 describe('PayrollService', () => {
   let service: PayrollService;
@@ -125,7 +127,15 @@ describe('PayrollService', () => {
           },
         },
         { provide: LoansService, useValue: loans },
-        { provide: HrSettingsService, useValue: { getCalculator: async () => new PayrollCalculator() } },
+        {
+          provide: HrSettingsService,
+          useValue: {
+            getCalculator: async () => new PayrollCalculator(),
+            getRules: async () => mergeRules({}),
+            getAccounts: async () => ({ martyrsFundAccountId: null }),
+          },
+        },
+        { provide: OvertimeService, useValue: { approvedBetween: jest.fn(async () => []) } },
         { provide: AutoPostingService, useValue: autoPosting },
         { provide: SequenceService, useValue: { next: jest.fn().mockResolvedValue('PAY-000001') } },
       ],
@@ -245,6 +255,84 @@ describe('PayrollService', () => {
     await service.cancel('t1', 'run-1');
     expect(run.status).toBe(PayrollRunStatus.CANCELLED);
     expect(autoPosting.post).not.toHaveBeenCalled();
+  });
+
+  it('puts the employee cost center on the payslip and the expense lines', async () => {
+    (employees[0] as any).costCenterId = 'cc-sales';
+    try {
+      await service.create('t1', 'u1', { period: '2026-10' });
+      const eg = lines.find((l) => l.employeeId === 'e-eg');
+      expect(eg.costCenterId).toBe('cc-sales');
+      await service.approve('t1', 'u1', 'run-1', {});
+      const posted = autoPosting.post.mock.calls[0][0].buildLines({}, (k: string) => k);
+      const expense = posted.find((l: any) => l.accountId === 'salariesExpenseAccountId' && l.branchId === 'b1');
+      expect(expense.costCenterId).toBe('cc-sales');
+    } finally {
+      delete (employees[0] as any).costCenterId;
+    }
+  });
+
+  it('posts the Martyrs fund and debits a negative (refund) tax', () => {
+    const line = {
+      gross: 10000,
+      employeeSi: 1100,
+      employerSi: 1875,
+      incomeTax: -300,
+      martyrsFund: 5,
+      martyrsFundEmployer: 0,
+      loanDeduction: 0,
+      otherDeductions: 0,
+      net: 10000 - 1100 + 300 - 5,
+      branchId: 'b1',
+      costCenterId: 'cc1',
+    } as any;
+    const posted = PayrollService.accrualLines([line], (k: string) => k, 'fund-acc');
+    const debit = posted.reduce((s, l) => s + (l.debit ?? 0), 0);
+    const credit = posted.reduce((s, l) => s + (l.credit ?? 0), 0);
+    expect(Math.round(debit * 100)).toBe(Math.round(credit * 100));
+    expect(posted).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ accountId: 'payrollTaxPayableAccountId', debit: 300 }),
+        expect.objectContaining({ accountId: 'fund-acc', credit: 5 }),
+      ]),
+    );
+    // Employer-borne fund is an extra salaries expense.
+    const employer = PayrollService.accrualLines(
+      [{ ...line, incomeTax: 0, martyrsFund: 0, martyrsFundEmployer: 5, net: 8900 }],
+      (k: string) => k,
+    );
+    expect(employer[0]).toMatchObject({ accountId: 'salariesExpenseAccountId', debit: 10005 });
+    expect(employer).toEqual(
+      expect.arrayContaining([expect.objectContaining({ accountId: 'payrollTaxPayableAccountId', credit: 5 })]),
+    );
+  });
+
+  it('feeds the year-to-date of earlier approved months into the Egyptian tax', async () => {
+    const earlier = { id: 'run-0', period: '2026-09', status: PayrollRunStatus.APPROVED };
+    runRepo.find.mockImplementation(async ({ where }: any) =>
+      [earlier, ...(run ? [run] : [])].filter(
+        (r) => typeof where.period !== 'string' || r.period === where.period,
+      ),
+    );
+    const lineRepo: any = (service as any).lineRepo;
+    const originalFind = lineRepo.find;
+    lineRepo.find = jest.fn(async ({ where }: any) =>
+      where.runId && where.runId._value?.includes('run-0')
+        ? [
+            {
+              runId: 'run-0',
+              employeeId: 'e-eg',
+              payrollCountry: PayrollCountry.EG,
+              incomeTax: 900,
+              details: { incomeTax: { regularTaxable: 10680, irregularTaxable: 0 } },
+            },
+          ]
+        : originalFind(),
+    );
+    await service.create('t1', 'u1', { period: '2026-10' });
+    const eg = lines.find((l) => l.employeeId === 'e-eg');
+    expect(eg.details.incomeTax.method).toBe('cumulative');
+    expect(eg.details.incomeTax.cumulative).toMatchObject({ months: 2, taxBefore: 900 });
   });
 
   it('refuses to delete an adjustment consumed by an approved run', async () => {

@@ -70,6 +70,10 @@ export class PosOrder extends TenantBaseEntity {
   @Column({ name: 'created_by', type: 'uuid' })
   createdBy: string;
 
+  /** Sales representative credited with the sale (defaults to the cashier's or customer's rep). */
+  @Column({ name: 'sales_rep_id', type: 'uuid', nullable: true })
+  salesRepId: string | null;
+
   @ManyToOne(() => PosSession)
   @JoinColumn({ name: 'session_id' })
   session: PosSession;

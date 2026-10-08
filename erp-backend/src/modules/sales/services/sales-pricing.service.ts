@@ -185,6 +185,15 @@ export class SalesPricingService {
    * Fills the unit price of lines sent without one from the customer's price
    * list (or the product sales price). Lines with a price are kept as is.
    */
+  /** Default sales tax rate per product, for lines that do not give one. */
+  async defaultTaxRates(tenantId: string, productIds: string[]): Promise<Map<string, number>> {
+    if (!productIds.length) return new Map();
+    const products = await this.productRepo.find({
+      where: { tenantId, id: In([...new Set(productIds)]) },
+    });
+    return new Map(products.map((p) => [p.id, Number(p.salesTaxRate ?? 0)]));
+  }
+
   async priceLines<T extends PricedLineInput>(
     tenantId: string,
     context: { customer: Customer; priceListId?: string | null; date: string },

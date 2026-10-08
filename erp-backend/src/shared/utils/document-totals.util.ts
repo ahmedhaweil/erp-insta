@@ -147,3 +147,18 @@ export function paymentState(paidAmount: number, totalAmount: number): PaymentSt
 export function residual(totalAmount: number, paidAmount: number): number {
   return Math.max(round(Number(totalAmount) - Number(paidAmount), 4), 0);
 }
+
+/**
+ * Fills the tax rate of lines that do not specify one with the product's
+ * default (sales or purchase) rate. An explicit rate, including 0, is kept.
+ */
+export function withDefaultTaxRates<T extends { productId: string; taxRate?: number | null }>(
+  lines: T[],
+  defaults: Map<string, number>,
+): T[] {
+  return lines.map((l) =>
+    l.taxRate === undefined || l.taxRate === null
+      ? { ...l, taxRate: defaults.get(l.productId) ?? 0 }
+      : l,
+  );
+}

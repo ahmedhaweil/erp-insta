@@ -5,6 +5,8 @@ import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { RequirePermissions } from '@common/decorators/require-permissions.decorator';
 import { JwtPayload } from '@common/interfaces/request-with-user.interface';
 import { PayrollService } from '../services/payroll.service';
+import { CsvFile } from '../csv-file';
+import { BankFileQueryDto } from '../dto/payroll.dto';
 import {
   ApprovePayrollRunDto,
   CreatePayrollAdjustmentDto,
@@ -133,6 +135,22 @@ export class PayrollController {
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
   ) {
     return this.payroll.payslip(tenantId, id, employeeId);
+  }
+
+  @RequirePermissions(READ)
+  @Get('payroll-runs/:id/bank-file')
+  @ApiOperation({
+    summary:
+      'Salary transfer file (format=generic bank sheet with IBAN, or wps = Saudi WPS/Mudad style); download=true streams the CSV',
+  })
+  async bankFile(
+    @CurrentTenant() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: BankFileQueryDto,
+  ) {
+    const file = await this.payroll.bankFile(tenantId, id, query);
+    if (query.download === 'true' || query.download === '1') return new CsvFile(file.content, file.filename);
+    return file;
   }
 
   // ------------------------------------------------------------ reports

@@ -1,5 +1,5 @@
-import { Controller, Get, Post, Patch, Param, Body } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Param, Body, Query, ParseUUIDPipe } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PosActor, PosService } from '../services/pos.service';
 import { RbacService } from '@modules/auth/services/rbac.service';
 import { OpenSessionDto } from '../dto/open-session.dto';
@@ -120,6 +120,73 @@ export class PosController {
     @Body() dto: UpdateTerminalDto,
   ) {
     return this.posService.updateTerminal(tenantId, id, dto);
+  }
+
+  @RequirePermissions({ module: 'pos', screen: 'sessions', action: 'read' })
+  @Get('sessions')
+  @ApiQuery({ name: 'terminalId', required: false })
+  @ApiQuery({ name: 'status', required: false, enum: ['open', 'closed'] })
+  @ApiQuery({ name: 'mine', required: false, type: Boolean })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  findSessions(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Query('terminalId') terminalId?: string,
+    @Query('status') status?: string,
+    @Query('mine') mine?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.posService.findSessions(tenantId, {
+      terminalId,
+      status,
+      userId: mine === 'true' ? user.sub : undefined,
+      from,
+      to,
+    });
+  }
+
+  @RequirePermissions({ module: 'pos', screen: 'orders', action: 'read' })
+  @Get('orders')
+  @ApiQuery({ name: 'sessionId', required: false })
+  @ApiQuery({ name: 'customerId', required: false })
+  @ApiQuery({ name: 'search', required: false, description: 'Order number or client reference' })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  @ApiQuery({ name: 'refunds', required: false, type: Boolean })
+  @ApiQuery({ name: 'refundedOrderId', required: false, description: 'Refunds of this sale' })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'offset', required: false })
+  findOrders(
+    @CurrentTenant() tenantId: string,
+    @Query('sessionId') sessionId?: string,
+    @Query('customerId') customerId?: string,
+    @Query('search') search?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('refunds') refunds?: string,
+    @Query('refundedOrderId') refundedOrderId?: string,
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+  ) {
+    return this.posService.findOrders(tenantId, {
+      sessionId,
+      customerId,
+      search,
+      from,
+      to,
+      refunds: refunds === undefined ? undefined : refunds === 'true',
+      refundedOrderId,
+      limit,
+      offset,
+    });
+  }
+
+  @RequirePermissions({ module: 'pos', screen: 'orders', action: 'read' })
+  @Get('orders/:id')
+  findOrder(@CurrentTenant() tenantId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.posService.findOrder(tenantId, id);
   }
 
   @RequirePermissions({ module: 'pos', screen: 'orders', action: 'read' })

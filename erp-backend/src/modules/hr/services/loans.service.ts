@@ -1,9 +1,9 @@
+import { HrPaymentSourceService } from './hr-payment-source.service';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+  NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import {
@@ -52,6 +52,7 @@ export class LoansService {
     private readonly employees: EmployeesService,
     private readonly autoPosting: AutoPostingService,
     private readonly sequenceService: SequenceService,
+    @Optional() private readonly paymentSource?: HrPaymentSourceService,
   ) {}
 
   findAll(tenantId: string, query: LoanQueryDto = {}) {
@@ -102,8 +103,11 @@ export class LoansService {
   async disburse(tenantId: string, userId: string, id: string, dto: DisburseLoanDto) {
     const loan = await this.findById(tenantId, id);
     if (loan.status !== LoanStatus.DRAFT) throw new ConflictException('Only draft loans can be disbursed');
-    const liquidityKey = dto.paymentMethod === HrPaymentMethod.CASH ? 'cashAccountId' : 'bankAccountId';
-    await this.autoPosting.preflight(tenantId, dto.date, ['employeeAdvancesAccountId', liquidityKey]);
+    const source = await this.paymentSourceFor(tenantId, userId, dto, Number(loan.amount));
+    await this.autoPosting.preflight(tenantId, dto.date, [
+      'employeeAdvancesAccountId',
+      ...(source.settingsKey ? [source.settingsKey] : []),
+    ]);
 
     const amounts = splitInstallments(Number(loan.amount), loan.installmentCount);
     await this.installmentRepo.save(
@@ -130,14 +134,14 @@ export class LoansService {
     await this.autoPosting.post({
       tenantId,
       userId,
-      journalType: dto.paymentMethod === HrPaymentMethod.CASH ? JournalType.CASH : JournalType.BANK,
+      journalType: source.journalType,
       date: dto.date,
       description: `Employee ${loan.type} ${loan.loanNumber}`,
       sourceType: 'employee_loan',
       sourceId: loan.id,
       buildLines: (_s, account) => [
         { accountId: account('employeeAdvancesAccountId'), debit: amount },
-        { accountId: account(liquidityKey), credit: amount },
+        { accountId: HrPaymentSourceService.account(source, account), credit: amount },
       ],
     });
     return this.findById(tenantId, id);
@@ -182,6 +186,29 @@ export class LoansService {
   }
 
   /**
+   * Allocates `amount` to all the employee's outstanding installments
+   * (whatever their due month), oldest first: used by the final settlement.
+   */
+  async allocateOutstanding(tenantId: string, employeeId: string, amount: number): Promise<InstallmentRecovery[]> {
+    const outstanding = await this.dueInstallments(tenantId, employeeId, '9999-12');
+    const out: InstallmentRecovery[] = [];
+    let left = round(amount, 2);
+    for (const installment of outstanding) {
+      if (left <= 0) break;
+      const take = round(Math.min(installment.amount, left), 2);
+      out.push({ ...installment, amount: take });
+      left = round(left - take, 2);
+    }
+    return out;
+  }
+
+  /** Outstanding loan balance of an employee. */
+  async outstandingBalance(tenantId: string, employeeId: string): Promise<number> {
+    const outstanding = await this.dueInstallments(tenantId, employeeId, '9999-12');
+    return round(outstanding.reduce((s, i) => s + i.amount, 0), 2);
+  }
+
+  /**
    * Records (sign = 1) or undoes (sign = -1) installment recoveries made by
    * an approved payroll, updating the loans' repaid amount and status.
    */
@@ -212,5 +239,19 @@ export class LoansService {
       const status = repaid >= Number(loan.amount) - 0.0001 ? LoanStatus.SETTLED : LoanStatus.DISBURSED;
       await this.loanRepo.update(loan.id, { repaidAmount: repaid, status });
     }
+  }
+
+  private paymentSourceFor(
+    tenantId: string,
+    userId: string,
+    dto: { paymentMethod: HrPaymentMethod; treasuryId?: string; date: string },
+    amount: number,
+  ) {
+    if (this.paymentSource) return this.paymentSource.resolve(tenantId, userId, dto, amount);
+    const cash = dto.paymentMethod === HrPaymentMethod.CASH;
+    return Promise.resolve({
+      journalType: cash ? JournalType.CASH : JournalType.BANK,
+      settingsKey: (cash ? 'cashAccountId' : 'bankAccountId') as 'cashAccountId' | 'bankAccountId',
+    } as import('./hr-payment-source.service').HrPaymentSource);
   }
 }

@@ -22,6 +22,10 @@ import { CreateInvoiceFromOrderDto, DeliverOrderDto } from '../dto/sales-actions
 import { OrderConfirmedEvent } from '../events/order-confirmed.event';
 import { SalesInvoicesService } from './sales-invoices.service';
 import { SalesPricingService } from './sales-pricing.service';
+import { baseUnitLines, prepareSalesLines } from './sales-line-units';
+import { ProductsService } from '@modules/inventory/services/products.service';
+import { toBaseQty } from '@modules/inventory/services/document-units.util';
+import { addLots, lotsOrUndefined } from '@modules/inventory/services/document-lots.util';
 import { SequenceService } from '@shared/services/sequence.service';
 import { StockService } from '@modules/inventory/services/stock.service';
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
@@ -43,6 +47,7 @@ export class SalesOrdersService {
     private readonly invoicesService: SalesInvoicesService,
     private readonly autoPosting: AutoPostingService,
     @Optional() private readonly pricing?: SalesPricingService,
+    @Optional() private readonly products?: ProductsService,
   ) {}
 
   async create(
@@ -56,21 +61,16 @@ export class SalesOrdersService {
 
     const orderNumber = await this.sequenceService.next(tenantId, 'sales_order', 'SO');
 
-    // Lines without a price are priced from the customer price list.
-    let inputLines = dto.lines;
-    let priceListId: string | null = dto.priceListId ?? null;
-    if (this.pricing && inputLines.some((l) => l.unitPrice === undefined || l.unitPrice === null)) {
-      const priced = await this.pricing.priceLines(
-        tenantId,
-        { customer, priceListId: dto.priceListId, date: dto.date },
-        inputLines,
-      );
-      inputLines = priced.lines;
-      priceListId = priced.priceListId;
-    }
-    if (inputLines.some((l) => l.unitPrice === undefined || l.unitPrice === null)) {
-      throw new BadRequestException('Every line needs a unit price');
-    }
+    // Units are resolved; lines without a price are priced from the customer price list.
+    const prepared = await prepareSalesLines(
+      this.pricing,
+      this.products,
+      tenantId,
+      { customer, priceListId: dto.priceListId, date: dto.date },
+      dto.lines,
+    );
+    const inputLines = prepared.lines;
+    const priceListId = prepared.priceListId;
 
     // Amounts are always recomputed server-side from quantities and prices
     const taxIncluded = !!dto.pricesIncludeTax;
@@ -78,11 +78,13 @@ export class SalesOrdersService {
       ...computeLine({ ...l, unitPrice: l.unitPrice as number }, { taxIncluded }),
       productId: l.productId,
       description: l.description,
+      unitId: l.unitId,
+      unitFactor: l.unitFactor,
     }));
     const { subtotal, taxAmount, totalAmount } = computeTotals(lines);
 
     if (this.pricing) {
-      await this.pricing.enforceMinPrice(tenantId, userId, lines, Number(dto.exchangeRate ?? 1));
+      await this.pricing.enforceMinPrice(tenantId, userId, baseUnitLines(lines), Number(dto.exchangeRate ?? 1));
     }
 
     const order = this.orderRepo.create({
@@ -157,11 +159,12 @@ export class SalesOrdersService {
 
     if (order.warehouseId) {
       for (const line of order.lines ?? []) {
+        // Reservations are kept in base units
         const reserved = await this.stockService.reserve(
           tenantId,
           line.productId,
           order.warehouseId,
-          Number(line.quantity),
+          toBaseQty(line.quantity, line.unitFactor),
         );
         line.qtyReserved = reserved;
       }
@@ -203,6 +206,12 @@ export class SalesOrdersService {
 
     const warehouseId = dto.warehouseId || order.warehouseId;
     const requested = new Map((dto.lines ?? []).map((l) => [l.lineId, Number(l.quantity)]));
+    const requestedLots = new Map((dto.lines ?? []).map((l) => [l.lineId, lotsOrUndefined(l.lots)]));
+    for (const l of dto.lines ?? []) {
+      if (!order.lines.some((line) => line.id === l.lineId)) {
+        throw new BadRequestException(`Line ${l.lineId} is not part of order ${order.orderNumber}`);
+      }
+    }
     const date = dto.date || today();
     let totalCost = 0;
     let delivered = 0;
@@ -217,23 +226,28 @@ export class SalesOrdersService {
         throw new BadRequestException('Delivered quantity exceeds the remaining ordered quantity');
       }
 
+      const baseQuantity = toBaseQty(quantity, line.unitFactor);
       const releaseReserved =
-        warehouseId === order.warehouseId ? Math.min(Number(line.qtyReserved), quantity) : 0;
+        warehouseId === order.warehouseId ? Math.min(Number(line.qtyReserved), baseQuantity) : 0;
+      const lots = requestedLots.get(line.id);
       if (!warehouseId) {
         if (await this.stockService.isStockable(tenantId, line.productId)) {
           throw new BadRequestException('A warehouse is required to deliver stockable products');
         }
       } else {
-        const { cost } = await this.stockService.issue(tenantId, userId, {
+        const issued = await this.stockService.issue(tenantId, userId, {
           productId: line.productId,
           warehouseId,
-          quantity,
+          quantity: baseQuantity,
           releaseReserved,
           referenceType: 'sales_order',
           referenceId: order.id,
           description: `Delivery ${order.orderNumber}`,
+          lots,
         });
-        totalCost += cost;
+        totalCost += issued.cost;
+        // Delivered lots are kept on the line so returns restore the same lots/serials
+        if (issued.lots?.length) line.lots = addLots(line.lots, issued.lots);
       }
 
       line.qtyDelivered = round(Number(line.qtyDelivered) + quantity, 4);
@@ -323,6 +337,8 @@ export class SalesOrdersService {
           taxRate: Number(line.taxRate),
           description: line.description,
           orderLineId: line.id,
+          unitId: line.unitId ?? undefined,
+          unitFactor: line.unitId ? Number(line.unitFactor) : undefined,
         })),
       },
       {},

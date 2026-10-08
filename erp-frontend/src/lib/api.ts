@@ -1,5 +1,13 @@
 import axios from 'axios';
 
+/** Window event fired when an action returns 409 with error.approvalRequestId. */
+export const APPROVAL_EVENT = 'erp:approval-required';
+export interface ApprovalEventDetail {
+  id: string;
+  requestNumber?: string;
+  message?: string;
+}
+
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1',
   headers: { 'Content-Type': 'application/json' },
@@ -18,6 +26,19 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // An action blocked by the approval engine (409 with the request id): let
+    // the layout show a toast linking to the approval request.
+    const apiErr = error.response?.data?.error;
+    if (error.response?.status === 409 && apiErr?.approvalRequestId && typeof window !== 'undefined') {
+      // The approval toast replaces the generic error toast of the screens.
+      error.approvalHandled = true;
+      if (typeof apiErr.message === 'string') apiErr.message = apiErr.message.replace(/\s*\[approvalRequestId=[^\]]*\]/, '');
+      window.dispatchEvent(
+        new CustomEvent(APPROVAL_EVENT, {
+          detail: { id: apiErr.approvalRequestId, requestNumber: apiErr.requestNumber, message: apiErr.message },
+        }),
+      );
+    }
     if (error.response?.status === 401 && typeof window !== 'undefined') {
       const refreshToken = localStorage.getItem('refreshToken');
       if (refreshToken && !error.config._retry) {

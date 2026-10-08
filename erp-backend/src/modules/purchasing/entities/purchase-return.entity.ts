@@ -1,6 +1,7 @@
 import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { TenantBaseEntity } from '@shared/entities/tenant-base.entity';
 import { BaseEntity } from '@shared/entities/base.entity';
+import type { DocumentLot } from '@modules/inventory/services/document-lots.util';
 import { Supplier } from './supplier.entity';
 
 export enum PurchaseReturnStatus {
@@ -83,6 +84,17 @@ export class PurchaseReturn extends TenantBaseEntity {
   @Column({ name: 'posted_at', type: 'timestamptz', nullable: true })
   postedAt: Date | null;
 
+  /** Part of the credit note / vendor refund reconciled with the original document when posted. */
+  @Column({ name: 'applied_amount', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  appliedAmount: number;
+
+  /** Cash refunded when posted (refund method cash). */
+  @Column({ name: 'refunded_amount', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  refundedAmount: number;
+
+  @Column({ name: 'cancelled_at', type: 'timestamptz', nullable: true })
+  cancelledAt: Date | null;
+
   @ManyToOne(() => Supplier)
   @JoinColumn({ name: 'supplier_id' })
   supplier: Supplier;
@@ -127,6 +139,18 @@ export class PurchaseReturnLine extends BaseEntity {
 
   @Column({ nullable: true })
   description: string;
+
+  /** Alternate unit the quantity and unit price are expressed in (null = base unit). */
+  @Column({ name: 'unit_id', type: 'uuid', nullable: true })
+  unitId: string | null;
+
+  /** Base units per line unit (1 for the base unit); stock moves use quantity x factor. */
+  @Column({ name: 'unit_factor', type: 'decimal', precision: 18, scale: 6, default: 1 })
+  unitFactor: number;
+
+  /** Lots/serial numbers moved by the return (base unit). */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  lots: DocumentLot[];
 
   @ManyToOne(() => PurchaseReturn, (r) => r.lines)
   @JoinColumn({ name: 'return_id' })

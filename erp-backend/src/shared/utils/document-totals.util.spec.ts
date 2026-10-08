@@ -1,4 +1,5 @@
 import {
+  withDefaultTaxRates,
   computeLine,
   computeTotals,
   computeWithholding,
@@ -76,5 +77,23 @@ describe('document-totals util', () => {
     expect(addMonths('2026-01-31', 1)).toBe('2026-02-28');
     expect(addMonths('2026-01-15', 12)).toBe('2027-01-15');
     expect(addMonths('2026-11-30', 3)).toBe('2027-02-28');
+  });
+});
+
+describe('withDefaultTaxRates', () => {
+  const defaults = new Map([['p1', 14], ['p2', 5]]);
+
+  it('fills missing rates from the product default and keeps explicit ones, including 0', () => {
+    expect(
+      withDefaultTaxRates(
+        [
+          { productId: 'p1' },
+          { productId: 'p2', taxRate: 0 },
+          { productId: 'p2', taxRate: 10 },
+          { productId: 'unknown', taxRate: null },
+        ],
+        defaults,
+      ).map((l) => l.taxRate),
+    ).toEqual([14, 0, 10, 0]);
   });
 });

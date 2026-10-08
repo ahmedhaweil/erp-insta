@@ -18,6 +18,13 @@ export class PurchaseInvoiceLineDto {
   @IsUUID()
   productId: string;
 
+  @ApiPropertyOptional({
+    description: 'Alternate unit of the product (product_units); quantity and unit price are in this unit',
+  })
+  @IsOptional()
+  @IsUUID()
+  unitId?: string;
+
   @ApiProperty()
   @IsNumber()
   quantity: number;
