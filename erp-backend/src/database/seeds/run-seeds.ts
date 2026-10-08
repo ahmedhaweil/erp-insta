@@ -36,7 +36,11 @@ async function run() {
     database: process.env.DB_NAME || 'erp_saas',
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
     entities: ['src/**/*.entity.ts'],
-    synchronize: true,
+    migrations: ['src/database/migrations/*.ts'],
+    // Development: create/alter the schema from the entities. Production
+    // (SEED_SYNC=false): apply the pending migrations instead.
+    synchronize: process.env.SEED_SYNC !== 'false',
+    migrationsRun: process.env.SEED_SYNC === 'false',
     logging: process.env.DB_LOGGING === 'true',
   });
 
