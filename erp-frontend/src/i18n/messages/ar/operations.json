@@ -305,7 +305,9 @@
       "settings": "إعدادات المخزون",
       "allowNegativeStock": "السماح بالرصيد السالب",
       "expiryAlertDays": "التنبيه قبل الانتهاء (يوم)",
-      "expiryAlertDaysHint": "يتم التنبيه على التشغيلات التي تنتهي خلال هذه المدة"
+      "expiryAlertDaysHint": "يتم التنبيه على التشغيلات التي تنتهي خلال هذه المدة",
+      "editCategory": "تعديل التصنيف",
+      "editUnit": "تعديل الوحدة"
     },
     "sales": {
       "customers": "العملاء",
@@ -507,7 +509,34 @@
       "settings": "إعدادات المشتريات",
       "approvalThreshold": "حد اعتماد أوامر الشراء",
       "approvalThresholdHint": "الأوامر التي تتجاوز هذا الإجمالي (بالعملة الأساسية) تحتاج اعتماداً قبل التأكيد؛ 0 لإلغاء الاعتماد",
-      "requisitionApprovalRequired": "طلبات الشراء تحتاج اعتماداً قبل التحويل"
+      "requisitionApprovalRequired": "طلبات الشراء تحتاج اعتماداً قبل التحويل",
+      "landedCosts": "تكاليف الاستيراد",
+      "landedCost": "تكلفة استيراد",
+      "newLandedCost": "تكلفة استيراد جديدة",
+      "landedCostsIntro": "توزيع مصاريف الشحن والجمارك والتخليص على البضائع المستلمة في أوامر الشراء: نصيب البضاعة الموجودة بالمخزن يرفع متوسط تكلفتها، ونصيب البضاعة المباعة يُحمّل على تكلفة المبيعات.",
+      "purchaseOrders": "أوامر الشراء",
+      "splitMethod": "طريقة التوزيع",
+      "split": {
+        "by_value": "حسب القيمة",
+        "by_quantity": "حسب الكمية",
+        "equal": "بالتساوي"
+      },
+      "noReceivedOrders": "لا توجد أوامر شراء بها بضاعة مستلمة.",
+      "charges": "المصاريف",
+      "chargePlaceholder": "شحن، جمارك، تخليص...",
+      "chargeAccount": "الحساب الدائن",
+      "chargeAccountHint": "فارغ = حساب المشتريات",
+      "addCharge": "إضافة مصروف",
+      "defaultPurchaseAccount": "المشتريات (افتراضي)",
+      "landedCostDraftHint": "يُحفظ المستند كمسودة: راجع معاينة التوزيع ثم رحّله.",
+      "splitPreview": "معاينة التوزيع",
+      "allocation": "التوزيع",
+      "receivedQty": "الكمية المستلمة",
+      "receivedValue": "القيمة المستلمة",
+      "share": "النسبة",
+      "toInventory": "على المخزون",
+      "toCogs": "على تكلفة المبيعات",
+      "cogsHint": "البضاعة المباعة منذ الاستلام يُحمّل نصيبها على تكلفة المبيعات بدلاً من المخزون."
     },
     "pos": {
       "openSession": "فتح وردية",
@@ -586,7 +615,24 @@
       "terminalWarehouseHint": "يتم الصرف من هذا المخزن",
       "printerIp": "عنوان الطابعة",
       "cashDrawerPort": "منفذ درج النقدية",
-      "scalePort": "منفذ الميزان"
+      "scalePort": "منفذ الميزان",
+      "terminal": "نقطة البيع",
+      "mySessions": "جلساتي فقط",
+      "closedAt": "الإغلاق",
+      "sessionsHistory": "سجل جلسات نقاط البيع",
+      "openSessionFound": "هذه النقطة بها جلسة مفتوحة (فُتحت {opened}، نقدية افتتاحية {cash}). استأنفها لمتابعة البيع.",
+      "receipt": "إيصال",
+      "refundNeedsSession": "يُصرف المرتجع من جلسة نقطة بيع مفتوحة: افتح جلسة على نقطة بيع أولاً.",
+      "refundIntoSession": "الصرف من الجلسة",
+      "refundIntoSessionHint": "تُصرف النقدية من درج هذه الجلسة",
+      "ordersSearch": "طلبات نقاط البيع",
+      "searchOrdersHint": "رقم الطلب أو المرجع",
+      "salesOnly": "مبيعات",
+      "refundsOnly": "مرتجعات",
+      "refundDoc": "مرتجع",
+      "saleDoc": "بيع",
+      "originalOrder": "الطلب الأصلي",
+      "refundsOfOrder": "مرتجعات هذا الطلب"
     },
     "comp": {
       "settings": "إعدادات الفاتورة الإلكترونية",
@@ -735,6 +781,12 @@
       "submitReceiptHint": "ترسل الإيصالات تلقائياً عند تفعيل الإرسال التلقائي؛ استخدم هذا لإرسال طلب نقطة بيع واحد. يمكن أيضاً الإرسال من قائمة طلبات نقطة البيع.",
       "posOrderId": "رقم طلب نقطة البيع (ID)",
       "previousUuid": "UUID السابق"
+    },
+    "paging": {
+      "page": "صفحة {page}",
+      "rows": "السجلات {from}-{to}",
+      "previous": "السابق",
+      "next": "التالي"
     }
   },
   "nav": {
@@ -763,6 +815,9 @@
     "complianceSettings": "إعدادات الفاتورة الإلكترونية",
     "itemCodes": "أكواد الأصناف الضريبية",
     "taxProfiles": "البيانات الضريبية للعملاء",
-    "eReceipts": "الإيصالات الإلكترونية"
+    "eReceipts": "الإيصالات الإلكترونية",
+    "posSessions": "سجل الجلسات",
+    "posOrders": "طلبات نقاط البيع",
+    "landedCosts": "تكاليف الاستيراد"
   }
 }

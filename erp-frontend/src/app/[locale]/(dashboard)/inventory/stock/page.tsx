@@ -7,6 +7,7 @@ import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import { Btn, Field, inputCls, SelectBox, toOptions } from '@/components/operations/form';
 import { byId, Card, FilterBar, fmtDateTime, fmtMoney, fmtQty, num, SimpleTable, Stat, Tabs, useModal, useNamer } from '@/components/operations/common';
+import Pager from '@/components/operations/Pager';
 import LotsInput, { type LotDraft, lotsPayload } from '@/components/operations/LotsInput';
 import { useOpsCategories, useOpsMutation, useOpsProducts, useOpsQuery, useOpsWarehouses } from '@/hooks/use-operations';
 import { opsInventory } from '@/services/operations-inventory.service';
@@ -23,6 +24,10 @@ export default function StockPage() {
   const [categoryId, setCategoryId] = useState('');
   const [productId, setProductId] = useState('');
   const [includeZero, setIncludeZero] = useState(false);
+  const [moveFrom, setMoveFrom] = useState('');
+  const [moveTo, setMoveTo] = useState('');
+  const [offset, setOffset] = useState(0);
+  const MOVE_LIMIT = 100;
   const { data: warehouses = [] } = useOpsWarehouses();
   const { data: categories = [] } = useOpsCategories();
   const { data: products = [] } = useOpsProducts();
@@ -32,9 +37,13 @@ export default function StockPage() {
   const balance = useOpsQuery(['stock-balance', warehouseId, categoryId, includeZero], () =>
     opsInventory.stockBalance({ warehouseId, categoryId, includeZero: includeZero || undefined }),
   );
-  const movements = useOpsQuery(['stock-movements', warehouseId, productId], () => opsInventory.movements({ warehouseId, productId }), {
-    enabled: tab === 'movements',
-  });
+  const movements = useOpsQuery(
+    ['stock-movements', warehouseId, productId, moveFrom, moveTo, offset],
+    () => opsInventory.movements({ warehouseId, productId, from: moveFrom, to: moveTo, limit: MOVE_LIMIT, offset }),
+    {
+      enabled: tab === 'movements',
+    },
+  );
   const moveModal = useModal<'adjust' | 'receive'>();
 
   const groups: any[] = balance.data?.warehouses ?? [];
@@ -69,9 +78,41 @@ export default function StockPage() {
             </label>
           </>
         ) : (
-          <Field label={t('common.product')}>
-            <SelectBox value={productId} onChange={setProductId} options={toOptions(products, name)} emptyLabel={t('common.all')} />
-          </Field>
+          <>
+            <Field label={t('common.product')}>
+              <SelectBox
+                value={productId}
+                onChange={(v) => {
+                  setProductId(v);
+                  setOffset(0);
+                }}
+                options={toOptions(products, name)}
+                emptyLabel={t('common.all')}
+              />
+            </Field>
+            <Field label={t('common.from')}>
+              <input
+                type="date"
+                className={inputCls}
+                value={moveFrom}
+                onChange={(e) => {
+                  setMoveFrom(e.target.value);
+                  setOffset(0);
+                }}
+              />
+            </Field>
+            <Field label={t('common.to')}>
+              <input
+                type="date"
+                className={inputCls}
+                value={moveTo}
+                onChange={(e) => {
+                  setMoveTo(e.target.value);
+                  setOffset(0);
+                }}
+              />
+            </Field>
+          </>
         )}
       </FilterBar>
 
@@ -101,11 +142,12 @@ export default function StockPage() {
           ))}
         </div>
       ) : (
+        <>
         <DataTable
           data={movements.data ?? []}
           loading={movements.isLoading}
           searchable
-          pageSize={25}
+          pageSize={MOVE_LIMIT}
           columns={[
             { key: 'createdAt', header: t('common.date'), render: (m: Row) => fmtDateTime(m.createdAt) },
             { key: 'productId', header: t('common.product'), render: (m: Row) => name(m.product ?? productMap[m.productId]) },
@@ -116,6 +158,8 @@ export default function StockPage() {
             { key: 'referenceType', header: t('inv.reference'), render: (m: Row) => m.referenceType || '-' },
           ]}
         />
+        <Pager offset={offset} limit={MOVE_LIMIT} count={movements.data?.length ?? 0} onChange={setOffset} />
+        </>
       )}
 
       {moveModal.data && (

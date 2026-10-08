@@ -48,6 +48,7 @@ export const operationsNav: NavGroup[] = [
       { key: 'purchaseOrders', href: '/purchasing/orders' },
       { key: 'purchaseInvoices', href: '/purchasing/invoices' },
       { key: 'purchaseReturns', href: '/purchasing/returns' },
+      { key: 'landedCosts', href: '/purchasing/landed-costs' },
       { key: 'replenishment', href: '/purchasing/replenishment' },
       { key: 'purchasingSettings', href: '/purchasing/settings' },
     ],
@@ -58,6 +59,8 @@ export const operationsNav: NavGroup[] = [
     order: 60,
     items: [
       { key: 'posTill', href: '/pos' },
+      { key: 'posSessions', href: '/pos/sessions' },
+      { key: 'posOrders', href: '/pos/orders' },
       { key: 'posTerminals', href: '/pos/terminals' },
     ],
   },

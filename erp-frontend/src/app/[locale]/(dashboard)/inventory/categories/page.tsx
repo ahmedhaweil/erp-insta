@@ -5,8 +5,8 @@ import { useTranslations } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
-import { EntityForm, type FieldDef, toOptions } from '@/components/operations/form';
-import { byId, fmtQty, Status, Tabs, useModal, useNamer } from '@/components/operations/common';
+import { changedOnly, EntityForm, type FieldDef, toOptions } from '@/components/operations/form';
+import { byId, fmtQty, RowAction, Status, Tabs, useModal, useNamer } from '@/components/operations/common';
 import { useOpsCategories, useOpsMutation, useOpsUnits } from '@/hooks/use-operations';
 import { opsInventory } from '@/services/operations-inventory.service';
 import type { Row } from '@/services/operations-api';
@@ -22,28 +22,67 @@ export default function CategoriesUnitsPage() {
   const { data: units = [], isLoading: loadingUnits } = useOpsUnits();
   const catMap = byId(categories);
   const unitMap = byId(units);
-  const modal = useModal();
+  const modal = useModal<Row>();
 
-  const createCategory = useOpsMutation((body: any) => opsInventory.createCategory(body), {
-    invalidate: ['categories'],
-    onSuccess: () => modal.close(),
-  });
-  const createUnit = useOpsMutation((body: any) => opsInventory.createUnit(body), {
-    invalidate: ['units'],
-    onSuccess: () => modal.close(),
-  });
+  const createCategory = useOpsMutation(
+    (body: any) => (modal.data ? opsInventory.updateCategory(modal.data.id, changedOnly(body, modal.data)) : opsInventory.createCategory(body)),
+    {
+      invalidate: ['categories'],
+      onSuccess: () => modal.close(),
+    },
+  );
+  const createUnit = useOpsMutation(
+    (body: any) => (modal.data ? opsInventory.updateUnit(modal.data.id, changedOnly(body, modal.data)) : opsInventory.createUnit(body)),
+    {
+      invalidate: ['units'],
+      onSuccess: () => modal.close(),
+    },
+  );
+  // A category cannot be moved under itself or one of its sub-categories.
+  const blockedParents = new Set<string>();
+  if (modal.data && tab === 'categories') {
+    blockedParents.add(modal.data.id);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const c of categories) {
+        if (c.parentId && blockedParents.has(c.parentId) && !blockedParents.has(c.id)) {
+          blockedParents.add(c.id);
+          grew = true;
+        }
+      }
+    }
+  }
 
   const categoryFields: FieldDef[] = [
     { name: 'nameAr', label: t('common.nameAr'), required: true },
     { name: 'nameEn', label: t('common.nameEn') },
-    { name: 'parentId', label: t('inv.parentCategory'), type: 'select', options: toOptions(categories, name, false) },
+    {
+      name: 'parentId',
+      label: t('inv.parentCategory'),
+      type: 'select',
+      options: toOptions(
+        categories.filter((c) => !blockedParents.has(c.id)),
+        name,
+        false,
+      ),
+    },
     { name: 'isActive', label: t('common.active'), type: 'checkbox' },
   ];
   const unitFields: FieldDef[] = [
     { name: 'nameAr', label: t('common.nameAr'), required: true },
     { name: 'nameEn', label: t('common.nameEn') },
     { name: 'symbol', label: t('inv.symbol'), required: true },
-    { name: 'baseUnitId', label: t('inv.referenceUnit'), type: 'select', options: toOptions(units, name, false) },
+    {
+      name: 'baseUnitId',
+      label: t('inv.referenceUnit'),
+      type: 'select',
+      options: toOptions(
+        units.filter((u) => u.id !== modal.data?.id),
+        name,
+        false,
+      ),
+    },
     { name: 'conversionFactor', label: t('inv.conversionFactor'), type: 'number', min: 0.000001, hint: t('inv.conversionFactorHint') },
   ];
 
@@ -74,6 +113,8 @@ export default function CategoriesUnitsPage() {
             { key: 'level', header: t('inv.level') },
             { key: 'isActive', header: t('common.status'), render: (c: Row) => <Status status={c.isActive ? 'active' : 'inactive'} /> },
           ]}
+          onRowClick={(c: Row) => modal.open(c)}
+          actions={(c: Row) => <RowAction onClick={() => modal.open(c)}>{t('common.edit')}</RowAction>}
         />
       ) : (
         <DataTable
@@ -86,19 +127,35 @@ export default function CategoriesUnitsPage() {
             { key: 'baseUnitId', header: t('inv.referenceUnit'), render: (u: Row) => (u.baseUnitId ? name(unitMap[u.baseUnitId]) : '-') },
             { key: 'conversionFactor', header: t('inv.conversionFactor'), render: (u: Row) => fmtQty(u.conversionFactor) },
           ]}
+          onRowClick={(u: Row) => modal.open(u)}
+          actions={(u: Row) => <RowAction onClick={() => modal.open(u)}>{t('common.edit')}</RowAction>}
         />
       )}
-      <Modal isOpen={modal.isOpen} onClose={modal.close} title={isCats ? t('inv.newCategory') : t('inv.newUnit')}>
+      <Modal
+        isOpen={modal.isOpen}
+        onClose={modal.close}
+        title={isCats ? (modal.data ? t('inv.editCategory') : t('inv.newCategory')) : modal.data ? t('inv.editUnit') : t('inv.newUnit')}
+      >
         {isCats ? (
           <EntityForm
+            key={modal.data?.id ?? 'new'}
             fields={categoryFields}
-            initial={{ isActive: true }}
+            mode={modal.data ? 'edit' : 'create'}
+            initial={modal.data ?? { isActive: true }}
             loading={createCategory.isPending}
             onSubmit={(p) => createCategory.mutate(p)}
             onCancel={modal.close}
           />
         ) : (
-          <EntityForm fields={unitFields} loading={createUnit.isPending} onSubmit={(p) => createUnit.mutate(p)} onCancel={modal.close} />
+          <EntityForm
+            key={modal.data?.id ?? 'new'}
+            fields={unitFields}
+            mode={modal.data ? 'edit' : 'create'}
+            initial={modal.data ?? undefined}
+            loading={createUnit.isPending}
+            onSubmit={(p) => createUnit.mutate(p)}
+            onCancel={modal.close}
+          />
         )}
       </Modal>
     </div>

@@ -8,6 +8,8 @@ import { Btn, EntityForm, Field, inputCls, inputSm } from '@/components/operatio
 import { DetailGrid, fmtDateTime, fmtMoney, fmtQty, num, SimpleTable, Status, Stat } from '@/components/operations/common';
 import { useOpsMutation, useOpsQuery } from '@/hooks/use-operations';
 import { opsPos } from '@/services/operations-pos.service';
+import RefundModal from './RefundModal';
+import { PrintButton } from '@/components/platform/PrintButton';
 import { opsCompliance } from '@/services/operations-compliance.service';
 import type { Row } from '@/services/operations-api';
 
@@ -111,50 +113,9 @@ export function OrdersModal({
   const { data: orders = [], isLoading } = useOpsQuery(['pos-orders', sessionId], () => opsPos.sessionOrders(sessionId));
   const [refunding, setRefunding] = useState<Row | null>(null);
   const eReceipt = useOpsMutation((id: string) => opsCompliance.submitReceipt(id), { invalidate: ['e-receipts'], success: 'submitted' });
-  const [qty, setQty] = useState<Record<string, string>>({});
-  const refund = useOpsMutation(
-    () =>
-      opsPos.refund(refunding!.id, {
-        sessionId,
-        lines: (refunding!.lines ?? [])
-          .map((l: any) => ({ productId: l.productId, quantity: num(qty[l.id]) }))
-          .filter((l: any) => l.quantity > 0),
-      }),
-    { invalidate: ['pos-orders', 'pos-summary'], success: 'refundCreated', onSuccess: () => { setRefunding(null); setQty({}); } },
-  );
 
   if (refunding) {
-    return (
-      <Modal isOpen onClose={() => setRefunding(null)} title={`${t('pos.refund')} ${refunding.orderNumber}`} size="lg">
-        <SimpleTable
-          rows={refunding.lines ?? []}
-          columns={[
-            { key: 'product', header: t('common.product'), render: (l) => productName(l.productId) },
-            { key: 'quantity', header: t('common.quantity'), render: (l) => fmtQty(l.quantity) },
-            { key: 'refundedQty', header: t('pos.refunded'), render: (l) => fmtQty(l.refundedQty) },
-            { key: 'lineTotal', header: t('common.lineTotal'), render: (l) => fmtMoney(l.lineTotal) },
-            {
-              key: 'r',
-              header: t('pos.refundQty'),
-              render: (l) => (
-                <input type="number" step="any" min="0" max={num(l.quantity) - num(l.refundedQty)} value={qty[l.id] ?? ''} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} className={`${inputSm} w-24`} />
-              ),
-            },
-          ]}
-        />
-        <div className="flex justify-between gap-2 mt-4">
-          <Btn variant="secondary" onClick={() => setQty(Object.fromEntries((refunding.lines ?? []).map((l: any) => [l.id, String(num(l.quantity) - num(l.refundedQty))])))}>
-            {t('pos.refundAll')}
-          </Btn>
-          <div className="flex gap-2">
-            <Btn variant="secondary" onClick={() => setRefunding(null)}>{t('common.back')}</Btn>
-            <Btn variant="danger" loading={refund.isPending} disabled={!Object.values(qty).some((v) => num(v) > 0)} onClick={() => refund.mutate(undefined)}>
-              {t('pos.confirmRefund')}
-            </Btn>
-          </div>
-        </div>
-      </Modal>
-    );
+    return <RefundModal order={refunding} sessionId={sessionId} productName={productName} onClose={() => setRefunding(null)} />;
   }
 
   return (
@@ -181,6 +142,7 @@ export function OrdersModal({
                   <Btn size="sm" variant="secondary" loading={eReceipt.isPending && eReceipt.variables === o.id} onClick={() => eReceipt.mutate(o.id)}>
                     {t('pos.eReceipt')}
                   </Btn>
+                  <PrintButton path={`/print/pos-orders/${o.id}`} params={{ paper: '80mm' }} label={t('pos.receipt')} />
                 </div>
               ),
             },

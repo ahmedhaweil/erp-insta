@@ -305,7 +305,9 @@
       "settings": "Inventory settings",
       "allowNegativeStock": "Allow negative stock",
       "expiryAlertDays": "Expiry alert (days)",
-      "expiryAlertDaysHint": "Lots expiring within this many days are flagged"
+      "expiryAlertDaysHint": "Lots expiring within this many days are flagged",
+      "editCategory": "Edit category",
+      "editUnit": "Edit unit"
     },
     "sales": {
       "customers": "Customers",
@@ -507,7 +509,34 @@
       "settings": "Purchasing settings",
       "approvalThreshold": "PO approval threshold",
       "approvalThresholdHint": "Orders above this total (base currency) need approval before confirmation; 0 disables approvals",
-      "requisitionApprovalRequired": "Requisitions need approval before conversion"
+      "requisitionApprovalRequired": "Requisitions need approval before conversion",
+      "landedCosts": "Landed costs",
+      "landedCost": "Landed cost",
+      "newLandedCost": "New landed cost",
+      "landedCostsIntro": "Spread freight, customs and clearing charges over the goods received on purchase orders: the share of goods still in stock raises their average cost, the share of goods already sold goes to cost of sales.",
+      "purchaseOrders": "Purchase orders",
+      "splitMethod": "Split method",
+      "split": {
+        "by_value": "By value",
+        "by_quantity": "By quantity",
+        "equal": "Equally"
+      },
+      "noReceivedOrders": "No purchase orders with received goods.",
+      "charges": "Charges",
+      "chargePlaceholder": "Freight, customs, clearance...",
+      "chargeAccount": "Credited account",
+      "chargeAccountHint": "Empty = the purchases account",
+      "addCharge": "Add charge",
+      "defaultPurchaseAccount": "Purchases (default)",
+      "landedCostDraftHint": "The document is saved as a draft: check the split preview, then post it.",
+      "splitPreview": "Split preview",
+      "allocation": "Allocation",
+      "receivedQty": "Received qty",
+      "receivedValue": "Received value",
+      "share": "Share",
+      "toInventory": "To inventory",
+      "toCogs": "To cost of sales",
+      "cogsHint": "Goods already sold since receipt take their share as cost of sales instead of inventory."
     },
     "pos": {
       "openSession": "Open session",
@@ -586,7 +615,24 @@
       "terminalWarehouseHint": "Stock is taken from this warehouse",
       "printerIp": "Printer IP",
       "cashDrawerPort": "Cash drawer port",
-      "scalePort": "Scale port"
+      "scalePort": "Scale port",
+      "terminal": "Terminal",
+      "mySessions": "My sessions only",
+      "closedAt": "Closed",
+      "sessionsHistory": "POS sessions history",
+      "openSessionFound": "This terminal already has an open session (opened {opened}, opening cash {cash}). Resume it to continue selling.",
+      "receipt": "Receipt",
+      "refundNeedsSession": "A refund is paid from an open POS session: open a session on a terminal first.",
+      "refundIntoSession": "Refund from session",
+      "refundIntoSessionHint": "The cash is paid out of this session's drawer",
+      "ordersSearch": "POS orders",
+      "searchOrdersHint": "Order number or client reference",
+      "salesOnly": "Sales",
+      "refundsOnly": "Refunds",
+      "refundDoc": "Refund",
+      "saleDoc": "Sale",
+      "originalOrder": "Original order",
+      "refundsOfOrder": "Refunds of this order"
     },
     "comp": {
       "settings": "E-invoicing settings",
@@ -735,6 +781,12 @@
       "submitReceiptHint": "Receipts are sent automatically when auto-submit is on; use this to (re)send one POS order. You can also send it from the POS orders list.",
       "posOrderId": "POS order ID",
       "previousUuid": "Previous UUID"
+    },
+    "paging": {
+      "page": "Page {page}",
+      "rows": "rows {from}-{to}",
+      "previous": "Previous",
+      "next": "Next"
     }
   },
   "nav": {
@@ -763,6 +815,9 @@
     "complianceSettings": "E-invoicing settings",
     "itemCodes": "Item tax codes",
     "taxProfiles": "Customer tax profiles",
-    "eReceipts": "E-receipts"
+    "eReceipts": "E-receipts",
+    "posSessions": "Sessions history",
+    "posOrders": "POS orders",
+    "landedCosts": "Landed costs"
   }
 }

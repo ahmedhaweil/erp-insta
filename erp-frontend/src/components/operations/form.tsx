@@ -167,6 +167,24 @@ export function buildPayload(fields: FieldDef[], values: Values, mode: 'create' 
   return out;
 }
 
+/**
+ * Keeps only the fields of an edit payload whose value differs from the
+ * record being edited (null and '' count as equal), so a PATCH sends just
+ * what the user changed.
+ */
+export function changedOnly(payload: Values, original: Values | null | undefined): Values {
+  if (!original) return payload;
+  const norm = (v: any) => (v === undefined || v === null || v === '' ? null : typeof v === 'number' ? v : String(v));
+  const out: Values = {};
+  for (const [k, v] of Object.entries(payload)) {
+    const before = original[k];
+    const same =
+      typeof v === 'boolean' ? v === !!before : typeof v === 'number' && before != null && before !== '' ? v === Number(before) : norm(v) === norm(before);
+    if (!same) out[k] = v;
+  }
+  return out;
+}
+
 /** Config-driven form used by the master-data screens. */
 export function EntityForm({
   fields,

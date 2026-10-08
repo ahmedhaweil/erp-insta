@@ -14,6 +14,7 @@ import { useOpsCategories, useOpsCustomers, useOpsMutation, useOpsQuery, useOpsT
 import { opsPos, type PosOrderInput } from '@/services/operations-pos.service';
 import { opsInventory } from '@/services/operations-inventory.service';
 import { apiError, type Row } from '@/services/operations-api';
+import { Link } from '@/i18n/navigation';
 
 /** Touch-friendly point of sale till with an offline sale queue. */
 export default function PosPage() {
@@ -37,24 +38,20 @@ function OpenSession({ onOpened }: { onOpened: (s: StoredSession) => void }) {
   const active = terminals.filter((x) => x.isActive);
   const [terminalId, setTerminalId] = useState('');
   const [openingCash, setOpeningCash] = useState('0');
-  const [resumeId, setResumeId] = useState('');
   const terminal = active.find((x) => x.id === terminalId);
+  // The terminal's open session (if any) is resumed instead of opening a new one.
+  const openSessions = useOpsQuery(['pos-sessions', 'open', terminalId], () => opsPos.sessions({ terminalId, status: 'open' }), {
+    enabled: !!terminalId,
+  });
+  const existing = openSessions.data?.[0];
 
   const open = useOpsMutation(() => opsPos.openSession({ terminalId, openingCash: num(openingCash) }), {
     success: 'sessionOpened',
     onSuccess: (s: Row) =>
       onOpened({ id: s.id, terminalId, terminalName: terminal?.name ?? '', openedAt: s.openedAt, openingCash: num(s.openingCash) }),
   });
-  const resume = useOpsMutation(() => opsPos.summary(resumeId.trim()), {
-    success: false,
-    onSuccess: (sum: any) => {
-      if (sum?.closingCash != null) {
-        toast.error(t('pos.sessionAlreadyClosed'));
-        return;
-      }
-      onOpened({ id: resumeId.trim(), terminalId, terminalName: terminal?.name ?? '', openedAt: new Date().toISOString(), openingCash: num(sum?.openingCash) });
-    },
-  });
+  const resume = (s: Row) =>
+    onOpened({ id: s.id, terminalId: s.terminalId, terminalName: terminal?.name ?? '', openedAt: s.openedAt, openingCash: num(s.openingCash) });
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -85,27 +82,33 @@ function OpenSession({ onOpened }: { onOpened: (s: StoredSession) => void }) {
           </div>
         )}
       </Card>
-      <Card>
-        <div className="flex flex-wrap items-end gap-3">
-          <Field label={t('pos.openingCash')} className="flex-1">
-            <input type="number" step="any" min="0" value={openingCash} onChange={(e) => setOpeningCash(e.target.value)} className={`${inputCls} text-xl py-3`} />
-          </Field>
-          <Btn size="lg" disabled={!terminalId} loading={open.isPending} onClick={() => open.mutate(undefined)}>
-            {t('pos.openSession')}
-          </Btn>
-        </div>
-      </Card>
-      <Card title={t('pos.resumeSession')}>
-        <p className="text-sm text-gray-600 mb-3">{t('pos.resumeHint')}</p>
-        <div className="flex flex-wrap items-end gap-3">
-          <Field label={t('pos.sessionId')} className="flex-1">
-            <input value={resumeId} onChange={(e) => setResumeId(e.target.value)} className={inputCls} />
-          </Field>
-          <Btn variant="secondary" disabled={!resumeId.trim()} loading={resume.isPending} onClick={() => resume.mutate(undefined)}>
-            {t('pos.resume')}
-          </Btn>
-        </div>
-      </Card>
+      {terminalId && openSessions.isLoading && <p className="text-sm text-gray-500">{t('common.loading')}</p>}
+      {existing ? (
+        <Card title={t('pos.resumeSession')}>
+          <p className="text-sm text-gray-600 mb-3">
+            {t('pos.openSessionFound', { opened: fmtDateTime(existing.openedAt), cash: fmtMoney(existing.openingCash) })}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Btn size="lg" onClick={() => resume(existing)}>
+              {t('pos.resume')}
+            </Btn>
+            <Link href="/pos/sessions" className="px-5 py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 text-base font-medium">
+              {t('pos.sessionsHistory')}
+            </Link>
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label={t('pos.openingCash')} className="flex-1">
+              <input type="number" step="any" min="0" value={openingCash} onChange={(e) => setOpeningCash(e.target.value)} className={`${inputCls} text-xl py-3`} />
+            </Field>
+            <Btn size="lg" disabled={!terminalId || openSessions.isLoading} loading={open.isPending} onClick={() => open.mutate(undefined)}>
+              {t('pos.openSession')}
+            </Btn>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

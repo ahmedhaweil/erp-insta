@@ -32,6 +32,20 @@ export const opsPurchasing = {
   billOrder: (id: string, body: { date?: string; supplierReference?: string; post?: boolean }) =>
     ops.post<Row>(`${U}/orders/${id}/bill`, body),
 
+  // Landed costs (freight / customs spread over received goods)
+  landedCosts: () => ops.get<Row[]>(`${U}/landed-costs`),
+  landedCost: (id: string) => ops.get<Row>(`${U}/landed-costs/${id}`),
+  landedCostPreview: (id: string) => ops.get<Row>(`${U}/landed-costs/${id}/preview`),
+  createLandedCost: (body: {
+    date: string;
+    purchaseOrderIds: string[];
+    splitMethod: 'by_value' | 'by_quantity' | 'equal';
+    charges: { description: string; amount: number; accountId?: string }[];
+    notes?: string;
+  }) => ops.post<Row>(`${U}/landed-costs`, body),
+  postLandedCost: (id: string) => ops.post<Row>(`${U}/landed-costs/${id}/post`),
+  cancelLandedCost: (id: string) => ops.post<Row>(`${U}/landed-costs/${id}/cancel`),
+
   // Vendor bills
   bills: () => ops.get<Row[]>(`${U}/invoices`),
   bill: (id: string) => ops.get<Row>(`${U}/invoices/${id}`),

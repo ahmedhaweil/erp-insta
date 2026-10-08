@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
-import { EntityForm, type FieldDef, toOptions } from '@/components/operations/form';
+import { changedOnly, EntityForm, type FieldDef, toOptions } from '@/components/operations/form';
 import { byId, RowAction, Status, useModal, useNamer } from '@/components/operations/common';
 import { useOpsBranches, useOpsMutation, useOpsWarehouses } from '@/hooks/use-operations';
 import { opsInventory } from '@/services/operations-inventory.service';
@@ -19,7 +19,8 @@ export default function WarehousesPage() {
   const modal = useModal<Row>();
 
   const save = useOpsMutation(
-    (body: any) => (modal.data ? opsInventory.updateWarehouse(modal.data.id, body) : opsInventory.createWarehouse(body)),
+    (body: any) =>
+      modal.data ? opsInventory.updateWarehouse(modal.data.id, changedOnly(body, modal.data)) : opsInventory.createWarehouse(body),
     { invalidate: ['warehouses'], onSuccess: () => modal.close() },
   );
 

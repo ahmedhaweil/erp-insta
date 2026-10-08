@@ -25,6 +25,7 @@ function activeHref(pathname: string): string | undefined {
 
 export default function Sidebar() {
   const t = useTranslations('nav');
+  const tCommon = useTranslations('common');
   const pathname = usePathname();
   const current = activeHref(pathname);
   const [openGroups, setOpenGroups] = useState<string[]>(['dashboard']);
@@ -38,7 +39,7 @@ export default function Sidebar() {
   return (
     <aside className="w-64 bg-sidebar text-white min-h-screen flex-shrink-0">
       <div className="p-4 border-b border-white/10">
-        <h1 className="text-lg font-bold">ERP System</h1>
+        <h1 className="text-lg font-bold">{tCommon('appName')}</h1>
       </div>
       <nav className="p-2 space-y-1">
         {navGroups.map((group) => {

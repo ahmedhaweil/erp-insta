@@ -20,15 +20,25 @@ export const opsInventory = {
   // Master data
   categories: () => ops.get<Row[]>(`${P}/categories`),
   createCategory: (body: any) => ops.post<Row>(`${P}/categories`, body),
+  updateCategory: (id: string, body: any) => ops.patch<Row>(`${P}/categories/${id}`, body),
   units: () => ops.get<Row[]>(`${P}/units`),
   createUnit: (body: any) => ops.post<Row>(`${P}/units`, body),
+  updateUnit: (id: string, body: any) => ops.patch<Row>(`${P}/units/${id}`, body),
   warehouses: () => ops.get<Row[]>(`${P}/warehouses`),
   createWarehouse: (body: any) => ops.post<Row>(`${P}/warehouses`, body),
   updateWarehouse: (id: string, body: any) => ops.patch<Row>(`${P}/warehouses/${id}`, body),
 
   // Stock
   stock: (params?: { productId?: string; warehouseId?: string }) => ops.get<Row[]>(`${P}/stock`, params),
-  movements: (params?: { productId?: string; warehouseId?: string }) => ops.get<Row[]>(`${P}/stock/movements`, params),
+  movements: (params?: {
+    productId?: string;
+    warehouseId?: string;
+    from?: string;
+    to?: string;
+    referenceType?: string;
+    limit?: number;
+    offset?: number;
+  }) => ops.get<Row[]>(`${P}/stock/movements`, params),
   adjust: (body: any) => ops.post(`${P}/stock/adjust`, body),
   receive: (body: any) => ops.post(`${P}/stock/receive`, body),
   settings: () => ops.get<{ allowNegativeStock: boolean; expiryAlertDays: number }>(`${P}/settings`),

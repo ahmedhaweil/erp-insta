@@ -23,6 +23,20 @@ export const opsPos = {
   addCashMovement: (id: string, body: { type: 'in' | 'out'; amount: number; reason: string }) =>
     ops.post(`/pos/sessions/${id}/cash-movements`, body),
 
+  sessions: (params: { terminalId?: string; status?: 'open' | 'closed' | ''; mine?: boolean; from?: string; to?: string } = {}) =>
+    ops.get<Row[]>('/pos/sessions', { ...params, mine: params.mine ? 'true' : undefined }),
+  orders: (params: {
+    sessionId?: string;
+    customerId?: string;
+    search?: string;
+    from?: string;
+    to?: string;
+    refunds?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}) => ops.get<Row[]>('/pos/orders', { ...params, refunds: params.refunds === undefined ? undefined : String(params.refunds) }),
+  order: (id: string) => ops.get<Row>(`/pos/orders/${id}`),
+
   createOrder: (body: PosOrderInput) => ops.post<Row>('/pos/orders', body),
   refund: (orderId: string, body: { sessionId: string; lines?: { productId: string; quantity: number }[] }) =>
     ops.post<Row>(`/pos/orders/${orderId}/refund`, body),
