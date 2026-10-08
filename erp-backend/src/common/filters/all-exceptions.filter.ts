@@ -38,6 +38,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let message = 'Internal server error';
     let details: any[] | undefined;
     let code = 'INTERNAL_ERROR';
+    // Structured fields an exception may expose to clients (e.g. the approval
+    // request a blocked action is waiting on).
+    let extra: Record<string, unknown> = {};
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -49,6 +52,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const res = exceptionResponse as any;
         message = res.message || exception.message;
         code = res.error || ERROR_CODES[status] || 'INTERNAL_ERROR';
+        if (res.approvalRequestId) {
+          extra = { approvalRequestId: res.approvalRequestId, requestNumber: res.requestNumber };
+        }
 
         if (Array.isArray(res.message)) {
           details = res.message.map((msg: string) => ({ message: msg }));
@@ -57,7 +63,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         }
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
+      // Unexpected errors (database, bugs) can reveal internals: clients get a
+      // generic message in production; the full error is logged below.
+      message = process.env.APP_ENV === 'production' ? 'Internal server error' : exception.message;
     }
 
     code = ERROR_CODES[status] || code;
@@ -70,7 +78,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
         path: request.url,
         method: request.method,
         statusCode: status,
-        error: { code, message },
+        error: {
+          code,
+          message: exception instanceof Error ? exception.message : message,
+          ...(status >= 500 && exception instanceof Error && { stack: exception.stack }),
+        },
       }),
     );
 
@@ -80,6 +92,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         code,
         message,
         ...(details && { details }),
+        ...extra,
       },
     });
   }
