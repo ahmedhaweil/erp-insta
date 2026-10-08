@@ -1,11 +1,12 @@
 /* Minimal typings for the untyped libraries used by the printing engine. */
 
 declare module 'bidi-js' {
-  export interface EmbeddingLevels {
+  namespace bidiFactory {
+  interface EmbeddingLevels {
     levels: Uint8Array;
     paragraphs: { start: number; end: number; level: number }[];
   }
-  export interface Bidi {
+  interface Bidi {
     getEmbeddingLevels(text: string, direction?: 'ltr' | 'rtl' | 'auto'): EmbeddingLevels;
     getReorderSegments(
       text: string,
@@ -13,15 +14,17 @@ declare module 'bidi-js' {
       start?: number,
       end?: number,
     ): [number, number][];
+    /** Note: takes the `levels` array, not the result object. */
     getMirroredCharactersMap(
       text: string,
-      levels: EmbeddingLevels,
+      levels: Uint8Array,
       start?: number,
       end?: number,
     ): Map<number, string>;
   }
-  const bidiFactory: () => Bidi;
-  export default bidiFactory;
+  }
+  const bidiFactory: () => bidiFactory.Bidi;
+  export = bidiFactory;
 }
 
 declare module 'qrcode' {

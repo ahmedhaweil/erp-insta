@@ -1,4 +1,4 @@
-import bidiFactory from 'bidi-js';
+import bidiFactory = require('bidi-js');
 
 /**
  * Right-to-left support for PDFKit.
@@ -36,6 +36,17 @@ const ARABIC_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
 const NEUTRAL_SCRIPT_RE = /[\p{Script=Common}\p{Script=Inherited}]/u;
 const RTL_SCRIPT_RE = /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}]/u;
 const SPACE_RE = /\s/;
+/** Bidi isolate / embedding controls: used for ordering, never drawn. */
+const ISOLATES_RE = /[\u2066-\u2069\u202A-\u202E\u200E\u200F]/g;
+
+/**
+ * Wraps a value (date, number, code) in a left-to-right isolate so it keeps
+ * its natural order inside Arabic text (e.g. 2026-10-08 after an Arabic word
+ * would otherwise be shown as 08-10-2026 per the bidi rules).
+ */
+export function ltr(value: unknown): string {
+  return `\u2066${value ?? ''}\u2069`;
+}
 
 /** True when the text contains Arabic letters. */
 export function hasArabic(text: string | null | undefined): boolean {
@@ -65,7 +76,7 @@ export function visualChunks(line: string, base: Direction): VisualChunk[] {
   const text = line.replace(/[\r\n\t]+/g, ' ');
   const embedding = bidi.getEmbeddingLevels(text, base);
   const levels = embedding.levels;
-  const mirrored = bidi.getMirroredCharactersMap(text, embedding);
+  const mirrored = bidi.getMirroredCharactersMap(text, embedding.levels);
 
   // Visual order of the logical indices.
   const order = Array.from({ length: text.length }, (_, i) => i);
@@ -95,20 +106,23 @@ export function visualChunks(line: string, base: Direction): VisualChunk[] {
   }
   flush();
 
-  return groups.map((g) => {
-    const rtl = levels[g[0]] % 2 === 1;
-    const logical = [...g]
-      .sort((a, b) => a - b)
-      .map((i) => (rtl ? mirrored.get(i) ?? text[i] : text[i]))
-      .join('');
-    const space = SPACE_RE.test(text[g[0]]);
-    // Desired visual order: rtl -> reversed logical, ltr -> logical.
-    // fontkit reverses RTL-script words itself, so pass the logical order
-    // whenever exactly one reversal is wanted and fontkit will do it.
-    const flips = fontkitReverses(logical);
-    const out = rtl === flips ? logical : reverse(logical);
-    return { text: out, rtl, space };
-  });
+  return groups
+    .map((g) => {
+      const rtl = levels[g[0]] % 2 === 1;
+      const sorted = [...g].sort((a, b) => a - b);
+      // Bidi mirroring (brackets) applies to RTL runs; fontkit does not mirror.
+      const logical = sorted
+        .map((i) => (rtl ? mirrored.get(i) ?? text[i] : text[i]))
+        .join('')
+        .replace(ISOLATES_RE, '');
+      const space = SPACE_RE.test(text[g[0]]);
+      // Desired visual order: rtl -> reversed logical, ltr -> logical.
+      // fontkit reverses RTL-script words itself (keeping Arabic shaping in
+      // logical order), so pass the logical text whenever fontkit flips it.
+      const flips = fontkitReverses(logical);
+      return { text: rtl === flips ? logical : reverse(logical), rtl, space };
+    })
+    .filter((c) => c.text.length > 0);
 }
 
 /**
