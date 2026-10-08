@@ -24,6 +24,8 @@ import { RealtimeModule } from './modules/realtime/realtime.module';
 import { EventsModule } from './modules/events/events.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { ManufacturingModule } from './modules/manufacturing/manufacturing.module';
+import { CrmModule } from './modules/crm/crm.module';
 
 function buildImports() {
   const imports: any[] = [
@@ -65,6 +67,8 @@ function buildImports() {
     RealtimeModule,
     EventsModule,
     ReportsModule,
+    ManufacturingModule,
+    CrmModule,
   ];
 
   // BullMQ for background jobs – only when Redis is available
