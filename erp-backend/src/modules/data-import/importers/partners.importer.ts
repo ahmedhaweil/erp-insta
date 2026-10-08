@@ -106,7 +106,7 @@ abstract class PartnerImporter implements Importer<PartnerPlan> {
       if (current) {
         planned.push({ row, action: 'update', data: { id: current.id, dto } });
       } else {
-        const full = { ...this.defaults(), ...dto, code };
+        const full: Record<string, unknown> = { ...this.defaults(), ...dto, code };
         if (!full.nameEn) full.nameEn = full.nameAr;
         planned.push({ row, action: 'create', data: { dto: full } });
       }
