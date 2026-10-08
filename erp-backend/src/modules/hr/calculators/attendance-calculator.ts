@@ -43,13 +43,18 @@ export interface AttendanceSummary {
   days: AttendanceDayResult[];
 }
 
+export type LeaveDayValue = boolean | { paid: boolean; fraction: number };
+
 export interface AttendanceComputationInput {
   from: string;
   to: string;
   schedule: ScheduleInput;
   records: AttendanceRecordInput[];
-  /** date -> paid flag of the approved leave covering that date. */
-  leaveDays: Map<string, boolean>;
+  /**
+   * date -> paid flag of the approved leave covering that date, or
+   * { paid, fraction } for a half-day leave (fraction 0.5).
+   */
+  leaveDays: Map<string, LeaveDayValue>;
   holidays: Set<string>;
   /** When false, only leaves are counted (no absence/late/overtime). */
   trackAttendance: boolean;
@@ -134,9 +139,30 @@ export function computeAttendance(input: AttendanceComputationInput): Attendance
     };
 
     if (type === 'working') summary.workingDays += 1;
-    const leavePaid = input.leaveDays.get(date);
+    const leave = input.leaveDays.get(date);
+    const leavePaid = leave === undefined ? undefined : typeof leave === 'boolean' ? leave : leave.paid;
+    const leaveFraction =
+      leave === undefined ? 0 : typeof leave === 'boolean' ? 1 : Math.min(Math.max(leave.fraction, 0), 1);
 
-    if (type === 'working' && leavePaid !== undefined) {
+    if (type === 'working' && leavePaid !== undefined && leaveFraction < 1) {
+      // Half-day leave: the leave part counts as leave, the other half must be worked.
+      day.status = leavePaid ? 'paid_leave' : 'unpaid_leave';
+      if (leavePaid) summary.paidLeaveDays += leaveFraction;
+      else summary.unpaidLeaveDays += leaveFraction;
+      if (input.trackAttendance) {
+        if (record && toMinutes(record.checkIn) !== null) {
+          const hours = workedHours(record.checkIn, record.checkOut);
+          const due = dailyHours * (1 - leaveFraction);
+          day.workedHours = hours;
+          day.overtimeHours = Math.max(Math.round((hours - due) * 100) / 100, 0);
+          summary.presentDays += 1 - leaveFraction;
+          summary.overtimeHours += day.overtimeHours;
+          summary.workedHours += hours;
+        } else {
+          summary.absenceDays += 1 - leaveFraction;
+        }
+      }
+    } else if (type === 'working' && leavePaid !== undefined) {
       day.status = leavePaid ? 'paid_leave' : 'unpaid_leave';
       if (leavePaid) summary.paidLeaveDays += 1;
       else summary.unpaidLeaveDays += 1;

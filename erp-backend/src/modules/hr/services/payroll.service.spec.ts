@@ -14,6 +14,8 @@ import { HrSettingsService } from './hr-settings.service';
 import { PayrollCalculator } from '../calculators/payroll-calculator';
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
 import { SequenceService } from '@shared/services/sequence.service';
+import { OvertimeService } from './overtime.service';
+import { mergeRules } from '../calculators/payroll-rules';
 
 describe('PayrollService', () => {
   let service: PayrollService;
@@ -125,7 +127,15 @@ describe('PayrollService', () => {
           },
         },
         { provide: LoansService, useValue: loans },
-        { provide: HrSettingsService, useValue: { getCalculator: async () => new PayrollCalculator() } },
+        {
+          provide: HrSettingsService,
+          useValue: {
+            getCalculator: async () => new PayrollCalculator(),
+            getRules: async () => mergeRules({}),
+            getAccounts: async () => ({ martyrsFundAccountId: null }),
+          },
+        },
+        { provide: OvertimeService, useValue: { approvedBetween: jest.fn(async () => []) } },
         { provide: AutoPostingService, useValue: autoPosting },
         { provide: SequenceService, useValue: { next: jest.fn().mockResolvedValue('PAY-000001') } },
       ],

@@ -93,6 +93,11 @@ export class CreateEmployeeDto {
 
   @ApiPropertyOptional({ default: false }) @IsOptional() @IsBoolean() trackAttendance?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsUUID() userId?: string;
+
+  @ApiPropertyOptional({ description: 'Cost center charged with payroll and EOS costs' })
+  @IsOptional()
+  @IsUUID()
+  costCenterId?: string;
 }
 
 export class UpdateEmployeeDto extends PartialType(OmitType(CreateEmployeeDto, ['code'] as const)) {}

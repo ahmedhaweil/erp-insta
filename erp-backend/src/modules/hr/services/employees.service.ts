@@ -9,6 +9,7 @@ import { Brackets, Repository } from 'typeorm';
 import { Employee, EmployeeStatus, PayrollCountry } from '../entities/employee.entity';
 import { Branch } from '@modules/tenants/entities/branch.entity';
 import { User } from '@modules/auth/entities/user.entity';
+import { CostCenter } from '@modules/accounting/entities/cost-center.entity';
 import {
   CreateEmployeeDto,
   EmployeeQueryDto,
@@ -30,6 +31,8 @@ export class EmployeesService {
     private readonly branchRepo: Repository<Branch>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(CostCenter)
+    private readonly costCenterRepo: Repository<CostCenter>,
     private readonly organization: HrOrganizationService,
     private readonly settings: HrSettingsService,
     private readonly sequenceService: SequenceService,
@@ -58,6 +61,13 @@ export class EmployeesService {
       );
     }
     return qb.getMany();
+  }
+
+  /** Employee linked to a user (self-service). */
+  async findByUser(tenantId: string, userId: string): Promise<Employee> {
+    const employee = await this.employeeRepo.findOne({ where: { tenantId, userId } });
+    if (!employee) throw new NotFoundException('Your user is not linked to an employee');
+    return employee;
   }
 
   async findById(tenantId: string, id: string): Promise<Employee> {
@@ -173,6 +183,10 @@ export class EmployeesService {
     if (dto.managerId) {
       if (dto.managerId === selfId) throw new BadRequestException('An employee cannot manage themselves');
       await this.findById(tenantId, dto.managerId);
+    }
+    if (dto.costCenterId) {
+      const costCenter = await this.costCenterRepo.findOne({ where: { id: dto.costCenterId, tenantId } });
+      if (!costCenter) throw new NotFoundException('Cost center not found');
     }
     if (dto.userId) {
       const user = await this.userRepo.findOne({ where: { id: dto.userId, tenantId } });

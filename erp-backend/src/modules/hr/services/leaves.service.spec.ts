@@ -8,11 +8,18 @@ import { EmployeeStatus } from '../entities/employee.entity';
 import { EmployeesService } from './employees.service';
 import { HrOrganizationService, FALLBACK_SCHEDULE } from './hr-organization.service';
 import { SequenceService } from '@shared/services/sequence.service';
+import { LeaveEncashment } from '../entities/leave-encashment.entity';
+import { PayrollAdjustment } from '../entities/payroll-adjustment.entity';
+import { HrSettingsService } from './hr-settings.service';
+import { PayrollLockService } from './payroll-lock.service';
+import { mergeRules } from '../calculators/payroll-rules';
 
 describe('LeavesService', () => {
   let service: LeavesService;
   let requests: any[];
   let saved: any;
+  let encashments: any[];
+  let payrollLock: Record<string, jest.Mock>;
 
   const annual = {
     id: 'lt-annual',
@@ -30,6 +37,8 @@ describe('LeavesService', () => {
   beforeEach(async () => {
     requests = [];
     saved = null;
+    encashments = [];
+    payrollLock = { assertOpen: jest.fn(), lockedPeriods: jest.fn(async () => []) };
     const requestRepo = {
       create: jest.fn((x) => x),
       save: jest.fn(async (x) => (saved = { id: 'lr-new', ...x })),
@@ -44,7 +53,10 @@ describe('LeavesService', () => {
           useValue: { findOne: jest.fn(async () => annual), find: jest.fn(async () => [annual]) },
         },
         { provide: getRepositoryToken(LeaveRequest), useValue: requestRepo },
-        { provide: EmployeesService, useValue: { findById: jest.fn(async () => employee) } },
+        {
+          provide: EmployeesService,
+          useValue: { findById: jest.fn(async () => employee), monthlyWage: jest.fn(() => 9000) },
+        },
         {
           provide: HrOrganizationService,
           useValue: {
@@ -53,6 +65,16 @@ describe('LeavesService', () => {
           },
         },
         { provide: SequenceService, useValue: { next: jest.fn().mockResolvedValue('LV-000001') } },
+        {
+          provide: getRepositoryToken(LeaveEncashment),
+          useValue: { find: jest.fn(async () => encashments), create: jest.fn((x) => x), save: jest.fn(async (x) => x) },
+        },
+        {
+          provide: getRepositoryToken(PayrollAdjustment),
+          useValue: { create: jest.fn((x) => x), save: jest.fn(async (x) => ({ id: 'adj-1', ...x })) },
+        },
+        { provide: HrSettingsService, useValue: { getRules: jest.fn(async () => mergeRules({})) } },
+        { provide: PayrollLockService, useValue: payrollLock },
       ],
     }).compile();
     service = module.get(LeavesService);
