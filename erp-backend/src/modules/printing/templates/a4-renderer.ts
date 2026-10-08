@@ -17,19 +17,36 @@ const C = {
 const FOOTER_SPACE = 8;
 
 /** Renders a document on A4 (portrait or landscape) with page footers. */
-export async function renderA4(doc: PrintDocument, now = new Date()): Promise<Buffer> {
-  const landscape = doc.paper === 'a4-landscape';
+export function renderA4(doc: PrintDocument, now = new Date()): Promise<Buffer> {
+  return renderA4Batch([doc], now);
+}
+
+/**
+ * Renders several documents of the same paper size into one PDF, each
+ * starting on a new page with its own page numbering (e.g. all payslips of
+ * a payroll run).
+ */
+export async function renderA4Batch(docs: PrintDocument[], now = new Date()): Promise<Buffer> {
+  if (!docs.length) throw new Error('Nothing to render');
+  const first = docs[0];
+  const landscape = first.paper === 'a4-landscape';
   const size: [number, number] = landscape ? [PAGE_A4[1], PAGE_A4[0]] : PAGE_A4;
   const c = new PdfCanvas({
     size,
     margins: { top: 34, bottom: 46, left: 36, right: 36 },
-    direction: baseDirection(doc.lang),
-    title: [doc.title, doc.number].filter(Boolean).join(' '),
-    lang: doc.lang,
+    direction: baseDirection(first.lang),
+    title: [first.title, docs.length === 1 ? first.number : ''].filter(Boolean).join(' '),
+    lang: first.lang,
   });
-  const r = new A4Layout(c, doc);
-  r.render();
-  r.footers(now);
+  const layouts: { layout: A4Layout; start: number; end: number }[] = [];
+  docs.forEach((doc, i) => {
+    if (i > 0) c.addPage();
+    const start = c.pageCount() - 1;
+    const layout = new A4Layout(c, doc);
+    layout.render();
+    layouts.push({ layout, start, end: c.pageCount() - 1 });
+  });
+  for (const { layout, start, end } of layouts) layout.footers(now, start, end);
   return c.finish();
 }
 
@@ -352,10 +369,13 @@ class A4Layout {
   }
 
   /** Page numbers and print time on every page. */
-  footers(now: Date) {
+  footers(now: Date, firstPage: number, lastPage: number) {
     const { c, doc } = this;
     const fy = c.pageHeight - 34;
-    c.eachPage((i, count) => {
+    c.eachPage((page) => {
+      if (page < firstPage || page > lastPage) return;
+      const i = page - firstPage;
+      const count = lastPage - firstPage + 1;
       c.hline(c.left, c.right, fy - 4, C.line, 0.5);
       const third = c.contentWidth / 3;
       c.text(`${this.t('page')} ${i + 1} ${this.t('of')} ${count}`, c.left + third, fy, {

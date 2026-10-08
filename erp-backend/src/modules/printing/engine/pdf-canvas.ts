@@ -71,7 +71,7 @@ export const PAGE_A4: [number, number] = [595.28, 841.89];
  * few primitives used by the document templates.
  */
 export class PdfCanvas {
-  readonly doc: PDFKit.PDFDocument;
+  readonly doc: InstanceType<typeof PDFDocument>;
   readonly dir: Direction;
   private readonly chunks: Buffer[] = [];
   private readonly done: Promise<Buffer>;
