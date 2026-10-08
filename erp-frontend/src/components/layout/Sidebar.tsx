@@ -9,10 +9,24 @@ import { useState } from 'react';
 import { buildNav } from './nav';
 
 const navGroups = buildNav();
+const allHrefs = navGroups.flatMap((g) => g.items.map((i) => i.href));
+
+/**
+ * The menu item for the current page: the longest item path that equals the
+ * path (without the locale) or is a parent of it. Substring matching marked
+ * e.g. /settings active on /hr/payroll-settings or /accounting/settings.
+ */
+function activeHref(pathname: string): string | undefined {
+  const path = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
+  return allHrefs
+    .filter((href) => path === href || (href !== '/' && path.startsWith(`${href}/`)))
+    .sort((a, b) => b.length - a.length)[0];
+}
 
 export default function Sidebar() {
   const t = useTranslations('nav');
   const pathname = usePathname();
+  const current = activeHref(pathname);
   const [openGroups, setOpenGroups] = useState<string[]>(['dashboard']);
 
   const toggleGroup = (key: string) => {
@@ -33,7 +47,7 @@ export default function Sidebar() {
 
           if (!hasMultipleItems) {
             const item = group.items[0];
-            const isActive = pathname.endsWith(item.href) || (item.href === '/' && pathname.match(/\/[a-z]{2}$/));
+            const isActive = current === item.href;
             return (
               <Link
                 key={group.key}
@@ -69,7 +83,7 @@ export default function Sidebar() {
               {isOpen && (
                 <div className="ms-8 mt-1 space-y-1">
                   {group.items.map((item) => {
-                    const isActive = pathname.includes(item.href);
+                    const isActive = current === item.href;
                     return (
                       <Link
                         key={item.key}
