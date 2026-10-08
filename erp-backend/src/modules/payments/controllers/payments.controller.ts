@@ -26,8 +26,13 @@ export class PaymentsController {
   @RequirePermissions({ module: 'accounting', screen: 'payments', action: 'read' })
   @Get()
   @ApiQuery({ name: 'partnerId', required: false })
-  findAll(@CurrentTenant() tenantId: string, @Query('partnerId') partnerId?: string) {
-    return this.paymentsService.findAll(tenantId, partnerId);
+  @ApiQuery({ name: 'treasuryId', required: false })
+  findAll(
+    @CurrentTenant() tenantId: string,
+    @Query('partnerId') partnerId?: string,
+    @Query('treasuryId') treasuryId?: string,
+  ) {
+    return this.paymentsService.findAll(tenantId, partnerId, treasuryId);
   }
 
   @RequirePermissions({ module: 'accounting', screen: 'payments', action: 'read' })
@@ -40,10 +45,11 @@ export class PaymentsController {
   @Post(':id/allocate')
   allocate(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Body() dto: AllocatePaymentDto,
   ) {
-    return this.paymentsService.allocate(tenantId, id, dto);
+    return this.paymentsService.allocate(tenantId, id, dto, user.sub);
   }
 
   @RequirePermissions({ module: 'accounting', screen: 'payments', action: 'update' })

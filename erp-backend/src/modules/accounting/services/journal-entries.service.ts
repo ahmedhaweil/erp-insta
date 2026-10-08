@@ -197,6 +197,7 @@ export class JournalEntriesService {
       costCenterId: l.costCenterId,
       debit: Number(l.credit),
       credit: Number(l.debit),
+      amountCurrency: l.amountCurrency != null ? -Number(l.amountCurrency) : undefined,
       description: `Reversal of ${original.refNumber}`,
       branchId: l.branchId,
     }));
