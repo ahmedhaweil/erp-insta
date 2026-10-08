@@ -89,7 +89,7 @@ Legend: ✅ available · 🟡 partial · ❌ not available.
 
 ## Known open items (highest value first)
 
-1. **Keep migrations in step.** The initial migration (`src/database/migrations`) creates the whole schema. Production runs it at startup with `DB_RUN_MIGRATIONS=true`, then seeds with `SEED_SYNC=false`. Generate a new migration (`npm run migration:generate`) with every entity change.
+1. **Keep migrations in step.** The initial migration (`src/database/migrations`) creates the whole schema. Production runs it at startup with `DB_RUN_MIGRATIONS=true`, then seeds with `SEED_SYNC=false`. Generate a new migration (`npm run migration:generate`) with every entity change. Databases created earlier by `synchronize` are brought under migrations with `npm run migration:baseline`.
 2. **Real-environment checks.** Run ETA/ZATCA preprod validation and the ZATCA SDK hash check.
 3. **Inventory valuation.** Per-warehouse average cost and FIFO are missing.
 4. **Restaurant POS and offline catalogue.** Tables, kitchen screen, and a product cache for offline selling.

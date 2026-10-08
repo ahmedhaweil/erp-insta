@@ -155,6 +155,7 @@ export class PosController {
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
   @ApiQuery({ name: 'refunds', required: false, type: Boolean })
+  @ApiQuery({ name: 'refundedOrderId', required: false, description: 'Refunds of this sale' })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'offset', required: false })
   findOrders(
@@ -165,6 +166,7 @@ export class PosController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('refunds') refunds?: string,
+    @Query('refundedOrderId') refundedOrderId?: string,
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
   ) {
@@ -175,6 +177,7 @@ export class PosController {
       from,
       to,
       refunds: refunds === undefined ? undefined : refunds === 'true',
+      refundedOrderId,
       limit,
       offset,
     });

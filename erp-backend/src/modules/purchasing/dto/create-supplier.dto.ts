@@ -10,13 +10,15 @@ export class CreateSupplierDto {
   @IsString()
   nameAr: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  nameEn: string;
+  nameEn?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  phone: string;
+  phone?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -28,17 +30,20 @@ export class CreateSupplierDto {
   @IsString()
   taxId?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  address: string;
+  address?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  city: string;
+  city?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  country: string;
+  country?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

@@ -4,7 +4,10 @@ import { IsBoolean, IsDateString, IsEnum, IsIn, IsInt, IsOptional, IsString, IsU
 import { ImportEntity, ImportJobStatus } from '../entities/import-job.entity';
 
 /** Multipart fields arrive as strings: 'false' / '0' / 'no' must stay false. */
-const toBool = ({ value }: { value: unknown }) => {
+// Read the raw input (obj[key]): with enableImplicitConversion, `value` has
+// already been coerced by Boolean('false') === true.
+const toBool = ({ obj, key }: { obj: Record<string, unknown>; key: string }) => {
+  const value = obj[key];
   if (value === undefined || value === null || value === '') return undefined;
   if (typeof value === 'boolean') return value;
   return ['true', '1', 'yes', 'on'].includes(String(value).toLowerCase());

@@ -487,6 +487,7 @@ export class PosService {
       from?: string;
       to?: string;
       refunds?: boolean;
+      refundedOrderId?: string;
       limit?: number;
       offset?: number;
     } = {},
@@ -509,13 +510,25 @@ export class PosService {
     if (filters.to) qb.andWhere('o.createdAt <= :to', { to: `${filters.to}T23:59:59.999` });
     if (filters.refunds === true) qb.andWhere('o.refundedOrderId IS NOT NULL');
     if (filters.refunds === false) qb.andWhere('o.refundedOrderId IS NULL');
+    if (filters.refundedOrderId) {
+      qb.andWhere('o.refundedOrderId = :refundedOrderId', { refundedOrderId: filters.refundedOrderId });
+    }
     return qb.getMany();
   }
 
-  async findOrder(tenantId: string, id: string): Promise<PosOrder> {
-    const order = await this.orderRepo.findOne({ where: { id, tenantId }, relations: ['lines'] });
+  /** An order with its lines, session, terminal and the refunds issued against it. */
+  async findOrder(tenantId: string, id: string) {
+    const order = await this.orderRepo.findOne({ where: { id, tenantId }, relations: ['lines', 'session'] });
     if (!order) throw new NotFoundException('POS order not found');
-    return order;
+    const terminal = order.session
+      ? await this.terminalRepo.findOne({ where: { id: order.session.terminalId, tenantId } })
+      : null;
+    const refunds = await this.orderRepo.find({
+      where: { tenantId, refundedOrderId: order.id },
+      relations: ['lines'],
+      order: { createdAt: 'ASC' },
+    });
+    return { ...order, terminal, refunds };
   }
 
   async getSessionOrders(

@@ -10,13 +10,15 @@ export class CreateCustomerDto {
   @IsString()
   nameAr: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  nameEn: string;
+  nameEn?: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  phone: string;
+  phone?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

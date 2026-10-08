@@ -22,7 +22,8 @@
     "migration:generate": "npm run typeorm -- migration:generate -d src/config/typeorm.config.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/config/typeorm.config.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d src/config/typeorm.config.ts",
-    "seed:run": "ts-node -r tsconfig-paths/register src/database/seeds/run-seeds.ts"
+    "seed:run": "ts-node -r tsconfig-paths/register src/database/seeds/run-seeds.ts",
+    "migration:baseline": "ts-node -r tsconfig-paths/register src/database/migrations-baseline.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.600.0",

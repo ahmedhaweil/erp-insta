@@ -1,4 +1,19 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
+import { CurrentUser } from '@common/decorators/current-user.decorator';
+import { JwtPayload } from '@common/interfaces/request-with-user.interface';
+import { Employee } from '@modules/hr/entities/employee.entity';
+import { PayrollLine } from '@modules/hr/entities/payroll-line.entity';
+import { PayrollRun, PayrollRunStatus } from '@modules/hr/entities/payroll-run.entity';
 import { ApiBearerAuth, ApiOperation, ApiProduces, ApiTags } from '@nestjs/swagger';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { RequirePermissions } from '@common/decorators/require-permissions.decorator';
@@ -25,7 +40,35 @@ const pdf = (r: RenderedPdf, q: { disposition?: 'inline' | 'attachment' }) =>
 @ApiProduces('application/pdf')
 @Controller('print')
 export class PrintingController {
-  constructor(private readonly printing: PrintingService) {}
+  constructor(
+    private readonly printing: PrintingService,
+    @InjectRepository(Employee) private readonly employeeRepo: Repository<Employee>,
+    @InjectRepository(PayrollLine) private readonly lineRepo: Repository<PayrollLine>,
+    @InjectRepository(PayrollRun) private readonly runRepo: Repository<PayrollRun>,
+  ) {}
+
+  /**
+   * Employee self-service: the logged-in user's own payslip for an approved
+   * or paid run. Needs no HR permission; only the employee linked to the
+   * user can be printed.
+   */
+  @ApiOperation({ summary: 'My payslip (self-service)' })
+  @Get('me/payslips/:runId')
+  async myPayslip(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('runId', ParseUUIDPipe) runId: string,
+    @Query() q: PrintQueryDto,
+  ) {
+    const employee = await this.employeeRepo.findOne({ where: { tenantId, userId: user.sub } });
+    if (!employee) throw new NotFoundException('Your user is not linked to an employee');
+    const run = await this.runRepo.findOne({
+      where: { id: runId, tenantId, status: In([PayrollRunStatus.APPROVED, PayrollRunStatus.PAID]) },
+    });
+    const line = run && (await this.lineRepo.findOne({ where: { runId: run.id, employeeId: employee.id } }));
+    if (!line) throw new NotFoundException('Payslip not found');
+    return pdf(await this.printing.payslip(tenantId, line.id, q), q);
+  }
 
   @ApiOperation({ summary: 'Sales tax invoice / credit note (ETA / ZATCA QR when available)' })
   @RequirePermissions({ module: 'sales', screen: 'invoices', action: 'read' })
