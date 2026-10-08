@@ -52,6 +52,35 @@ export const useCustomersLookup = () =>
 export const useSuppliersLookup = () =>
   useQuery({ queryKey: ['fin-suppliers'], queryFn: treasuryService.getSuppliers, staleTime: 60_000 });
 
+export const useJournals = () =>
+  useQuery({ queryKey: ['fin-journals'], queryFn: finAccountingService.getJournals, staleTime: 60_000 });
+
+export const useCostCenters = () =>
+  useQuery({ queryKey: ['fin-cost-centers'], queryFn: finAccountingService.getCostCenters, staleTime: 60_000 });
+
+export const useCurrencies = () =>
+  useQuery({ queryKey: ['fin-currencies'], queryFn: finAccountingService.getCurrencies, staleTime: 300_000 });
+
+export const useExchangeRates = () =>
+  useQuery({ queryKey: ['fin-exchange-rates'], queryFn: () => finAccountingService.getExchangeRates(), staleTime: 60_000 });
+
+/**
+ * Latest exchange rate of a currency on or before a date (company rates win
+ * over the shared defaults on the same date). Undefined when none is known.
+ */
+export function useRateFor(currencyId: string | null | undefined, date: string): number | undefined {
+  const { data: rates = [] } = useExchangeRates();
+  if (!currencyId) return undefined;
+  const best = rates
+    .filter((r) => r.currencyId === currencyId && String(r.date).slice(0, 10) <= (date || '9999-12-31'))
+    .sort((a, b) => {
+      const byDate = String(b.date).localeCompare(String(a.date));
+      if (byDate) return byDate;
+      return (a.tenantId ? 0 : 1) - (b.tenantId ? 0 : 1);
+    })[0];
+  return best ? Number(best.rate) : undefined;
+}
+
 export const useUsersLookup = () => useQuery({ queryKey: ['users'], queryFn: adminService.getUsers, staleTime: 60_000 });
 
 /** id -> record map helper. */

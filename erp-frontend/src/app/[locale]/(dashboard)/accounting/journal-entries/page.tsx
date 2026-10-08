@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
@@ -10,28 +10,27 @@ import Modal from '@/components/ui/Modal';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import AccountPicker, { useAccountLabel } from '@/components/finance/AccountPicker';
-import { Btn, Field, Money, Tabs, fmtMoney, inputCls, todayIso } from '@/components/finance/ui';
-import { useFinAction } from '@/hooks/use-finance';
+import { Btn, Field, Money, Tabs, fmtMoney, inputCls, todayIso, useLocalName } from '@/components/finance/ui';
+import { byId, useCostCenters, useCurrencies, useFinAction, useJournals, useRateFor } from '@/hooks/use-finance';
 import { finAccountingService, type JournalEntryRow } from '@/services/finance-accounting.service';
 
-type LineDraft = { accountId: string; debit: string; credit: string; description: string; amountCurrency: string };
-const emptyLine = (): LineDraft => ({ accountId: '', debit: '', credit: '', description: '', amountCurrency: '' });
+type LineDraft = { accountId: string; debit: string; credit: string; description: string; amountCurrency: string; costCenterId: string };
+const emptyLine = (): LineDraft => ({ accountId: '', debit: '', credit: '', description: '', amountCurrency: '', costCenterId: '' });
 
 const total = (e: JournalEntryRow) => e.lines?.reduce((s, l) => s + Number(l.debit), 0) ?? 0;
-
-/** Groups the journals seen on existing entries by what posts into them (there is no journals endpoint). */
-function journalKind(sourceTypes: Set<string>): string {
-  const has = (p: string) => [...sourceTypes].some((s) => s.startsWith(p));
-  if (has('sales') || has('pos')) return 'sale';
-  if (has('purchase')) return 'purchase';
-  if (has('payment') || has('treasury_voucher') || has('treasury_transfer') || has('cheque')) return 'treasury';
-  return 'general';
-}
 
 export default function JournalEntriesPage() {
   const t = useTranslations('acct');
   const tc = useTranslations('common');
   const accountLabel = useAccountLabel();
+  const name = useLocalName();
+  const { data: journalList = [] } = useJournals();
+  const { data: costCenters = [] } = useCostCenters();
+  const { data: currencies = [] } = useCurrencies();
+  const journalsById = byId(journalList);
+  const costCentersById = byId(costCenters);
+  const currenciesById = byId(currencies);
+  const foreignCurrencies = currencies.filter((c) => !c.isBase);
   const { data: entries = [], isLoading } = useQuery({ queryKey: ['fin-journal-entries'], queryFn: finAccountingService.getJournalEntries });
 
   const [status, setStatus] = useState<'all' | 'draft' | 'posted' | 'cancelled'>('all');
@@ -41,28 +40,34 @@ export default function JournalEntriesPage() {
   const [showNew, setShowNew] = useState(false);
 
   // ---- create form
-  const journals = useMemo(() => {
-    const map = new Map<string, { types: Set<string>; count: number }>();
-    for (const e of entries) {
-      const j = map.get(e.journalId) ?? { types: new Set<string>(), count: 0 };
-      j.types.add(e.sourceType ?? 'manual');
-      j.count += 1;
-      map.set(e.journalId, j);
-    }
-    return [...map.entries()].map(([id, v]) => ({ id, kind: journalKind(v.types), count: v.count }));
-  }, [entries]);
-  const defaultJournal = journals.find((j) => j.kind === 'general')?.id ?? journals[0]?.id ?? '';
+  const defaultJournal = journalList.find((j) => j.type === 'general')?.id ?? journalList[0]?.id ?? '';
 
-  const [form, setForm] = useState({ journalId: '', date: todayIso(), description: '', exchangeRate: '' });
+  const [form, setForm] = useState({ journalId: '', date: todayIso(), description: '', currencyId: '', exchangeRate: '' });
+  const [rateTouched, setRateTouched] = useState(false);
+  const suggestedRate = useRateFor(form.currencyId, form.date);
+  useEffect(() => {
+    if (form.currencyId && !rateTouched) {
+      setForm((f) => ({ ...f, exchangeRate: suggestedRate != null ? String(suggestedRate) : '' }));
+    }
+  }, [form.currencyId, suggestedRate, rateTouched]);
+  const foreign = !!form.currencyId;
   const [lines, setLines] = useState<LineDraft[]>([emptyLine(), emptyLine()]);
   const sumDebit = lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
   const sumCredit = lines.reduce((s, l) => s + (Number(l.credit) || 0), 0);
   const diff = Math.round((sumDebit - sumCredit) * 100) / 100;
   const linesValid = lines.every((l) => l.accountId && (Number(l.debit) > 0) !== (Number(l.credit) > 0));
-  const canSave = (form.journalId || defaultJournal) && form.date && lines.length >= 2 && linesValid && diff === 0 && sumDebit > 0;
+  const canSave =
+    (form.journalId || defaultJournal) &&
+    form.date &&
+    lines.length >= 2 &&
+    linesValid &&
+    diff === 0 &&
+    sumDebit > 0 &&
+    (!foreign || Number(form.exchangeRate) > 0);
 
   const openNew = () => {
-    setForm({ journalId: defaultJournal, date: todayIso(), description: '', exchangeRate: '' });
+    setForm({ journalId: defaultJournal, date: todayIso(), description: '', currencyId: '', exchangeRate: '' });
+    setRateTouched(false);
     setLines([emptyLine(), emptyLine()]);
     setShowNew(true);
   };
@@ -76,13 +81,15 @@ export default function JournalEntriesPage() {
           journalId: form.journalId || defaultJournal,
           date: form.date,
           description: form.description || undefined,
-          exchangeRate: form.exchangeRate ? Number(form.exchangeRate) : undefined,
+          currencyId: foreign ? form.currencyId : undefined,
+          exchangeRate: foreign && form.exchangeRate ? Number(form.exchangeRate) : undefined,
           lines: lines.map((l) => ({
             accountId: l.accountId,
             debit: Number(l.debit) || 0,
             credit: Number(l.credit) || 0,
             description: l.description || undefined,
-            amountCurrency: l.amountCurrency ? Number(l.amountCurrency) : undefined,
+            costCenterId: l.costCenterId || undefined,
+            amountCurrency: foreign && l.amountCurrency ? Number(l.amountCurrency) : undefined,
           })),
         })
         .then((e) => (post ? finAccountingService.postJournalEntry(e.id) : e)),
@@ -118,6 +125,7 @@ export default function JournalEntriesPage() {
   const columns = [
     { key: 'refNumber', header: t('refNumber') },
     { key: 'date', header: tc('date') },
+    { key: 'journalId', header: t('journal'), render: (e: JournalEntryRow) => journalsById[e.journalId]?.name ?? '' },
     { key: 'description', header: tc('description') },
     {
       key: 'sourceType',
@@ -128,7 +136,14 @@ export default function JournalEntriesPage() {
     {
       key: 'exchangeRate',
       header: t('currency'),
-      render: (e: JournalEntryRow) => (isForeign(e) ? <span className="text-xs text-amber-700" dir="ltr">FX × {Number(e.exchangeRate)}</span> : ''),
+      render: (e: JournalEntryRow) =>
+        isForeign(e) ? (
+          <span className="text-xs text-amber-700" dir="ltr">
+            {(e.currencyId && currenciesById[e.currencyId]?.code) || 'FX'} × {Number(e.exchangeRate)}
+          </span>
+        ) : (
+          ''
+        ),
     },
     {
       key: 'status',
@@ -196,6 +211,10 @@ export default function JournalEntriesPage() {
                 {tc(detail.status)}
               </div>
               <div>
+                <span className="text-gray-500">{t('journal')}: </span>
+                {journalsById[detail.journalId]?.name ?? ''}
+              </div>
+              <div>
                 <span className="text-gray-500">{t('source')}: </span>
                 {detail.sourceType ? (t.has(`src.${detail.sourceType}`) ? t(`src.${detail.sourceType}`) : detail.sourceType) : t('manual')}
               </div>
@@ -212,6 +231,7 @@ export default function JournalEntriesPage() {
                 <tr>
                   <th className="text-start px-3 py-2">{t('account')}</th>
                   <th className="text-start px-3 py-2">{tc('description')}</th>
+                  <th className="text-start px-3 py-2">{t('costCenter')}</th>
                   <th className="text-end px-3 py-2">{t('debit')}</th>
                   <th className="text-end px-3 py-2">{t('credit')}</th>
                   {isForeign(detail) && <th className="text-end px-3 py-2">{t('amountCurrency')}</th>}
@@ -222,6 +242,11 @@ export default function JournalEntriesPage() {
                   <tr key={l.id ?? i} className="border-t border-gray-100">
                     <td className="px-3 py-1.5">{accountLabel(l.accountId)}</td>
                     <td className="px-3 py-1.5">{l.description}</td>
+                    <td className="px-3 py-1.5">
+                      {l.costCenterId && costCentersById[l.costCenterId]
+                        ? `${costCentersById[l.costCenterId].code} - ${name(costCentersById[l.costCenterId])}`
+                        : ''}
+                    </td>
                     <td className="px-3 py-1.5 text-end">{Number(l.debit) ? <Money value={l.debit} /> : ''}</td>
                     <td className="px-3 py-1.5 text-end">{Number(l.credit) ? <Money value={l.credit} /> : ''}</td>
                     {isForeign(detail) && (
@@ -232,7 +257,7 @@ export default function JournalEntriesPage() {
               </tbody>
               <tfoot className="bg-gray-100 font-semibold">
                 <tr>
-                  <td className="px-3 py-2" colSpan={2}>
+                  <td className="px-3 py-2" colSpan={3}>
                     {tc('total')}
                   </td>
                   <td className="px-3 py-2 text-end">
@@ -253,26 +278,54 @@ export default function JournalEntriesPage() {
       {/* create */}
       <Modal isOpen={showNew} onClose={() => setShowNew(false)} title={t('newJournalEntry')} size="xl">
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Field label={t('journal')} hint={journals.length ? undefined : t('journalIdHint')}>
-              {journals.length ? (
-                <select className={inputCls} value={form.journalId} onChange={(e) => setForm({ ...form, journalId: e.target.value })}>
-                  {journals.map((j) => (
-                    <option key={j.id} value={j.id}>
-                      {t(`journalKind_${j.kind}`)} ({j.count})
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input className={inputCls} dir="ltr" value={form.journalId} onChange={(e) => setForm({ ...form, journalId: e.target.value.trim() })} />
-              )}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <Field label={t('journal')} hint={journalList.length ? undefined : t('noJournals')}>
+              <select className={inputCls} value={form.journalId} onChange={(e) => setForm({ ...form, journalId: e.target.value })}>
+                {!journalList.length && <option value="">-</option>}
+                {journalList.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.name} ({t(`journalType_${j.type}`)})
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label={tc('date')}>
               <input type="date" className={inputCls} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
             </Field>
-            <Field label={t('exchangeRate')} hint={t('exchangeRateHint')}>
-              <input type="number" step="any" className={inputCls} value={form.exchangeRate} onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })} />
+            <Field label={t('currency')}>
+              <select
+                className={inputCls}
+                value={form.currencyId}
+                onChange={(e) => {
+                  setRateTouched(false);
+                  setForm({ ...form, currencyId: e.target.value, exchangeRate: '' });
+                }}
+              >
+                <option value="">{t('baseCurrencyOption')}</option>
+                {foreignCurrencies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code} - {name(c)}
+                  </option>
+                ))}
+              </select>
             </Field>
+            {foreign && (
+              <Field
+                label={t('exchangeRate') + ' *'}
+                hint={suggestedRate != null ? t('rateSuggested', { rate: suggestedRate }) : t('noRateKnown')}
+              >
+                <input
+                  type="number"
+                  step="any"
+                  className={inputCls}
+                  value={form.exchangeRate}
+                  onChange={(e) => {
+                    setRateTouched(true);
+                    setForm({ ...form, exchangeRate: e.target.value });
+                  }}
+                />
+              </Field>
+            )}
             <Field label={tc('description')}>
               <input className={inputCls} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </Field>
@@ -284,9 +337,10 @@ export default function JournalEntriesPage() {
                 <tr className="bg-gray-50">
                   <th className="text-start px-2 py-2 w-[34%]">{t('account')}</th>
                   <th className="text-start px-2 py-2">{tc('description')}</th>
+                  <th className="text-start px-2 py-2 w-44">{t('costCenter')}</th>
                   <th className="text-start px-2 py-2 w-32">{t('debit')}</th>
                   <th className="text-start px-2 py-2 w-32">{t('credit')}</th>
-                  {form.exchangeRate && <th className="text-start px-2 py-2 w-32">{t('amountCurrency')}</th>}
+                  {foreign && <th className="text-start px-2 py-2 w-32">{t('amountCurrency')}</th>}
                   <th className="w-10" />
                 </tr>
               </thead>
@@ -298,6 +352,16 @@ export default function JournalEntriesPage() {
                     </td>
                     <td className="px-2 py-1.5">
                       <input className={inputCls} value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <select className={inputCls} value={l.costCenterId} onChange={(e) => setLine(i, { costCenterId: e.target.value })}>
+                        <option value="">-</option>
+                        {costCenters.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.code} - {name(c)}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-2 py-1.5">
                       <input
@@ -319,7 +383,7 @@ export default function JournalEntriesPage() {
                         onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })}
                       />
                     </td>
-                    {form.exchangeRate && (
+                    {foreign && (
                       <td className="px-2 py-1.5">
                         <input
                           type="number"
@@ -351,7 +415,9 @@ export default function JournalEntriesPage() {
                       <Plus size={14} /> {t('addLine')}
                     </Btn>
                   </td>
-                  <td className="px-2 py-2 text-end">{tc('total')}</td>
+                  <td className="px-2 py-2 text-end" colSpan={2}>
+                    {tc('total')}
+                  </td>
                   <td className="px-2 py-2 tabular-nums" dir="ltr">{fmtMoney(sumDebit)}</td>
                   <td className="px-2 py-2 tabular-nums" dir="ltr">{fmtMoney(sumCredit)}</td>
                   <td colSpan={2} />

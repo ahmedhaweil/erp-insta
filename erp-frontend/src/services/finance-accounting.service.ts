@@ -118,7 +118,51 @@ export interface CreateJournalEntryInput {
   description?: string;
   currencyId?: string;
   exchangeRate?: number;
-  lines: { accountId: string; debit: number; credit: number; description?: string; branchId?: string; amountCurrency?: number }[];
+  lines: {
+    accountId: string;
+    debit: number;
+    credit: number;
+    description?: string;
+    branchId?: string;
+    costCenterId?: string;
+    amountCurrency?: number;
+  }[];
+}
+
+export type JournalType = 'sale' | 'purchase' | 'bank' | 'cash' | 'general';
+
+export interface Journal {
+  id: string;
+  name: string;
+  type: JournalType;
+  defaultAccountId: string | null;
+}
+
+export interface CostCenter {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string | null;
+  parentId: string | null;
+  branchId: string | null;
+}
+
+export interface Currency {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string | null;
+  symbol: string;
+  isBase: boolean;
+}
+
+export interface ExchangeRate {
+  id: string;
+  tenantId: string | null;
+  currencyId: string;
+  rate: number | string;
+  date: string;
+  createdAt?: string;
 }
 
 /** Default account keys of the accounting settings (all suffixed AccountId). */
@@ -202,6 +246,21 @@ export const finAccountingService = {
   getBudgets: () => d<Budget[]>(api.get('/accounting/budgets')),
   createBudget: (data: { fiscalYearId: string; accountId: string; period?: string; amount: number }) =>
     d<Budget>(api.post('/accounting/budgets', data)),
+
+  // master data used by entry forms
+  getJournals: () => d<Journal[]>(api.get('/accounting/journals')),
+  createJournal: (data: { name: string; type: JournalType; defaultAccountId?: string }) =>
+    d<Journal>(api.post('/accounting/journals', data)),
+  getCostCenters: () => d<CostCenter[]>(api.get('/accounting/cost-centers')),
+  createCostCenter: (data: { code: string; nameAr: string; nameEn?: string; parentId?: string; branchId?: string }) =>
+    d<CostCenter>(api.post('/accounting/cost-centers', data)),
+  updateCostCenter: (id: string, data: Partial<Omit<CostCenter, 'id'>>) =>
+    d<CostCenter>(api.patch(`/accounting/cost-centers/${id}`, data)),
+  getCurrencies: () => d<Currency[]>(api.get('/accounting/currencies')),
+  getExchangeRates: (currencyId?: string) =>
+    d<ExchangeRate[]>(api.get('/accounting/exchange-rates', { params: currencyId ? { currencyId } : {} })),
+  createExchangeRate: (data: { currencyId: string; rate: number; date: string }) =>
+    d<ExchangeRate>(api.post('/accounting/exchange-rates', data)),
 
   // journal entries
   getJournalEntries: () => d<JournalEntryRow[]>(api.get('/accounting/journal-entries')),

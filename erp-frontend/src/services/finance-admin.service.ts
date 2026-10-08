@@ -125,6 +125,7 @@ export const adminService = {
   getBranches: () => d<Branch[]>(api.get('/branches')),
   createBranch: (data: { code: string; name: string; address?: string; phone?: string; isActive?: boolean }) =>
     d<Branch>(api.post('/branches', data)),
+  updateBranch: (id: string, data: Record<string, unknown>) => d<Branch>(api.patch(`/branches/${id}`, data)),
 };
 
 /** Drops empty values from a query object. */
