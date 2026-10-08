@@ -155,9 +155,14 @@ function arBelowThousand(n: number, feminine: boolean): string {
   return parts.join(' و');
 }
 
-/** "مائتان" becomes "مائتا" before the counted noun (مائتا ألف، مائتا جنيه). */
+/**
+ * Construct state (إضافة) of the last number word before the counted noun:
+ * مائتان -> مائتا, ألفان -> ألفا, أحد عشر ألفاً -> أحد عشر ألف (مائتا جنيه، ألفا ريال).
+ */
 function construct(words: string): string {
-  return words.endsWith('مائتان') ? `${words.slice(0, -1)}` : words;
+  if (/(مائتان|ألفان|مليونان|ملياران|تريليونان)$/.test(words)) return words.slice(0, -1);
+  if (/(ألفاً|مليوناً|ملياراً|تريليوناً)$/.test(words)) return words.slice(0, -2);
+  return words;
 }
 
 /** Integer in Arabic words (masculine unless `feminine`). */
