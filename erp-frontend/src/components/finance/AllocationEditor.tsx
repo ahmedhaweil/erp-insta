@@ -12,12 +12,15 @@ import { Btn, Money, Spinner, fmtMoney, inputCls } from './ui';
 export default function AllocationEditor({
   partnerType,
   partnerId,
+  direction,
   available,
   value,
   onChange,
 }: {
   partnerType: 'customer' | 'supplier';
   partnerId: string;
+  /** Payment direction: refunds settle credit notes / supplier refunds. */
+  direction?: 'inbound' | 'outbound';
   available: number;
   value: Record<string, string>;
   onChange: (v: Record<string, string>) => void;
@@ -25,8 +28,8 @@ export default function AllocationEditor({
   const t = useTranslations('payments');
   const tc = useTranslations('common');
   const { data: invoices = [], isLoading } = useQuery({
-    queryKey: ['open-invoices', partnerType, partnerId],
-    queryFn: () => treasuryService.getOpenInvoices(partnerType, partnerId),
+    queryKey: ['open-invoices', partnerType, partnerId, direction ?? ''],
+    queryFn: () => treasuryService.getOpenInvoices(partnerType, partnerId, direction),
     enabled: !!partnerId,
   });
 

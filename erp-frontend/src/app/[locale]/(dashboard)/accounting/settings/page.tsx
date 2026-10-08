@@ -42,8 +42,9 @@ export default function AccountingSettingsPage() {
 
   const save = useFinAction(
     () => {
-      const payload: Record<string, string | undefined> = {};
-      for (const [k, v] of Object.entries(form)) payload[k] = v || undefined;
+      // a cleared account (or lock date) is sent as null so the server clears it
+      const payload: Record<string, string | null> = {};
+      for (const [k, v] of Object.entries(form)) payload[k] = v || null;
       return finAccountingService.updateSettings(payload as AccountingSettings);
     },
     { invalidate: ['accounting-settings'] },

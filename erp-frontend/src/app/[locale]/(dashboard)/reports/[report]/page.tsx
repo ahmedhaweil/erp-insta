@@ -7,12 +7,13 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Play } from 'lucide-react';
 import { useRouter } from '@/i18n/navigation';
 import AccountPicker from '@/components/finance/AccountPicker';
-import { ExcelButton, ReportTable } from '@/components/finance/ReportTable';
+import { ExcelButton, PdfButton, ReportTable } from '@/components/finance/ReportTable';
 import { findReport, type FilterKey } from '@/components/finance/reports/registry';
 import { Btn, Field, Money, Spinner, apiError, firstOfYearIso, inputCls, todayIso, useLocalName } from '@/components/finance/ui';
-import { useBranches, useCustomersLookup, useFiscalYears, useSuppliersLookup, useUsersLookup } from '@/hooks/use-finance';
+import { useBranches, useCostCenters, useCustomersLookup, useFiscalYears, useSuppliersLookup, useUsersLookup } from '@/hooks/use-finance';
 import { finReportsService } from '@/services/finance-reports.service';
 import api from '@/lib/api';
+import { PrintButton } from '@/components/platform/PrintButton';
 
 const SALES_GROUPS = ['product', 'customer', 'category', 'branch', 'salesperson', 'month', 'invoice', 'day'];
 const PURCHASE_GROUPS = ['supplier', 'product', 'category', 'branch', 'month', 'invoice'];
@@ -30,6 +31,7 @@ export default function ReportPage() {
   const def = findReport(key);
   const t = useTranslations('reports');
   const tc = useTranslations('common');
+  const tPl = useTranslations('platform');
   const locale = useLocale();
   const name = useLocalName();
   const router = useRouter();
@@ -41,6 +43,7 @@ export default function ReportPage() {
   const set = (k: string, v: unknown) => setDraft((d) => ({ ...d, [k]: v }));
 
   const { data: branches = [] } = useBranches();
+  const { data: costCenters = [] } = useCostCenters();
   const { data: customers = [] } = useCustomersLookup();
   const { data: suppliers = [] } = useSuppliersLookup();
   const { data: years = [] } = useFiscalYears();
@@ -89,7 +92,18 @@ export default function ReportPage() {
             <p className="text-sm text-gray-500">{t(`descs.${def.key}`)}</p>
           </div>
         </div>
-        <ExcelButton endpoint={def.endpoint} params={params} disabled={missing} />
+        <div className="flex gap-2">
+          {def.key === 'partner-statement' && params.partnerId && (
+            <PrintButton
+              size="md"
+              label={tPl('print.statement')}
+              path={`/print/statements/${params.partnerType ?? 'customer'}/${params.partnerId}`}
+              params={{ from: params.from, to: params.to }}
+            />
+          )}
+          <PdfButton endpoint={def.endpoint} params={params} disabled={missing} />
+          <ExcelButton endpoint={def.endpoint} params={params} disabled={missing} />
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -157,6 +171,18 @@ export default function ReportPage() {
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {has('costCenterId') && (
+            <Field label={t('f.costCenter')} className="w-48">
+              <select className={inputCls} value={draft.costCenterId ?? ''} onChange={(e) => set('costCenterId', e.target.value)}>
+                <option value="">{tc('all')}</option>
+                {costCenters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code} - {name(c)}
                   </option>
                 ))}
               </select>

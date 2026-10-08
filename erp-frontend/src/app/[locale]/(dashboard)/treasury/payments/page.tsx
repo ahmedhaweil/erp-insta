@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery } from '@tanstack/react-query';
 import DataTable from '@/components/ui/DataTable';
@@ -9,7 +9,8 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import AllocationEditor, { allocationsFrom } from '@/components/finance/AllocationEditor';
 import { Btn, Field, Money, Tabs, Toolbar, inputCls, todayIso, useLocalName } from '@/components/finance/ui';
-import { byId, useCustomersLookup, useFinAction, useSuppliersLookup, useTreasuries } from '@/hooks/use-finance';
+import { byId, useCustomersLookup, useFinAction, useRateFor, useSuppliersLookup, useTreasuries } from '@/hooks/use-finance';
+import { PrintButton } from '@/components/platform/PrintButton';
 import { treasuryService, type CreatePaymentPayload, type PaymentMethod, type PaymentRow } from '@/services/finance-treasury.service';
 
 type PartnerType = 'customer' | 'supplier';
@@ -41,6 +42,7 @@ export default function PaymentsPage() {
   const t = useTranslations('payments');
   const tt = useTranslations('treasury');
   const tc = useTranslations('common');
+  const tPl = useTranslations('platform');
   const name = useLocalName();
   const { data: customers = [] } = useCustomersLookup();
   const { data: suppliers = [] } = useSuppliersLookup();
@@ -76,6 +78,11 @@ export default function PaymentsPage() {
   const treasuryOptions = treasuries.filter((tr) => tr.isActive && tr.type === treasuryType);
   const selectedTreasury = treasuriesById[form.treasuryId];
   const foreign = !!selectedTreasury?.currencyId;
+  const suggestedRate = useRateFor(selectedTreasury?.currencyId, form.date);
+  // Prefill the exchange rate with the latest known rate of the treasury currency.
+  useEffect(() => {
+    if (foreign && suggestedRate != null) setForm((f) => (f.exchangeRate ? f : { ...f, exchangeRate: String(suggestedRate) }));
+  }, [foreign, suggestedRate, form.treasuryId]);
   const withholdingAllowed = !form.refund;
   const amountNum = Number(form.amount) || 0;
   const settled = amountNum + (withholdingAllowed ? Number(form.withholdingAmount) || 0 : 0);
@@ -114,7 +121,7 @@ export default function PaymentsPage() {
               }
             : undefined,
         autoAllocate: form.allocMode === 'auto' && !form.refund ? true : undefined,
-        allocations: form.allocMode === 'manual' && !form.refund ? allocationsFrom(manual) : undefined,
+        allocations: form.allocMode === 'manual' ? allocationsFrom(manual) : undefined,
       };
       return treasuryService.createPayment(payload);
     },
@@ -232,10 +239,10 @@ export default function PaymentsPage() {
         loading={isLoading}
         searchable
         pageSize={20}
-        actions={(p) =>
-          p.status === 'posted' ? (
-            <div className="flex gap-1">
-              {unallocated(p) > 0.004 && (
+        actions={(p) => (
+          <div className="flex gap-1">
+            <PrintButton path={`/print/payments/${p.id}`} label={tPl('print.pdf')} />
+            {p.status === 'posted' && unallocated(p) > 0.004 && (
                 <Btn
                   size="sm"
                   variant="ghost"
@@ -246,13 +253,14 @@ export default function PaymentsPage() {
                 >
                   {t('allocate')}
                 </Btn>
-              )}
+            )}
+            {p.status === 'posted' && (
               <Btn size="sm" variant="ghost" onClick={() => setCancelling(p)}>
                 {tc('cancel')}
               </Btn>
-            </div>
-          ) : null
-        }
+            )}
+          </div>
+        )}
       />
 
       {/* new payment */}
@@ -301,7 +309,14 @@ export default function PaymentsPage() {
               </select>
             </Field>
             <label className="flex items-center gap-2 text-sm md:col-span-4">
-              <input type="checkbox" checked={form.refund} onChange={(e) => set('refund', e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={form.refund}
+                onChange={(e) => {
+                  const refund = e.target.checked;
+                  setForm((f) => ({ ...f, refund, allocMode: refund && f.allocMode === 'auto' ? 'none' : f.allocMode }));
+                }}
+              />
               {form.partnerType === 'customer' ? t('refundToCustomer') : t('refundFromSupplier')}
             </label>
           </div>
@@ -393,11 +408,11 @@ export default function PaymentsPage() {
             </div>
           )}
 
-          {!form.refund && form.partnerId && (
+          {form.partnerId && (
             <div className="border border-gray-200 rounded-lg p-3 space-y-3">
               <div className="flex flex-wrap items-center gap-4 text-sm">
                 <span className="font-semibold">{t('allocation')}</span>
-                {(['auto', 'manual', 'none'] as const).map((m) => (
+                {(form.refund ? (['manual', 'none'] as const) : (['auto', 'manual', 'none'] as const)).map((m) => (
                   <label key={m} className="flex items-center gap-1.5">
                     <input type="radio" checked={form.allocMode === m} onChange={() => set('allocMode', m)} />
                     {t(`alloc_${m}`)}
@@ -408,6 +423,7 @@ export default function PaymentsPage() {
                 <AllocationEditor
                   partnerType={form.partnerType}
                   partnerId={form.partnerId}
+                  direction={direction}
                   available={endorsing ? Number(portfolio.find((c) => c.id === form.endorsedChequeId)?.amount ?? 0) : settled}
                   value={manual}
                   onChange={setManual}
@@ -434,6 +450,7 @@ export default function PaymentsPage() {
             <AllocationEditor
               partnerType={allocating.partnerType}
               partnerId={allocating.partnerId}
+              direction={allocating.direction}
               available={unallocated(allocating)}
               value={allocDraft}
               onChange={setAllocDraft}

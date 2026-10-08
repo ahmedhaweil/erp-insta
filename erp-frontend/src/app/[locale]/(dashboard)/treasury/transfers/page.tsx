@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery } from '@tanstack/react-query';
 import DataTable from '@/components/ui/DataTable';
@@ -8,7 +8,7 @@ import Modal from '@/components/ui/Modal';
 import StatusBadge from '@/components/ui/StatusBadge';
 import ActionDialog from '@/components/finance/ActionDialog';
 import { Btn, Field, Money, Toolbar, inputCls, todayIso, useLocalName } from '@/components/finance/ui';
-import { byId, useFinAction, useTreasuries } from '@/hooks/use-finance';
+import { byId, useFinAction, useRateFor, useTreasuries } from '@/hooks/use-finance';
 import { treasuryService, type Transfer } from '@/services/finance-treasury.service';
 
 const emptyForm = { fromTreasuryId: '', toTreasuryId: '', date: todayIso(), amount: '', rate: '', toAmount: '', baseRate: '', fee: '', reference: '', description: '' };
@@ -34,6 +34,19 @@ export default function TransfersPage() {
   const toT = byTreasury[form.toTreasuryId];
   const crossCurrency = !!fromT && !!toT && (fromT.currencyId ?? null) !== (toT.currencyId ?? null);
   const fromForeign = !!fromT?.currencyId;
+  // Suggestions from the exchange-rate table: base rate of the source currency and,
+  // across currencies, the source -> destination rate (both via the base currency).
+  const fromRate = useRateFor(fromT?.currencyId, form.date);
+  const toRate = useRateFor(toT?.currencyId, form.date);
+  const fromBase = fromT?.currencyId ? fromRate : 1;
+  const toBase = toT?.currencyId ? toRate : 1;
+  const crossRate = fromBase != null && toBase ? Math.round((fromBase / toBase) * 1e6) / 1e6 : undefined;
+  useEffect(() => {
+    if (fromForeign && fromRate != null) setForm((f) => (f.baseRate ? f : { ...f, baseRate: String(fromRate) }));
+  }, [fromForeign, fromRate, form.fromTreasuryId]);
+  useEffect(() => {
+    if (crossCurrency && crossRate != null) setForm((f) => (f.rate || f.toAmount ? f : { ...f, rate: String(crossRate) }));
+  }, [crossCurrency, crossRate, form.fromTreasuryId, form.toTreasuryId]);
 
   const create = useFinAction(
     (post: boolean) => {

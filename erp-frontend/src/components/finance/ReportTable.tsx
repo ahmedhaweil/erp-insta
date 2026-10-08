@@ -2,10 +2,11 @@
 
 import { useState, type ReactNode } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { finReportsService } from '@/services/finance-reports.service';
+import { openPdf } from '@/services/platform.service';
 import { Btn, fmtDate, fmtMoney, fmtNum } from './ui';
 
 export type ColType = 'text' | 'money' | 'number' | 'percent' | 'date';
@@ -136,6 +137,34 @@ export function ExcelButton({ endpoint, params, disabled }: { endpoint: string; 
     >
       <FileSpreadsheet size={16} />
       {busy ? t('downloading') : t('excel')}
+    </Btn>
+  );
+}
+
+/** Opens the PDF version of a report (?format=pdf&lang=) in a new tab. */
+export function PdfButton({ endpoint, params, disabled }: { endpoint: string; params: Record<string, unknown>; disabled?: boolean }) {
+  const t = useTranslations('reports');
+  const locale = useLocale();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Btn
+      variant="secondary"
+      disabled={busy || disabled}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const p: Record<string, any> = {};
+          for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== '') p[k] = v;
+          await openPdf(`/reports/${endpoint}`, { ...p, format: 'pdf', lang: locale });
+        } catch {
+          toast.error(t('downloadFailed'));
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <FileText size={16} />
+      {busy ? t('downloading') : t('pdf')}
     </Btn>
   );
 }

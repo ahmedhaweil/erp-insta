@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
@@ -10,7 +10,8 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import ActionDialog from '@/components/finance/ActionDialog';
 import AccountPicker, { useAccountLabel } from '@/components/finance/AccountPicker';
 import { Btn, Field, Money, Tabs, Toolbar, fmtMoney, inputCls, todayIso, useLocalName } from '@/components/finance/ui';
-import { byId, useBranches, useFinAction, useTreasuries } from '@/hooks/use-finance';
+import { byId, useBranches, useFinAction, useRateFor, useTreasuries } from '@/hooks/use-finance';
+import { PrintButton } from '@/components/platform/PrintButton';
 import { treasuryService, type Voucher, type VoucherType } from '@/services/finance-treasury.service';
 
 type LineDraft = { accountId: string; amount: string; description: string };
@@ -19,6 +20,7 @@ const emptyLine = (): LineDraft => ({ accountId: '', amount: '', description: ''
 export default function VouchersPage() {
   const t = useTranslations('treasury');
   const tc = useTranslations('common');
+  const tPl = useTranslations('platform');
   const name = useLocalName();
   const accountLabel = useAccountLabel();
   const { data: treasuries = [] } = useTreasuries(false);
@@ -49,6 +51,10 @@ export default function VouchersPage() {
   const total = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
   const selectedTreasury = treasuriesById[form.treasuryId];
   const foreign = !!selectedTreasury?.currencyId;
+  const suggestedRate = useRateFor(selectedTreasury?.currencyId, form.date);
+  useEffect(() => {
+    if (foreign && suggestedRate != null) setForm((f) => (f.exchangeRate ? f : { ...f, exchangeRate: String(suggestedRate) }));
+  }, [foreign, suggestedRate, form.treasuryId]);
 
   const openNew = (vt: VoucherType) => {
     setForm({ type: vt, treasuryId: treasuries[0]?.id ?? '', date: todayIso(), exchangeRate: '', counterpartyName: '', reference: '', description: '', branchId: '' });
@@ -143,6 +149,7 @@ export default function VouchersPage() {
         onRowClick={setDetail}
         actions={(v) => (
           <div className="flex gap-1">
+            <PrintButton path={`/print/treasury-vouchers/${v.id}`} label={tPl('print.pdf')} />
             {v.status === 'draft' && (
               <Btn size="sm" variant="ghost" onClick={() => post.mutate(v.id)} disabled={post.isPending}>
                 {t('post')}

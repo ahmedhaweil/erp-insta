@@ -22,7 +22,14 @@
     "auditLog": "Audit log",
     "myProfile": "My profile",
     "company": "Company",
-    "branches": "Branches"
+    "branches": "Branches",
+    "costCenters": "Cost centers",
+    "currencies": "Currencies & rates",
+    "recurringEntries": "Recurring entries",
+    "deferrals": "Deferrals",
+    "fxRevaluation": "FX revaluation",
+    "openingBalances": "Opening balances",
+    "periodClosing": "Period closing"
   },
   "fin": {
     "saved": "Saved successfully",
@@ -217,7 +224,8 @@
       "installments": "Installments",
       "price_lists": "Price lists",
       "reps": "Sales reps"
-    }
+    },
+    "editBranch": "Edit branch"
   },
   "acct": {
     "level": "Level",
@@ -397,7 +405,39 @@
       "installment_plan": "Installment plan",
       "production_order": "Production order",
       "mfg_scrap": "Scrap"
-    }
+    },
+    "costCenter": "Cost center",
+    "noJournals": "No journals yet: run the accounting setup wizard first",
+    "journalType_sale": "Sales",
+    "journalType_purchase": "Purchases",
+    "journalType_bank": "Bank",
+    "journalType_cash": "Cash",
+    "journalType_general": "General",
+    "baseCurrencyOption": "Base currency",
+    "rateSuggested": "Latest known rate: {rate}",
+    "noRateKnown": "No rate recorded",
+    "costCentersTitle": "Cost centers",
+    "costCentersIntro": "Cost centers are used on journal lines, budgets and the P&L by cost center report.",
+    "newCostCenter": "New cost center",
+    "editCostCenter": "Edit cost center",
+    "parentCostCenter": "Parent cost center",
+    "branch": "Branch",
+    "nameAr": "Arabic name",
+    "nameEn": "English name",
+    "currenciesTitle": "Currencies and exchange rates",
+    "currencies": "Currencies",
+    "exchangeRates": "Exchange rates",
+    "exchangeRatesHint": "Company rates take priority over the shared default rates of the same date. Forms suggest the latest rate on or before the document date.",
+    "newExchangeRate": "New exchange rate",
+    "setRate": "Set rate",
+    "symbol": "Symbol",
+    "latestRate": "Latest rate",
+    "baseCurrencyBadge": "Base currency",
+    "rateInBase": "Rate (in {base})",
+    "rateHint": "Base-currency units per one unit of the currency",
+    "rateSource": "Source",
+    "rateCompany": "Company",
+    "rateShared": "Shared default"
   },
   "treasury": {
     "treasuriesTitle": "Cash boxes and bank accounts",
@@ -700,7 +740,8 @@
       "limit": "Top N",
       "hierarchy": "Show account hierarchy",
       "includeZero": "Include zero balances",
-      "includeChildren": "Include sub-accounts"
+      "includeChildren": "Include sub-accounts",
+      "costCenter": "Cost center"
     },
     "group": {
       "product": "Product",
@@ -811,7 +852,8 @@
       "paymentsCash": "Cash payments",
       "paymentsBank": "Bank payments",
       "netCash": "Net cash"
-    }
+    },
+    "pdf": "PDF"
   },
   "finDash": {
     "setupTitle": "Accounting is not set up yet",

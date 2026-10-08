@@ -22,7 +22,14 @@
     "auditLog": "سجل المراجعة",
     "myProfile": "ملفي الشخصي",
     "company": "بيانات الشركة",
-    "branches": "الفروع"
+    "branches": "الفروع",
+    "costCenters": "مراكز التكلفة",
+    "currencies": "العملات وأسعار الصرف",
+    "recurringEntries": "القيود الدورية",
+    "deferrals": "الإيرادات والمصروفات المؤجلة",
+    "fxRevaluation": "إعادة تقييم العملات",
+    "openingBalances": "الأرصدة الافتتاحية",
+    "periodClosing": "إقفال الفترات"
   },
   "fin": {
     "saved": "تم الحفظ بنجاح",
@@ -217,7 +224,8 @@
       "installments": "التقسيط",
       "price_lists": "قوائم الأسعار",
       "reps": "المندوبون"
-    }
+    },
+    "editBranch": "تعديل الفرع"
   },
   "acct": {
     "level": "المستوى",
@@ -397,7 +405,39 @@
       "installment_plan": "خطة تقسيط",
       "production_order": "أمر إنتاج",
       "mfg_scrap": "هالك"
-    }
+    },
+    "costCenter": "مركز التكلفة",
+    "noJournals": "لا توجد دفاتر يومية بعد: شغّل معالج إعداد الحسابات أولاً",
+    "journalType_sale": "المبيعات",
+    "journalType_purchase": "المشتريات",
+    "journalType_bank": "البنك",
+    "journalType_cash": "الخزينة",
+    "journalType_general": "عام",
+    "baseCurrencyOption": "العملة الأساسية",
+    "rateSuggested": "آخر سعر مسجل: {rate}",
+    "noRateKnown": "لا يوجد سعر مسجل",
+    "costCentersTitle": "مراكز التكلفة",
+    "costCentersIntro": "تُستخدم مراكز التكلفة في سطور القيود والموازنات وتقرير الأرباح والخسائر حسب مركز التكلفة.",
+    "newCostCenter": "مركز تكلفة جديد",
+    "editCostCenter": "تعديل مركز التكلفة",
+    "parentCostCenter": "مركز التكلفة الرئيسي",
+    "branch": "الفرع",
+    "nameAr": "الاسم بالعربية",
+    "nameEn": "الاسم بالإنجليزية",
+    "currenciesTitle": "العملات وأسعار الصرف",
+    "currencies": "العملات",
+    "exchangeRates": "أسعار الصرف",
+    "exchangeRatesHint": "أسعار الشركة لها الأولوية على الأسعار الافتراضية المشتركة في نفس التاريخ. تقترح النماذج آخر سعر في تاريخ المستند أو قبله.",
+    "newExchangeRate": "سعر صرف جديد",
+    "setRate": "تسجيل سعر",
+    "symbol": "الرمز",
+    "latestRate": "آخر سعر",
+    "baseCurrencyBadge": "العملة الأساسية",
+    "rateInBase": "السعر (بـ {base})",
+    "rateHint": "عدد وحدات العملة الأساسية مقابل وحدة واحدة من العملة",
+    "rateSource": "المصدر",
+    "rateCompany": "الشركة",
+    "rateShared": "افتراضي مشترك"
   },
   "treasury": {
     "treasuriesTitle": "الخزائن والحسابات البنكية",
@@ -700,7 +740,8 @@
       "limit": "أعلى N",
       "hierarchy": "عرض شجرة الحسابات",
       "includeZero": "إظهار الأرصدة الصفرية",
-      "includeChildren": "شامل الحسابات الفرعية"
+      "includeChildren": "شامل الحسابات الفرعية",
+      "costCenter": "مركز التكلفة"
     },
     "group": {
       "product": "الصنف",
@@ -811,7 +852,8 @@
       "paymentsCash": "مدفوعات نقدية",
       "paymentsBank": "مدفوعات بنكية",
       "netCash": "صافي النقدية"
-    }
+    },
+    "pdf": "PDF"
   },
   "finDash": {
     "setupTitle": "لم يتم إعداد المحاسبة بعد",

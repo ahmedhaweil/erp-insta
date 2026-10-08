@@ -11,6 +11,7 @@ export type FilterKey =
   | 'to'
   | 'asOf'
   | 'branchId'
+  | 'costCenterId'
   | 'accountId'
   | 'includeChildren'
   | 'hierarchy'
@@ -251,7 +252,7 @@ export const REPORTS: ReportDef[] = [
     key: 'trial-balance',
     endpoint: 'trial-balance',
     group: 'financial',
-    filters: ['from', 'to', 'branchId', 'hierarchy', 'includeZero', 'maxLevel'],
+    filters: ['from', 'to', 'branchId', 'costCenterId', 'hierarchy', 'includeZero', 'maxLevel'],
     defaults: { hierarchy: true },
     render: (d, ctx) => {
       const { t } = ctx;
@@ -281,7 +282,7 @@ export const REPORTS: ReportDef[] = [
     key: 'general-ledger',
     endpoint: 'general-ledger',
     group: 'financial',
-    filters: ['accountId', 'from', 'to', 'branchId', 'includeChildren'],
+    filters: ['accountId', 'from', 'to', 'branchId', 'costCenterId', 'includeChildren'],
     required: ['accountId'],
     render: ledgerRender,
   },
@@ -289,7 +290,7 @@ export const REPORTS: ReportDef[] = [
     key: 'account-statement',
     endpoint: 'account-statement',
     group: 'financial',
-    filters: ['accountId', 'from', 'to', 'branchId'],
+    filters: ['accountId', 'from', 'to', 'branchId', 'costCenterId'],
     required: ['accountId'],
     render: ledgerRender,
   },
@@ -338,7 +339,7 @@ export const REPORTS: ReportDef[] = [
     },
   },
   { key: 'cost-center-pnl', endpoint: 'cost-center-pnl', group: 'management', filters: ['from', 'to', 'branchId'], render: pnlByRender },
-  { key: 'branch-pnl', endpoint: 'branch-pnl', group: 'management', filters: ['from', 'to'], render: pnlByRender },
+  { key: 'branch-pnl', endpoint: 'branch-pnl', group: 'management', filters: ['from', 'to', 'costCenterId'], render: pnlByRender },
   {
     key: 'budget-vs-actual',
     endpoint: 'budget-vs-actual',

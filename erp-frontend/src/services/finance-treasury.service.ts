@@ -228,8 +228,6 @@ export interface OpenInvoice {
   status: string;
 }
 
-const OPEN_STATUSES = new Set(['posted', 'sent', 'partial', 'overdue', 'approved']);
-
 export const treasuryService = {
   // treasuries
   getTreasuries: (params: { type?: TreasuryType; activeOnly?: boolean; withBalance?: boolean } = {}) =>
@@ -300,12 +298,17 @@ export const treasuryService = {
   // partners and their open invoices (read-only lookups)
   getCustomers: () => d<Partner[]>(api.get('/sales/customers')),
   getSuppliers: () => d<Partner[]>(api.get('/purchasing/suppliers')),
-  getOpenInvoices: async (partnerType: 'customer' | 'supplier', partnerId: string): Promise<OpenInvoice[]> => {
-    const rows = await d<any[]>(api.get(partnerType === 'customer' ? '/sales/invoices' : '/purchasing/invoices'));
-    const key = partnerType === 'customer' ? 'customerId' : 'supplierId';
+  /**
+   * Documents a payment of this partner can settle (GET /payments/open-documents):
+   * invoices / bills for normal payments, credit notes / refunds for refunds.
+   */
+  getOpenInvoices: async (
+    partnerType: 'customer' | 'supplier',
+    partnerId: string,
+    direction?: 'inbound' | 'outbound',
+  ): Promise<OpenInvoice[]> => {
+    const rows = await d<any[]>(api.get('/payments/open-documents', { params: clean({ partnerType, partnerId, direction }) }));
     return rows
-      .filter((r) => r[key] === partnerId && OPEN_STATUSES.has(r.status))
-      .filter((r) => !r.moveType || r.moveType === 'invoice' || r.moveType === 'bill')
       .map((r) => {
         const total = Number(r.totalAmount) || 0;
         const paid = Number(r.paidAmount) || 0;
@@ -320,7 +323,6 @@ export const treasuryService = {
           status: r.status,
         };
       })
-      .filter((r) => r.residual > 0.004)
-      .sort((a, b) => String(a.dueDate ?? a.date).localeCompare(String(b.dueDate ?? b.date)));
+      .filter((r) => r.residual > 0.004);
   },
 };

@@ -16,6 +16,13 @@ export const financeNav: NavGroup[] = [
       { key: 'fiscalYears', href: '/accounting/fiscal-years' },
       { key: 'fixedAssets', href: '/accounting/fixed-assets' },
       { key: 'budgets', href: '/accounting/budgets' },
+      { key: 'costCenters', href: '/accounting/cost-centers' },
+      { key: 'currencies', href: '/accounting/currencies' },
+      { key: 'recurringEntries', href: '/accounting/recurring-entries' },
+      { key: 'deferrals', href: '/accounting/deferrals' },
+      { key: 'fxRevaluation', href: '/accounting/fx-revaluation' },
+      { key: 'openingBalances', href: '/accounting/opening-balances' },
+      { key: 'periodClosing', href: '/accounting/period-closing' },
     ],
   },
   {
