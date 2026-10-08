@@ -6,6 +6,7 @@ import {
   IsArray,
   ValidateNested,
   ArrayMinSize,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -97,6 +98,11 @@ export class CreatePurchaseOrderDto {
   @IsOptional()
   @IsString()
   expectedDate?: string;
+
+  @ApiPropertyOptional({ description: 'Unit prices include VAT' })
+  @IsOptional()
+  @IsBoolean()
+  pricesIncludeTax?: boolean;
 
   @ApiProperty({ type: [PurchaseOrderLineDto] })
   @IsArray()

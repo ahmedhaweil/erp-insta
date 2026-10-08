@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -20,6 +21,7 @@ import { CreateSalesOrderDto } from '../dto/create-sales-order.dto';
 import { CreateInvoiceFromOrderDto, DeliverOrderDto } from '../dto/sales-actions.dto';
 import { OrderConfirmedEvent } from '../events/order-confirmed.event';
 import { SalesInvoicesService } from './sales-invoices.service';
+import { SalesPricingService } from './sales-pricing.service';
 import { SequenceService } from '@shared/services/sequence.service';
 import { StockService } from '@modules/inventory/services/stock.service';
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
@@ -40,6 +42,7 @@ export class SalesOrdersService {
     private readonly stockService: StockService,
     private readonly invoicesService: SalesInvoicesService,
     private readonly autoPosting: AutoPostingService,
+    @Optional() private readonly pricing?: SalesPricingService,
   ) {}
 
   async create(
@@ -53,13 +56,34 @@ export class SalesOrdersService {
 
     const orderNumber = await this.sequenceService.next(tenantId, 'sales_order', 'SO');
 
+    // Lines without a price are priced from the customer price list.
+    let inputLines = dto.lines;
+    let priceListId: string | null = dto.priceListId ?? null;
+    if (this.pricing && inputLines.some((l) => l.unitPrice === undefined || l.unitPrice === null)) {
+      const priced = await this.pricing.priceLines(
+        tenantId,
+        { customer, priceListId: dto.priceListId, date: dto.date },
+        inputLines,
+      );
+      inputLines = priced.lines;
+      priceListId = priced.priceListId;
+    }
+    if (inputLines.some((l) => l.unitPrice === undefined || l.unitPrice === null)) {
+      throw new BadRequestException('Every line needs a unit price');
+    }
+
     // Amounts are always recomputed server-side from quantities and prices
-    const lines = dto.lines.map((l) => ({
-      ...computeLine(l),
+    const taxIncluded = !!dto.pricesIncludeTax;
+    const lines = inputLines.map((l) => ({
+      ...computeLine({ ...l, unitPrice: l.unitPrice as number }, { taxIncluded }),
       productId: l.productId,
       description: l.description,
     }));
     const { subtotal, taxAmount, totalAmount } = computeTotals(lines);
+
+    if (this.pricing) {
+      await this.pricing.enforceMinPrice(tenantId, userId, lines, Number(dto.exchangeRate ?? 1));
+    }
 
     const order = this.orderRepo.create({
       ...dto,
@@ -67,10 +91,13 @@ export class SalesOrdersService {
       orderNumber,
       createdBy: userId,
       status: SalesOrderStatus.DRAFT,
+      salesRepId: dto.salesRepId ?? customer.salesRepId ?? null,
+      priceListId,
+      pricesIncludeTax: taxIncluded,
       subtotal,
       taxAmount,
       totalAmount,
-      lines: lines.map((l) => this.lineRepo.create(l)),
+      lines: lines.map(({ taxAmount: _t, ...l }) => this.lineRepo.create(l)),
     });
 
     return this.orderRepo.save(order);
@@ -284,6 +311,9 @@ export class SalesOrdersService {
         currencyId: order.currencyId,
         exchangeRate: Number(order.exchangeRate),
         branchId: order.branchId,
+        salesRepId: order.salesRepId ?? undefined,
+        priceListId: order.priceListId ?? undefined,
+        pricesIncludeTax: order.pricesIncludeTax,
         notes: `Invoice for ${order.orderNumber}`,
         lines: toInvoice.map(({ line, quantity }) => ({
           productId: line.productId,
@@ -295,6 +325,8 @@ export class SalesOrdersService {
           orderLineId: line.id,
         })),
       },
+      {},
+      { skipPriceChecks: true },
     );
 
     for (const { line, quantity } of toInvoice) {

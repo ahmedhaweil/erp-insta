@@ -281,6 +281,8 @@ describe('SalesOrdersService', () => {
           orderId: 'order-1',
           lines: [expect.objectContaining({ quantity: 1, orderLineId: 'l1' })],
         }),
+        {},
+        { skipPriceChecks: true },
       );
     });
 

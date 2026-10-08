@@ -31,6 +31,14 @@ export class PurchaseInvoiceLine extends BaseEntity {
   @Column({ name: 'order_line_id', type: 'uuid', nullable: true })
   orderLineId: string;
 
+  /** Line withholding rate (%); null = document rate. */
+  @Column({ name: 'withholding_rate', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  withholdingRate: number | null;
+
+  /** Quantity already returned through posted purchase returns. */
+  @Column({ name: 'qty_returned', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  qtyReturned: number;
+
   @ManyToOne(() => PurchaseInvoice, (invoice) => invoice.lines)
   @JoinColumn({ name: 'invoice_id' })
   invoice: PurchaseInvoice;

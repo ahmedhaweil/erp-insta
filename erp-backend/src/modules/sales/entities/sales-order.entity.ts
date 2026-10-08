@@ -76,6 +76,18 @@ export class SalesOrder extends TenantBaseEntity {
   @Column({ name: 'delivery_status', default: SalesOrderDeliveryStatus.PENDING })
   deliveryStatus: SalesOrderDeliveryStatus;
 
+  /** Sales representative credited with the document (commissions). */
+  @Column({ name: 'sales_rep_id', type: 'uuid', nullable: true })
+  salesRepId: string | null;
+
+  /** Price list used to price lines sent without a unit price. */
+  @Column({ name: 'price_list_id', type: 'uuid', nullable: true })
+  priceListId: string | null;
+
+  /** Unit prices include VAT (tax-inclusive pricing). */
+  @Column({ name: 'prices_include_tax', default: false })
+  pricesIncludeTax: boolean;
+
   @ManyToOne(() => Customer)
   @JoinColumn({ name: 'customer_id' })
   customer: Customer;

@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -22,6 +23,14 @@ import { PurchaseInvoicesService } from './purchase-invoices.service';
 import { Product, ProductType } from '@modules/inventory/entities/product.entity';
 import { StockService } from '@modules/inventory/services/stock.service';
 import { SequenceService } from '@shared/services/sequence.service';
+import { RbacService } from '@modules/auth/services/rbac.service';
+import { PurchasingSettingsService } from './purchasing-settings.service';
+
+export const PO_APPROVAL_PERMISSION = {
+  module: 'purchasing',
+  screen: 'po_approval',
+  action: 'approve',
+};
 import { computeLine, computeTotals, round, today } from '@shared/utils/document-totals.util';
 
 @Injectable()
@@ -39,12 +48,15 @@ export class PurchaseOrdersService {
     private readonly sequenceService: SequenceService,
     private readonly stockService: StockService,
     private readonly invoicesService: PurchaseInvoicesService,
+    @Optional() private readonly settingsService?: PurchasingSettingsService,
+    @Optional() private readonly rbac?: RbacService,
   ) {}
 
   async create(
     tenantId: string,
     userId: string,
     dto: CreatePurchaseOrderDto,
+    extra: { requisitionId?: string } = {},
   ): Promise<PurchaseOrder> {
     const supplier = await this.supplierRepo.findOne({ where: { id: dto.supplierId, tenantId } });
     if (!supplier) throw new NotFoundException('Supplier not found');
@@ -53,8 +65,9 @@ export class PurchaseOrdersService {
     const orderNumber = await this.sequenceService.next(tenantId, 'purchase_order', 'PO');
 
     // Client totals are ignored: amounts are recomputed from the lines
+    const taxIncluded = !!dto.pricesIncludeTax;
     const lines = dto.lines.map((l) => ({
-      ...computeLine(l),
+      ...computeLine(l, { taxIncluded }),
       productId: l.productId,
       description: l.description,
     }));
@@ -68,7 +81,9 @@ export class PurchaseOrdersService {
       orderNumber,
       createdBy: userId,
       status: PurchaseOrderStatus.DRAFT,
-      lines: lines.map((l) => this.lineRepo.create(l)),
+      pricesIncludeTax: taxIncluded,
+      requisitionId: extra.requisitionId ?? null,
+      lines: lines.map(({ taxAmount: _lt, ...l }) => this.lineRepo.create(l)),
     });
 
     return this.orderRepo.save(order);
@@ -101,6 +116,11 @@ export class PurchaseOrdersService {
     return this.orderRepo.save(order);
   }
 
+  /**
+   * Confirms an RFQ. Orders above the tenant approval threshold go to
+   * "to_approve" unless the user can approve them (purchasing/po_approval/approve),
+   * in which case they are approved and confirmed at once.
+   */
   async confirm(
     tenantId: string,
     userId: string,
@@ -108,10 +128,66 @@ export class PurchaseOrdersService {
   ): Promise<PurchaseOrder> {
     const order = await this.findById(tenantId, id);
 
+    if (order.status === PurchaseOrderStatus.TO_APPROVE) {
+      throw new ConflictException('The order is waiting for approval');
+    }
     if (order.status !== PurchaseOrderStatus.DRAFT && order.status !== PurchaseOrderStatus.SENT) {
       throw new ConflictException('Only draft orders can be confirmed');
     }
 
+    if (!order.approvedBy && (await this.requiresApproval(tenantId, order))) {
+      const canApprove = this.rbac
+        ? await this.rbac.hasPermission(tenantId, userId, PO_APPROVAL_PERMISSION)
+        : false;
+      if (!canApprove) {
+        order.status = PurchaseOrderStatus.TO_APPROVE;
+        order.rejectionReason = null;
+        return this.orderRepo.save(order);
+      }
+      order.approvedBy = userId;
+      order.approvedAt = new Date();
+    }
+
+    return this.doConfirm(tenantId, userId, order);
+  }
+
+  /** Approves an order waiting for approval and confirms it. */
+  async approve(tenantId: string, userId: string, id: string): Promise<PurchaseOrder> {
+    const order = await this.findById(tenantId, id);
+    if (order.status !== PurchaseOrderStatus.TO_APPROVE) {
+      throw new ConflictException('Only orders waiting for approval can be approved');
+    }
+    order.approvedBy = userId;
+    order.approvedAt = new Date();
+    order.rejectionReason = null;
+    return this.doConfirm(tenantId, userId, order);
+  }
+
+  /** Sends an order waiting for approval back to draft. */
+  async reject(tenantId: string, id: string, reason?: string): Promise<PurchaseOrder> {
+    const order = await this.findById(tenantId, id);
+    if (order.status !== PurchaseOrderStatus.TO_APPROVE) {
+      throw new ConflictException('Only orders waiting for approval can be rejected');
+    }
+    order.status = PurchaseOrderStatus.DRAFT;
+    order.rejectionReason = reason || 'Rejected';
+    return this.orderRepo.save(order);
+  }
+
+  async requiresApproval(tenantId: string, order: PurchaseOrder): Promise<boolean> {
+    if (!this.settingsService) return false;
+    const settings = await this.settingsService.get(tenantId);
+    const threshold = Number(settings.poApprovalThreshold || 0);
+    if (!(threshold > 0)) return false;
+    const baseTotal = Number(order.totalAmount) * (Number(order.exchangeRate) || 1);
+    return baseTotal > threshold + 0.0001;
+  }
+
+  private async doConfirm(
+    tenantId: string,
+    userId: string,
+    order: PurchaseOrder,
+  ): Promise<PurchaseOrder> {
     order.status = PurchaseOrderStatus.CONFIRMED;
     order.billStatus = PurchaseOrderBillStatus.TO_BILL;
     const saved = await this.orderRepo.save(order);
@@ -232,6 +308,7 @@ export class PurchaseOrdersService {
       currencyId: order.currencyId,
       exchangeRate: Number(order.exchangeRate),
       branchId: order.branchId,
+      pricesIncludeTax: order.pricesIncludeTax,
       notes: `Bill for ${order.orderNumber}`,
       lines: toBill.map(({ line, quantity }) => ({
         productId: line.productId,

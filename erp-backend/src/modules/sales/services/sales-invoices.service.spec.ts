@@ -11,12 +11,16 @@ import { SalesInvoiceLine } from '../entities/sales-invoice-line.entity';
 import { Customer } from '../entities/customer.entity';
 import { SequenceService } from '@shared/services/sequence.service';
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
+import { SalesPricingService } from './sales-pricing.service';
+import { InstallmentScheduleService } from './installment-schedule.service';
 
 describe('SalesInvoicesService', () => {
   let service: SalesInvoicesService;
   let invoiceRepo: Record<string, jest.Mock>;
   let customerRepo: Record<string, any>;
   let autoPosting: Record<string, jest.Mock>;
+  let pricing: Record<string, jest.Mock>;
+  let installments: Record<string, jest.Mock>;
   let balanceUpdate: {
     set: jest.Mock;
     setParameter: jest.Mock;
@@ -71,6 +75,15 @@ describe('SalesInvoicesService', () => {
       preflight: jest.fn(),
     };
 
+    pricing = {
+      priceLines: jest.fn(async (_t, _c, lines) => ({
+        lines: lines.map((l: any) => ({ ...l, unitPrice: l.unitPrice ?? 90 })),
+        priceListId: 'pl-1',
+      })),
+      enforceMinPrice: jest.fn(),
+    };
+    installments = { syncInvoice: jest.fn() };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SalesInvoicesService,
@@ -79,6 +92,8 @@ describe('SalesInvoicesService', () => {
         { provide: getRepositoryToken(Customer), useValue: customerRepo },
         { provide: SequenceService, useValue: { next: jest.fn().mockResolvedValue('INV-000001') } },
         { provide: AutoPostingService, useValue: autoPosting },
+        { provide: SalesPricingService, useValue: pricing },
+        { provide: InstallmentScheduleService, useValue: installments },
       ],
     }).compile();
 
@@ -172,5 +187,85 @@ describe('SalesInvoicesService', () => {
         totalAmount: 57,
       }),
     );
+  });
+
+  it('prices lines without a unit price from the price list and checks minimum prices', async () => {
+    await service.create('t1', 'u1', {
+      customerId: 'cust-1',
+      date: '2026-01-10',
+      lines: [{ productId: 'p1', quantity: 2 }],
+    } as any);
+
+    expect(pricing.priceLines).toHaveBeenCalled();
+    expect(pricing.enforceMinPrice).toHaveBeenCalledWith('t1', 'u1', [expect.objectContaining({ lineTotal: 180 })], 1);
+    expect(invoiceRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ priceListId: 'pl-1', subtotal: 180 }),
+    );
+  });
+
+  it('skips price checks on credit notes', async () => {
+    await service.create(
+      't1',
+      'u1',
+      { customerId: 'cust-1', date: '2026-01-10', lines: [{ productId: 'p1', quantity: 1, unitPrice: 1 }] } as any,
+      { moveType: SalesInvoiceType.CREDIT_NOTE },
+    );
+    expect(pricing.enforceMinPrice).not.toHaveBeenCalled();
+  });
+
+  it('computes tax-inclusive totals and withholding (line rate overrides document rate)', async () => {
+    await service.create('t1', 'u1', {
+      customerId: 'cust-1',
+      date: '2026-01-10',
+      pricesIncludeTax: true,
+      withholdingRate: 1,
+      lines: [
+        { productId: 'p1', quantity: 1, unitPrice: 1140, taxRate: 14, withholdingRate: 3 },
+        { productId: 'p2', quantity: 1, unitPrice: 570, taxRate: 14 },
+      ],
+    } as any);
+
+    expect(invoiceRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pricesIncludeTax: true,
+        subtotal: 1500,
+        taxAmount: 210,
+        totalAmount: 1710,
+        withholdingRate: 1,
+        withholdingAmount: 35,
+        salesRepId: null,
+      }),
+    );
+  });
+
+  it('defaults the sales rep from the customer', async () => {
+    customerRepo.findOne.mockResolvedValue({ ...customer, salesRepId: 'rep-1' });
+    await service.create('t1', 'u1', {
+      customerId: 'cust-1',
+      date: '2026-01-10',
+      lines: [{ productId: 'p1', quantity: 1, unitPrice: 10 }],
+    } as any);
+    expect(invoiceRepo.create).toHaveBeenCalledWith(expect.objectContaining({ salesRepId: 'rep-1' }));
+  });
+
+  it('posts credit notes to the sales return account when configured', async () => {
+    invoiceRepo.findOne.mockResolvedValue({
+      ...postedInvoice(),
+      status: SalesInvoiceStatus.DRAFT,
+      moveType: SalesInvoiceType.CREDIT_NOTE,
+    });
+    await service.post('t1', 'u1', 'inv-1');
+    const request = autoPosting.post.mock.calls[0][0];
+    const account = (key: string) => key;
+    expect(request.buildLines({ salesReturnAccountId: 'ret-acc' }, account)[0]).toEqual({
+      accountId: 'ret-acc',
+      debit: 100,
+    });
+    expect(request.buildLines({}, account)[0]).toEqual({ accountId: 'salesAccountId', debit: 100 });
+  });
+
+  it('syncs installments when a payment is applied', async () => {
+    await service.applyPayment(postedInvoice() as any, 50);
+    expect(installments.syncInvoice).toHaveBeenCalledWith('t1', 'inv-1', 50);
   });
 });

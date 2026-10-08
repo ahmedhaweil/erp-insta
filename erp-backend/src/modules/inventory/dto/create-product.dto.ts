@@ -53,6 +53,12 @@ export class CreateProductDto {
   @IsNumber()
   sellPrice?: number;
 
+  @ApiPropertyOptional({ description: 'Lowest unit price (net of tax) allowed without price override' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  minSellPrice?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()

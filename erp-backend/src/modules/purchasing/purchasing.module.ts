@@ -7,6 +7,21 @@ import { PurchaseInvoice } from './entities/purchase-invoice.entity';
 import { PurchaseInvoiceLine } from './entities/purchase-invoice-line.entity';
 import { Product } from '@modules/inventory/entities/product.entity';
 import { Stock } from '@modules/inventory/entities/stock.entity';
+import { PurchasingSettings } from './entities/purchasing-settings.entity';
+import {
+  PurchaseRequisition,
+  PurchaseRequisitionLine,
+} from './entities/purchase-requisition.entity';
+import { PurchaseReturn, PurchaseReturnLine } from './entities/purchase-return.entity';
+import { PurchasingSettingsService } from './services/purchasing-settings.service';
+import { PurchaseRequisitionsService } from './services/purchase-requisitions.service';
+import { PurchaseReturnsService } from './services/purchase-returns.service';
+import {
+  PurchaseRequisitionsController,
+  PurchaseReturnsController,
+  PurchasingSettingsController,
+} from './controllers/purchasing-extensions.controller';
+import { AuthModule } from '@modules/auth/auth.module';
 import { SuppliersService } from './services/suppliers.service';
 import { PurchaseOrdersService } from './services/purchase-orders.service';
 import { PurchaseInvoicesService } from './services/purchase-invoices.service';
@@ -28,26 +43,40 @@ import { InventoryModule } from '@modules/inventory/inventory.module';
       PurchaseInvoiceLine,
       Product,
       Stock,
+      PurchasingSettings,
+      PurchaseRequisition,
+      PurchaseRequisitionLine,
+      PurchaseReturn,
+      PurchaseReturnLine,
     ]),
     AccountingModule,
     InventoryModule,
+    AuthModule,
   ],
   controllers: [
     SuppliersController,
     PurchaseOrdersController,
     PurchaseInvoicesController,
     ReplenishmentController,
+    PurchasingSettingsController,
+    PurchaseRequisitionsController,
+    PurchaseReturnsController,
   ],
   providers: [
     SuppliersService,
     PurchaseOrdersService,
     PurchaseInvoicesService,
     ReplenishmentService,
+    PurchasingSettingsService,
+    PurchaseRequisitionsService,
+    PurchaseReturnsService,
   ],
   exports: [
     SuppliersService,
     PurchaseOrdersService,
     PurchaseInvoicesService,
+    PurchasingSettingsService,
+    PurchaseReturnsService,
   ],
 })
 export class PurchasingModule {}

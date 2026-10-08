@@ -10,6 +10,8 @@ import { Product, ProductType } from '@modules/inventory/entities/product.entity
 import { PurchaseInvoicesService } from './purchase-invoices.service';
 import { StockService } from '@modules/inventory/services/stock.service';
 import { SequenceService } from '@shared/services/sequence.service';
+import { PurchasingSettingsService } from './purchasing-settings.service';
+import { RbacService } from '@modules/auth/services/rbac.service';
 
 describe('PurchaseOrdersService', () => {
   let service: PurchaseOrdersService;
@@ -21,6 +23,8 @@ describe('PurchaseOrdersService', () => {
   let sequence: Record<string, jest.Mock>;
   let stockService: Record<string, jest.Mock>;
   let invoicesService: Record<string, jest.Mock>;
+  let settingsService: Record<string, jest.Mock>;
+  let rbac: Record<string, jest.Mock>;
 
   const mockOrder = {
     id: 'po-1',
@@ -63,6 +67,9 @@ describe('PurchaseOrdersService', () => {
       approve: jest.fn(),
     };
 
+    settingsService = { get: jest.fn().mockResolvedValue({ poApprovalThreshold: 0 }) };
+    rbac = { hasPermission: jest.fn().mockResolvedValue(false) };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PurchaseOrdersService,
@@ -74,6 +81,8 @@ describe('PurchaseOrdersService', () => {
         { provide: SequenceService, useValue: sequence },
         { provide: StockService, useValue: stockService },
         { provide: PurchaseInvoicesService, useValue: invoicesService },
+        { provide: PurchasingSettingsService, useValue: settingsService },
+        { provide: RbacService, useValue: rbac },
       ],
     }).compile();
 
@@ -288,5 +297,67 @@ describe('PurchaseOrdersService', () => {
 
       await expect(service.createBill('tenant-1', 'user-1', 'po-1')).rejects.toThrow();
     });
+  });
+
+  describe('approval workflow', () => {
+    beforeEach(() => {
+      settingsService.get.mockResolvedValue({ poApprovalThreshold: 1000 });
+    });
+
+    it('sends orders above the threshold to approval when the user cannot approve', async () => {
+      orderRepo.findOne.mockResolvedValue({ ...mockOrder, totalAmount: 600, exchangeRate: 2 });
+
+      const result = await service.confirm('tenant-1', 'user-1', 'po-1');
+
+      expect(result.status).toBe(PurchaseOrderStatus.TO_APPROVE);
+      expect(rbac.hasPermission).toHaveBeenCalledWith('tenant-1', 'user-1', {
+        module: 'purchasing',
+        screen: 'po_approval',
+        action: 'approve',
+      });
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('confirms orders under the threshold without approval', async () => {
+      orderRepo.findOne.mockResolvedValue({ ...mockOrder, totalAmount: 900, exchangeRate: 1 });
+      const result = await service.confirm('tenant-1', 'user-1', 'po-1');
+      expect(result.status).toBe(PurchaseOrderStatus.CONFIRMED);
+      expect(rbac.hasPermission).not.toHaveBeenCalled();
+    });
+
+    it('approves and confirms at once for approvers', async () => {
+      rbac.hasPermission.mockResolvedValue(true);
+      orderRepo.findOne.mockResolvedValue({ ...mockOrder, totalAmount: 5000 });
+      const result = await service.confirm('tenant-1', 'boss', 'po-1');
+      expect(result.status).toBe(PurchaseOrderStatus.CONFIRMED);
+      expect(result.approvedBy).toBe('boss');
+    });
+
+    it('refuses to confirm an order waiting for approval and approves it via approve()', async () => {
+      orderRepo.findOne.mockResolvedValue({ ...mockOrder, status: PurchaseOrderStatus.TO_APPROVE, totalAmount: 5000 });
+      await expect(service.confirm('tenant-1', 'user-1', 'po-1')).rejects.toThrow(ConflictException);
+
+      const approved = await service.approve('tenant-1', 'boss', 'po-1');
+      expect(approved.status).toBe(PurchaseOrderStatus.CONFIRMED);
+      expect(approved.approvedBy).toBe('boss');
+    });
+
+    it('rejects back to draft with a reason', async () => {
+      orderRepo.findOne.mockResolvedValue({ ...mockOrder, status: PurchaseOrderStatus.TO_APPROVE });
+      const result = await service.reject('tenant-1', 'po-1', 'too expensive');
+      expect(result.status).toBe(PurchaseOrderStatus.DRAFT);
+      expect(result.rejectionReason).toBe('too expensive');
+    });
+  });
+
+  it('computes tax-inclusive totals on creation', async () => {
+    await service.create('tenant-1', 'user-1', {
+      supplierId: 'sup-1',
+      pricesIncludeTax: true,
+      lines: [{ productId: 'prod-1', quantity: 2, unitPrice: 57, taxRate: 14 }],
+    } as any);
+    expect(orderRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ subtotal: 100, taxAmount: 14, totalAmount: 114, pricesIncludeTax: true }),
+    );
   });
 });

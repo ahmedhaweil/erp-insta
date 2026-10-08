@@ -78,6 +78,26 @@ export class PurchaseInvoice extends TenantBaseEntity {
   @Column({ name: 'posted_at', type: 'timestamptz', nullable: true })
   postedAt: Date;
 
+  /** Unit prices include VAT (tax-inclusive pricing). */
+  @Column({ name: 'prices_include_tax', default: false })
+  pricesIncludeTax: boolean;
+
+  /** Document withholding tax rate (%) applied to lines without their own rate. */
+  @Column({ name: 'withholding_rate', type: 'decimal', precision: 5, scale: 2, default: 0 })
+  withholdingRate: number;
+
+  /**
+   * Withholding tax we deduct from the vendor at payment (on untaxed
+   * amounts). It does not reduce `totalAmount`; the payments module posts it
+   * to withholdingTaxPayable when the bill is settled.
+   */
+  @Column({ name: 'withholding_amount', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  withholdingAmount: number;
+
+  /** Purchase return that generated this vendor refund. */
+  @Column({ name: 'purchase_return_id', type: 'uuid', nullable: true })
+  purchaseReturnId: string | null;
+
   @ManyToOne(() => Supplier)
   @JoinColumn({ name: 'supplier_id' })
   supplier: Supplier;

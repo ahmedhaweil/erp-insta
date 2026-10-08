@@ -75,6 +75,38 @@ export class SalesInvoice extends TenantBaseEntity {
   @Column({ name: 'posted_at', type: 'timestamptz', nullable: true })
   postedAt: Date;
 
+  /** Sales representative credited with the document (commissions). */
+  @Column({ name: 'sales_rep_id', type: 'uuid', nullable: true })
+  salesRepId: string | null;
+
+  /** Price list used to price lines sent without a unit price. */
+  @Column({ name: 'price_list_id', type: 'uuid', nullable: true })
+  priceListId: string | null;
+
+  /** Unit prices include VAT (tax-inclusive pricing). */
+  @Column({ name: 'prices_include_tax', default: false })
+  pricesIncludeTax: boolean;
+
+  /** Document withholding tax rate (%) applied to lines without their own rate. */
+  @Column({ name: 'withholding_rate', type: 'decimal', precision: 5, scale: 2, default: 0 })
+  withholdingRate: number;
+
+  /**
+   * Withholding tax the customer deducts at payment (on untaxed amounts).
+   * It does not reduce `totalAmount`; the payments module posts it to
+   * withholdingTaxReceivable when the invoice is settled.
+   */
+  @Column({ name: 'withholding_amount', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  withholdingAmount: number;
+
+  /** Financing income added to the invoice by an installment plan. */
+  @Column({ name: 'installment_interest', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  installmentInterest: number;
+
+  /** Sales return that generated this credit note. */
+  @Column({ name: 'sales_return_id', type: 'uuid', nullable: true })
+  salesReturnId: string | null;
+
   @ManyToOne(() => Customer)
   @JoinColumn({ name: 'customer_id' })
   customer: Customer;

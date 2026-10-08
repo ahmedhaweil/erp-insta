@@ -13,6 +13,8 @@ export enum PurchaseOrderBillStatus {
 export enum PurchaseOrderStatus {
   DRAFT = 'draft',
   SENT = 'sent',
+  /** Above the approval threshold, waiting for a purchasing/po_approval/approve user. */
+  TO_APPROVE = 'to_approve',
   CONFIRMED = 'confirmed',
   RECEIVED = 'received',
   CANCELLED = 'cancelled',
@@ -65,6 +67,23 @@ export class PurchaseOrder extends TenantBaseEntity {
 
   @Column({ name: 'bill_status', default: PurchaseOrderBillStatus.NOTHING })
   billStatus: PurchaseOrderBillStatus;
+
+  /** Unit prices include VAT (tax-inclusive pricing). */
+  @Column({ name: 'prices_include_tax', default: false })
+  pricesIncludeTax: boolean;
+
+  @Column({ name: 'approved_by', type: 'uuid', nullable: true })
+  approvedBy: string | null;
+
+  @Column({ name: 'approved_at', type: 'timestamptz', nullable: true })
+  approvedAt: Date | null;
+
+  @Column({ name: 'rejection_reason', type: 'varchar', nullable: true })
+  rejectionReason: string | null;
+
+  /** Purchase requisition this RFQ was generated from. */
+  @Column({ name: 'requisition_id', type: 'uuid', nullable: true })
+  requisitionId: string | null;
 
   @ManyToOne(() => Supplier)
   @JoinColumn({ name: 'supplier_id' })
