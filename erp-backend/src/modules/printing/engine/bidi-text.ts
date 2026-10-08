@@ -65,6 +65,15 @@ export function fontkitReverses(text: string): boolean {
   return false;
 }
 
+/** First strong character is Arabic/Hebrew (rule P2 of the bidi algorithm, simplified). */
+export function firstStrongIsRtl(text: string): boolean {
+  for (const ch of text) {
+    if (RTL_SCRIPT_RE.test(ch) && !/[٠-٩۰-۹]/.test(ch)) return true;
+    if (/\p{L}/u.test(ch)) return false;
+  }
+  return false;
+}
+
 const reverse = (s: string) => Array.from(s).reverse().join('');
 
 /**
@@ -74,7 +83,10 @@ const reverse = (s: string) => Array.from(s).reverse().join('');
 export function visualChunks(line: string, base: Direction): VisualChunk[] {
   if (!line) return [];
   const text = line.replace(/[\r\n\t]+/g, ' ');
-  const embedding = bidi.getEmbeddingLevels(text, base);
+  // In left-to-right documents an Arabic value (customer name, note) keeps
+  // its own right-to-left paragraph direction; Arabic documents stay RTL.
+  const direction = base === 'ltr' && firstStrongIsRtl(text) ? 'rtl' : base;
+  const embedding = bidi.getEmbeddingLevels(text, direction);
   const levels = embedding.levels;
   const mirrored = bidi.getMirroredCharactersMap(text, embedding.levels);
 
