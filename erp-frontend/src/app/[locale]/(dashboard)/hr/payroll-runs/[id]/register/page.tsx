@@ -7,6 +7,7 @@ import PrintStyles from '@/components/people/PrintStyles';
 import { Button, SimpleTable, td, useMoney } from '@/components/people/ui';
 import { usePeopleQuery } from '@/hooks/use-people';
 import { REGISTER_KEYS, hrService } from '@/services/people-hr.service';
+import { PrintButton } from '@/components/platform/PrintButton';
 
 export default function PayrollRegisterPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +26,7 @@ export default function PayrollRegisterPage() {
         <Button variant="secondary" onClick={() => router.push(`/hr/payroll-runs/${id}`)}>
           {tc('back')}
         </Button>
-        <Button onClick={() => window.print()}>{tc('print')}</Button>
+        <PrintButton size="md" path={`/print/payroll-runs/${id}/register`} label={tc('print')} className="!bg-primary-600 !text-white hover:!bg-primary-700" />
       </div>
       <div className="print-sheet">
         <h1 className="text-xl font-bold mb-1">{t('register')}</h1>

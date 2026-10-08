@@ -19,18 +19,19 @@ import {
   useSchedules,
   useUsers,
 } from '@/hooks/use-people';
+import { lookupsService } from '@/services/people-lookups.service';
 import { hrService, type Allowance, type Employee } from '@/services/people-hr.service';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const TEXT_FIELDS = ['code', 'nameEn', 'nameAr', 'nationalId', 'nationality', 'gender', 'email', 'phone', 'bankName', 'bankAccount', 'iban', 'socialInsuranceNumber'] as const;
 const DATE_FIELDS = ['birthDate', 'hireDate', 'contractEndDate'] as const;
-const REF_FIELDS = ['branchId', 'departmentId', 'jobTitleId', 'managerId', 'workScheduleId', 'userId'] as const;
+const REF_FIELDS = ['branchId', 'departmentId', 'jobTitleId', 'managerId', 'workScheduleId', 'userId', 'costCenterId'] as const;
 
 const empty = {
   code: '', nameEn: '', nameAr: '', idType: 'national_id', nationalId: '', nationality: 'EG', birthDate: '', gender: '',
   email: '', phone: '', hireDate: new Date().toISOString().slice(0, 10), branchId: '', departmentId: '', jobTitleId: '',
-  managerId: '', workScheduleId: '', userId: '', bankName: '', bankAccount: '', iban: '', contractType: 'permanent',
+  managerId: '', workScheduleId: '', userId: '', costCenterId: '', bankName: '', bankAccount: '', iban: '', contractType: 'permanent',
   contractEndDate: '', basicSalary: '', socialInsuranceWage: '', socialInsuranceNumber: '', socialInsuranceEnrolled: true,
   payrollCountry: 'EG', trackAttendance: false,
 };
@@ -70,6 +71,7 @@ export default function EmployeeFormPage() {
   const { data: schedules } = useSchedules();
   const { data: employees } = useEmployeesLookup('active');
   const { data: users } = useUsers();
+  const { data: costCenters } = usePeopleQuery(['people-cost-centers'], lookupsService.costCenters);
   const options = {
     branchId: useLabelMap(branches),
     departmentId: useLabelMap(departments),
@@ -77,6 +79,7 @@ export default function EmployeeFormPage() {
     workScheduleId: useLabelMap(schedules, false),
     managerId: useLabelMap(employees?.filter((e) => e.id !== id)),
     userId: new Map((users ?? []).map((u) => [u.id, `${u.name ?? ''} (${u.email ?? ''})`])),
+    costCenterId: useLabelMap(costCenters),
   };
 
   useEffect(() => {
@@ -194,6 +197,7 @@ export default function EmployeeFormPage() {
           {ref('managerId', t('manager'))}
           {ref('workScheduleId', t('workSchedule'))}
           {ref('userId', t('linkedUser'))}
+          {ref('costCenterId', t('costCenter'))}
           <div className="flex items-end">
             <Checkbox label={t('trackAttendance')} checked={form.trackAttendance} onChange={(v) => set('trackAttendance', v)} />
           </div>

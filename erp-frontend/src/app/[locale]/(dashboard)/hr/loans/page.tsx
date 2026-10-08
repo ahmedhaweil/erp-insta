@@ -8,6 +8,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import Modal from '@/components/ui/Modal';
 import { Field, FormActions, Input, KeyValue, LinkButton, Select, SimpleTable, Toolbar, currentPeriod, td, todayIso, useMoney } from '@/components/people/ui';
 import { useEmployeesLookup, useLabelMap, usePeopleMutation, usePeopleQuery } from '@/hooks/use-people';
+import TreasuryPicker from '@/components/people/TreasuryPicker';
 import { hrService, type EmployeeLoan, type HrPaymentMethod } from '@/services/people-hr.service';
 
 const STATUSES = ['draft', 'disbursed', 'settled', 'cancelled'];
@@ -29,14 +30,19 @@ export default function LoansPage() {
   const [viewId, setViewId] = useState<string | null>(null);
   const { data: loan } = usePeopleQuery(['hr-loans', 'detail', viewId], () => hrService.loan(viewId!), !!viewId);
   const [disbursing, setDisbursing] = useState<EmployeeLoan | null>(null);
-  const [disburse, setDisburse] = useState<{ date: string; paymentMethod: HrPaymentMethod }>({ date: todayIso(), paymentMethod: 'cash' });
+  const [disburse, setDisburse] = useState<{ date: string; paymentMethod: HrPaymentMethod; treasuryId: string }>({
+    date: todayIso(),
+    paymentMethod: 'cash',
+    treasuryId: '',
+  });
 
   const create = usePeopleMutation(
     (body: typeof blank) => hrService.createLoan({ ...body, amount: Number(body.amount), installmentCount: Number(body.installmentCount) }),
     { invalidate: ['hr-loans'], success: t('loanCreated'), onSuccess: () => setOpen(false) },
   );
   const doDisburse = usePeopleMutation(
-    (input: { id: string; date: string; paymentMethod: HrPaymentMethod }) => hrService.disburseLoan(input.id, { date: input.date, paymentMethod: input.paymentMethod }),
+    (input: { id: string; date: string; paymentMethod: HrPaymentMethod; treasuryId: string }) =>
+      hrService.disburseLoan(input.id, { date: input.date, paymentMethod: input.paymentMethod, treasuryId: input.treasuryId || undefined }),
     { invalidate: ['hr-loans'], success: t('loanDisbursed'), onSuccess: (res) => { setDisbursing(null); setViewId(res.id); } },
   );
   const cancel = usePeopleMutation((id: string) => hrService.cancelLoan(id), { invalidate: ['hr-loans'], success: t('loanCancelled') });
@@ -76,7 +82,7 @@ export default function LoansPage() {
           <div className="flex gap-3">
             {l.status === 'draft' && (
               <>
-                <LinkButton className="text-green-600" onClick={() => { setDisburse({ date: todayIso(), paymentMethod: 'cash' }); setDisbursing(l); }}>
+                <LinkButton className="text-green-600" onClick={() => { setDisburse({ date: todayIso(), paymentMethod: 'cash', treasuryId: '' }); setDisbursing(l); }}>
                   {t('disburse')}
                 </LinkButton>
                 <LinkButton className="text-red-600" disabled={cancel.isPending} onClick={() => cancel.mutate(l.id)}>
@@ -134,6 +140,11 @@ export default function LoansPage() {
           <Field label={t('paymentMethod')} required>
             <Select value={disburse.paymentMethod} onChange={(e) => setDisburse((d) => ({ ...d, paymentMethod: e.target.value as HrPaymentMethod }))} options={['cash', 'bank'].map((v) => ({ value: v, label: t(`method_${v}`) }))} />
           </Field>
+          <TreasuryPicker
+            method={disburse.paymentMethod}
+            value={disburse.treasuryId}
+            onChange={(treasuryId) => setDisburse((d) => (d.treasuryId === treasuryId ? d : { ...d, treasuryId }))}
+          />
           <p className="text-xs text-gray-500">{t('disburseHint')}</p>
           <FormActions onCancel={() => setDisbursing(null)} submitting={doDisburse.isPending} submitLabel={t('disburse')} />
         </form>

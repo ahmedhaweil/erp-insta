@@ -7,6 +7,7 @@ import PrintStyles from '@/components/people/PrintStyles';
 import { Button, useMoney } from '@/components/people/ui';
 import { useDepartments, useJobTitles, useLabelMap, usePeopleQuery } from '@/hooks/use-people';
 import { hrService } from '@/services/people-hr.service';
+import { PrintButton } from '@/components/platform/PrintButton';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -27,6 +28,9 @@ export default function PayslipPage() {
   const router = useRouter();
   const money = useMoney();
   const { data: slip, isLoading } = usePeopleQuery(['hr-payslip', id, employeeId], () => hrService.payslip(id, employeeId));
+  // The server PDF is addressed by the payroll line id.
+  const { data: run } = usePeopleQuery(['hr-payroll-runs', id], () => hrService.run(id));
+  const lineId = (run as any)?.lines?.find((l: any) => l.employeeId === employeeId)?.id as string | undefined;
   const deptMap = useLabelMap(useDepartments().data, false);
   const jobMap = useLabelMap(useJobTitles().data, false);
 
@@ -49,7 +53,11 @@ export default function PayslipPage() {
         <Button variant="secondary" onClick={() => router.push(`/hr/payroll-runs/${id}`)}>
           {tc('back')}
         </Button>
-        <Button onClick={() => window.print()}>{tc('print')}</Button>
+        {lineId ? (
+          <PrintButton size="md" variant="secondary" path={`/print/payroll-lines/${lineId}/payslip`} label={tc('print')} className="!bg-primary-600 !text-white hover:!bg-primary-700" />
+        ) : (
+          <Button onClick={() => window.print()}>{tc('print')}</Button>
+        )}
       </div>
 
       <div className="print-sheet bg-white border border-gray-200 rounded-xl p-8 max-w-3xl mx-auto text-sm">

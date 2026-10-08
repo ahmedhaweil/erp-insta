@@ -23,16 +23,31 @@ export default function LeaveRequestsPage() {
   const empMap = useLabelMap(employees);
   const typeMap = useLabelMap(types, false);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ employeeId: '', leaveTypeId: '', startDate: todayIso(), endDate: todayIso(), reason: '' });
+  const emptyForm = { employeeId: '', leaveTypeId: '', startDate: todayIso(), endDate: todayIso(), reason: '', halfDay: false, halfDayPeriod: 'am' as 'am' | 'pm' };
+  const [form, setForm] = useState(emptyForm);
+  const selectedType = types?.find((x) => x.id === form.leaveTypeId);
+  const halfDayAllowed = !!selectedType?.allowHalfDay;
   const [deciding, setDeciding] = useState<{ request: LeaveRequest; action: 'approve' | 'reject' } | null>(null);
   const [note, setNote] = useState('');
 
   const invalidate = ['hr-leave-requests', 'hr-leave-balances'];
-  const create = usePeopleMutation((body: typeof form) => hrService.createLeaveRequest(body), {
+  const create = usePeopleMutation(
+    (f: typeof form) =>
+      hrService.createLeaveRequest({
+        employeeId: f.employeeId,
+        leaveTypeId: f.leaveTypeId,
+        startDate: f.startDate,
+        endDate: f.halfDay && halfDayAllowed ? f.startDate : f.endDate,
+        reason: f.reason,
+        halfDay: f.halfDay && halfDayAllowed ? true : undefined,
+        halfDayPeriod: f.halfDay && halfDayAllowed ? f.halfDayPeriod : undefined,
+      }),
+    {
     invalidate,
     success: t('leaveRequested'),
     onSuccess: () => setOpen(false),
-  });
+    },
+  );
   const decide = usePeopleMutation(
     (input: { id: string; action: 'approve' | 'reject'; note: string }) =>
       input.action === 'approve' ? hrService.approveLeave(input.id, input.note) : hrService.rejectLeave(input.id, input.note),
@@ -53,7 +68,7 @@ export default function LeaveRequestsPage() {
         action={{
           label: t('newLeaveRequest'),
           onClick: () => {
-            setForm({ employeeId: '', leaveTypeId: '', startDate: todayIso(), endDate: todayIso(), reason: '' });
+            setForm({ ...emptyForm, startDate: todayIso(), endDate: todayIso() });
             setOpen(true);
           },
         }}
@@ -75,7 +90,11 @@ export default function LeaveRequestsPage() {
           { key: 'leaveTypeId', header: t('leaveType'), render: (r) => typeMap.get(r.leaveTypeId) ?? '-' },
           { key: 'startDate', header: t('from') },
           { key: 'endDate', header: t('to') },
-          { key: 'days', header: t('days'), render: (r) => Number(r.days) },
+          {
+            key: 'days',
+            header: t('days'),
+            render: (r) => (r.halfDay ? `${Number(r.days)} (${t(`halfDay_${r.halfDayPeriod ?? 'am'}`)})` : Number(r.days)),
+          },
           { key: 'reason', header: t('reason'), render: (r) => r.reason || r.decisionNote || '-' },
           { key: 'status', header: tc('status'), render: (r) => <StatusBadge status={r.status} label={t(`leave_${r.status}`)} /> },
         ]}
@@ -108,13 +127,30 @@ export default function LeaveRequestsPage() {
           <Field label={t('leaveType')} required>
             <Select required value={form.leaveTypeId} onChange={(e) => setForm((f) => ({ ...f, leaveTypeId: e.target.value }))} placeholder={tp('select')} options={[...typeMap].map(([value, label]) => ({ value, label }))} />
           </Field>
+          {halfDayAllowed && (
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={form.halfDay} onChange={(e) => setForm((f) => ({ ...f, halfDay: e.target.checked }))} />
+                {t('halfDay')}
+              </label>
+              {form.halfDay &&
+                (['am', 'pm'] as const).map((p) => (
+                  <label key={p} className="inline-flex items-center gap-1.5">
+                    <input type="radio" checked={form.halfDayPeriod === p} onChange={() => setForm((f) => ({ ...f, halfDayPeriod: p }))} />
+                    {t(`halfDay_${p}`)}
+                  </label>
+                ))}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
-            <Field label={t('from')} required>
+            <Field label={form.halfDay && halfDayAllowed ? tc('date') : t('from')} required>
               <Input type="date" required value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
             </Field>
-            <Field label={t('to')} required>
-              <Input type="date" required value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
-            </Field>
+            {!(form.halfDay && halfDayAllowed) && (
+              <Field label={t('to')} required>
+                <Input type="date" required value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
+              </Field>
+            )}
           </div>
           <Field label={t('reason')}>
             <Input value={form.reason} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} />

@@ -12,9 +12,14 @@ import StatCard from '@/components/ui/StatCard';
 import { Button, Card, Field, FormActions, Input, KeyValue, Select, SimpleTable, td, todayIso, useMoney } from '@/components/people/ui';
 import { useBranches, useDepartments, useLabelMap, usePeopleMutation, usePeopleQuery } from '@/hooks/use-people';
 import { hrService, type HrPaymentMethod } from '@/services/people-hr.service';
-import { Banknote, Users, Landmark, Receipt } from 'lucide-react';
+import { Banknote, Users, Landmark, Receipt, Download } from 'lucide-react';
+import TreasuryPicker from '@/components/people/TreasuryPicker';
+import { PrintButton } from '@/components/platform/PrintButton';
+import { toast } from 'sonner';
+import { apiErrorMessage } from '@/hooks/use-people';
+import { downloadFile } from '@/services/platform.service';
 
-type Dialog = 'approve' | 'pay' | 'reverse' | 'cancel' | null;
+type Dialog = 'approve' | 'pay' | 'reverse' | 'cancel' | 'bankFile' | null;
 
 export default function PayrollRunPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,12 +36,36 @@ export default function PayrollRunPage() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [date, setDate] = useState(todayIso());
   const [method, setMethod] = useState<HrPaymentMethod>('bank');
+  const [treasuryId, setTreasuryId] = useState('');
+  const [bankFile, setBankFile] = useState({ format: 'generic' as 'generic' | 'wps', bankName: '', valueDate: '' });
+  const [downloading, setDownloading] = useState(false);
+  const tpl = useTranslations('platform');
 
   const invalidate = ['hr-payroll-runs', 'hr-loans', 'hr-payroll-adjustments'];
   const close = { onSuccess: () => setDialog(null) };
   const recompute = usePeopleMutation(() => hrService.recomputeRun(id), { invalidate, success: t('runRecomputed') });
   const approve = usePeopleMutation((postingDate: string) => hrService.approveRun(id, postingDate || undefined), { invalidate, success: t('runApproved'), ...close });
-  const pay = usePeopleMutation((body: { date: string; paymentMethod: HrPaymentMethod }) => hrService.payRun(id, body), { invalidate, success: t('runPaid'), ...close });
+  const pay = usePeopleMutation((body: { date: string; paymentMethod: HrPaymentMethod; treasuryId?: string }) => hrService.payRun(id, body), {
+    invalidate: [...invalidate, 'people-treasuries'],
+    success: t('runPaid'),
+    ...close,
+  });
+  const downloadBankFile = async () => {
+    setDownloading(true);
+    try {
+      await downloadFile(`/hr/payroll-runs/${id}/bank-file`, {
+        format: bankFile.format,
+        bankName: bankFile.bankName || undefined,
+        valueDate: bankFile.valueDate || undefined,
+        download: 'true',
+      }, `payroll-${id}.csv`);
+      setDialog(null);
+    } catch (err) {
+      toast.error(apiErrorMessage(err, tc('error')));
+    } finally {
+      setDownloading(false);
+    }
+  };
   const reverse = usePeopleMutation((d: string) => hrService.reverseRun(id, d || undefined), { invalidate, success: t('runReversed'), ...close });
   const cancel = usePeopleMutation(() => hrService.cancelRun(id), { invalidate, success: t('runCancelled'), ...close });
 
@@ -44,6 +73,7 @@ export default function PayrollRunPage() {
 
   const open = (d: Dialog, defaultDate = todayIso()) => {
     setDate(defaultDate);
+    setTreasuryId('');
     setDialog(d);
   };
 
@@ -79,6 +109,15 @@ export default function PayrollRunPage() {
         <Button variant="secondary" onClick={() => router.push(`/hr/payroll-runs/${id}/register`)}>
           {t('register')}
         </Button>
+        <PrintButton size="md" path={`/print/payroll-runs/${id}/register`} label={tpl('print.register')} />
+        <PrintButton size="md" path={`/print/payroll-runs/${id}/payslips`} label={tpl('print.allPayslips')} />
+        {run.status !== 'draft' && run.status !== 'cancelled' && (
+          <Button variant="secondary" onClick={() => setDialog('bankFile')}>
+            <span className="inline-flex items-center gap-1.5">
+              <Download size={14} /> {t('bankFile')}
+            </span>
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -149,13 +188,14 @@ export default function PayrollRunPage() {
         </form>
       </Modal>
       <Modal isOpen={dialog === 'pay'} onClose={() => setDialog(null)} title={t('pay')} size="sm">
-        <form onSubmit={(e) => { e.preventDefault(); pay.mutate({ date, paymentMethod: method }); }} className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); pay.mutate({ date, paymentMethod: method, treasuryId: treasuryId || undefined }); }} className="space-y-4">
           <Field label={tc('date')} required>
             <Input type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
           </Field>
           <Field label={t('paymentMethod')} hint={t('paymentMethodHint')}>
             <Select value={method} onChange={(e) => setMethod(e.target.value as HrPaymentMethod)} options={['bank', 'cash'].map((v) => ({ value: v, label: t(`method_${v}`) }))} />
           </Field>
+          <TreasuryPicker method={method} value={treasuryId} onChange={setTreasuryId} />
           <p className="text-sm">{t('net')}: <b>{money(run.totalNet)}</b></p>
           <FormActions onCancel={() => setDialog(null)} submitting={pay.isPending} submitLabel={t('pay')} />
         </form>
@@ -167,6 +207,27 @@ export default function PayrollRunPage() {
           </Field>
           <p className="text-sm text-red-700">{t('reverseWarning')}</p>
           <FormActions onCancel={() => setDialog(null)} submitting={reverse.isPending} submitLabel={t('reverse')} />
+        </form>
+      </Modal>
+      <Modal isOpen={dialog === 'bankFile'} onClose={() => setDialog(null)} title={t('bankFile')} size="sm">
+        <form onSubmit={(e) => { e.preventDefault(); downloadBankFile(); }} className="space-y-4">
+          <Field label={t('bankFileFormat')}>
+            <Select
+              value={bankFile.format}
+              onChange={(e) => setBankFile({ ...bankFile, format: e.target.value as 'generic' | 'wps' })}
+              options={[
+                { value: 'generic', label: t('bankFile_generic') },
+                { value: 'wps', label: t('bankFile_wps') },
+              ]}
+            />
+          </Field>
+          <Field label={t('bankFileBank')} hint={t('bankFileBankHint')}>
+            <Input value={bankFile.bankName} onChange={(e) => setBankFile({ ...bankFile, bankName: e.target.value })} />
+          </Field>
+          <Field label={t('bankFileValueDate')}>
+            <Input type="date" value={bankFile.valueDate} onChange={(e) => setBankFile({ ...bankFile, valueDate: e.target.value })} />
+          </Field>
+          <FormActions onCancel={() => setDialog(null)} submitting={downloading} submitLabel={tc('download')} />
         </form>
       </Modal>
       <ConfirmDialog

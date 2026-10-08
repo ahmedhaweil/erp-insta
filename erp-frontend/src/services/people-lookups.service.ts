@@ -19,4 +19,10 @@ export const lookupsService = {
   products: () => data<NamedRef[]>(api.get('/inventory/products')),
   warehouses: () => data<NamedRef[]>(api.get('/inventory/warehouses')),
   customers: () => data<NamedRef[]>(api.get('/sales/customers')),
+  costCenters: () => data<NamedRef[]>(api.get('/accounting/cost-centers')),
+  /** Cash boxes / bank accounts the current user may pay from, with balances. */
+  usableTreasuries: () =>
+    data<(NamedRef & { type: 'cash' | 'bank'; isActive?: boolean; balance?: number | string | null })[]>(
+      api.get('/treasury/treasuries', { params: { usableOnly: 'true', activeOnly: 'true', withBalance: 'true' } }),
+    ),
 };

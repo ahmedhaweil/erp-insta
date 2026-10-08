@@ -81,6 +81,115 @@ export interface Employee {
   payrollCountry: PayrollCountry;
   trackAttendance: boolean;
   userId?: string | null;
+  costCenterId?: string | null;
+}
+
+export interface LeaveEncashment {
+  id: string;
+  employeeId: string;
+  leaveTypeId: string;
+  year: number;
+  days: number | string;
+  dailyRate: number | string;
+  amount: number | string;
+  period: string;
+  status: 'approved' | 'cancelled';
+  payrollAdjustmentId: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export type OvertimeStatus = 'draft' | 'approved' | 'rejected' | 'cancelled';
+
+export interface OvertimeRequest {
+  id: string;
+  employeeId: string;
+  date: string;
+  hours: number | string;
+  reason: string | null;
+  status: OvertimeStatus;
+  decisionNote: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+}
+
+export interface EosProvisionLine {
+  id: string;
+  employeeId: string;
+  employeeCode: string;
+  serviceYears: number | string;
+  monthlyWage: number | string;
+  liability: number | string;
+  booked: number | string;
+  delta: number | string;
+}
+
+export interface EosProvision {
+  id: string;
+  period: string;
+  postingDate: string;
+  status: 'posted' | 'reversed';
+  employeeCount: number;
+  totalLiability: number | string;
+  totalDelta: number | string;
+  createdAt: string;
+  lines?: EosProvisionLine[];
+}
+
+export type SettlementReason = 'termination' | 'contract_end' | 'resignation' | 'resignation_article_87' | 'dismissal_article_80';
+export const SETTLEMENT_REASONS: SettlementReason[] = ['termination', 'contract_end', 'resignation', 'resignation_article_87', 'dismissal_article_80'];
+
+export interface FinalSettlement {
+  id: string;
+  settlementNumber: string;
+  employeeId: string;
+  terminationDate: string;
+  reason: SettlementReason;
+  status: 'draft' | 'posted' | 'paid' | 'cancelled';
+  monthlyWage: number | string;
+  serviceYears: number | string;
+  gratuity: number | string;
+  provisionUsed: number | string;
+  leaveDays: number | string;
+  leaveEncashment: number | string;
+  lastSalary: number | string;
+  otherAdditions: number | string;
+  loanDeduction: number | string;
+  otherDeductions: number | string;
+  totalEarnings: number | string;
+  net: number | string;
+  details: Record<string, any> | null;
+  postingDate: string | null;
+  paidDate: string | null;
+  paymentMethod: HrPaymentMethod | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface MyProfile {
+  id: string;
+  code: string;
+  nameEn: string;
+  nameAr?: string | null;
+  hireDate: string;
+  branchId?: string | null;
+  departmentId?: string | null;
+  jobTitleId?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  bankName?: string | null;
+  iban?: string | null;
+  status: string;
+}
+
+export interface MyPayslipRow {
+  runId: string;
+  runNumber: string;
+  period: string;
+  status: string;
+  gross: number;
+  totalDeductions: number;
+  net: number;
 }
 
 export interface AttendanceRecord {
@@ -137,6 +246,12 @@ export interface LeaveType {
   seniorAfterYears?: number | null;
   allowNegative: boolean;
   isActive: boolean;
+  accrualMethod?: 'annual' | 'monthly';
+  carryForward?: boolean;
+  carryForwardMax?: number | string | null;
+  carryForwardExpiryMonths?: number | null;
+  allowHalfDay?: boolean;
+  encashable?: boolean;
 }
 
 export type LeaveStatus = 'draft' | 'approved' | 'rejected' | 'cancelled';
@@ -152,6 +267,8 @@ export interface LeaveRequest {
   reason?: string | null;
   status: LeaveStatus;
   decisionNote?: string | null;
+  halfDay?: boolean;
+  halfDayPeriod?: 'am' | 'pm' | null;
 }
 
 export interface LeaveBalance {
@@ -449,7 +566,7 @@ export const hrService = {
     data<EmployeeLoan[]>(api.get('/hr/loans', { params: clean(params) })),
   loan: (id: string) => data<EmployeeLoan>(api.get(`/hr/loans/${id}`)),
   createLoan: (body: Record<string, any>) => data<EmployeeLoan>(api.post('/hr/loans', clean(body))),
-  disburseLoan: (id: string, body: { date: string; paymentMethod: HrPaymentMethod }) =>
+  disburseLoan: (id: string, body: { date: string; paymentMethod: HrPaymentMethod; treasuryId?: string }) =>
     data<EmployeeLoan>(api.post(`/hr/loans/${id}/disburse`, body)),
   cancelLoan: (id: string) => data<EmployeeLoan>(api.post(`/hr/loans/${id}/cancel`)),
 
@@ -465,11 +582,55 @@ export const hrService = {
   recomputeRun: (id: string) => data<PayrollRun>(api.post(`/hr/payroll-runs/${id}/recompute`)),
   approveRun: (id: string, postingDate?: string) =>
     data<PayrollRun>(api.post(`/hr/payroll-runs/${id}/approve`, clean({ postingDate }))),
-  payRun: (id: string, body: { date: string; paymentMethod: HrPaymentMethod }) =>
+  payRun: (id: string, body: { date: string; paymentMethod: HrPaymentMethod; treasuryId?: string }) =>
     data<PayrollRun>(api.post(`/hr/payroll-runs/${id}/pay`, body)),
   cancelRun: (id: string) => data<PayrollRun>(api.post(`/hr/payroll-runs/${id}/cancel`)),
   reverseRun: (id: string, date?: string) => data<PayrollRun>(api.post(`/hr/payroll-runs/${id}/reverse`, clean({ date }))),
   payslip: (runId: string, employeeId: string) => data<Payslip>(api.get(`/hr/payroll-runs/${runId}/payslips/${employeeId}`)),
   register: (runId: string) => data<PayrollRegister>(api.get(`/hr/payroll-runs/${runId}/register`)),
   socialInsurance: (period: string) => data<SocialInsuranceReport>(api.get('/hr/reports/social-insurance', { params: { period } })),
+
+  // leave encashment
+  encashments: (params: { employeeId?: string; period?: string } = {}) =>
+    data<LeaveEncashment[]>(api.get('/hr/leave-encashments', { params: clean(params) })),
+  createEncashment: (body: Record<string, any>) => data<LeaveEncashment>(api.post('/hr/leave-encashments', clean(body))),
+  cancelEncashment: (id: string) => data<LeaveEncashment>(api.post(`/hr/leave-encashments/${id}/cancel`)),
+
+  // overtime
+  overtime: (params: { employeeId?: string; status?: string; from?: string; to?: string } = {}) =>
+    data<OvertimeRequest[]>(api.get('/hr/overtime-requests', { params: clean(params) })),
+  createOvertime: (body: Record<string, any>) => data<OvertimeRequest>(api.post('/hr/overtime-requests', clean(body))),
+  approveOvertime: (id: string, note?: string) => data<OvertimeRequest>(api.post(`/hr/overtime-requests/${id}/approve`, clean({ note }))),
+  rejectOvertime: (id: string, note?: string) => data<OvertimeRequest>(api.post(`/hr/overtime-requests/${id}/reject`, clean({ note }))),
+  cancelOvertime: (id: string) => data<OvertimeRequest>(api.post(`/hr/overtime-requests/${id}/cancel`)),
+
+  // end of service
+  provisions: () => data<EosProvision[]>(api.get('/hr/eos-provisions')),
+  provision: (id: string) => data<EosProvision>(api.get(`/hr/eos-provisions/${id}`)),
+  createProvision: (body: { period: string; postingDate?: string }) => data<EosProvision>(api.post('/hr/eos-provisions', clean(body))),
+  reverseProvision: (id: string, date?: string) => data<EosProvision>(api.post(`/hr/eos-provisions/${id}/reverse`, clean({ date }))),
+  settlements: (params: { employeeId?: string; status?: string } = {}) =>
+    data<FinalSettlement[]>(api.get('/hr/final-settlements', { params: clean(params) })),
+  settlement: (id: string) => data<FinalSettlement>(api.get(`/hr/final-settlements/${id}`)),
+  createSettlement: (body: Record<string, any>) => data<FinalSettlement>(api.post('/hr/final-settlements', body)),
+  postSettlement: (id: string, date?: string) => data<FinalSettlement>(api.post(`/hr/final-settlements/${id}/post`, clean({ date }))),
+  paySettlement: (id: string, body: { date: string; paymentMethod: HrPaymentMethod; treasuryId?: string }) =>
+    data<FinalSettlement>(api.post(`/hr/final-settlements/${id}/pay`, clean(body))),
+  cancelSettlement: (id: string, date?: string) => data<FinalSettlement>(api.post(`/hr/final-settlements/${id}/cancel`, clean({ date }))),
+};
+
+/** Employee self-service (/hr/me): open to every logged-in user linked to an employee. */
+export const selfService = {
+  profile: () => data<MyProfile>(api.get('/hr/me')),
+  payslips: () => data<MyPayslipRow[]>(api.get('/hr/me/payslips')),
+  payslip: (runId: string) => data<Payslip>(api.get(`/hr/me/payslips/${runId}`)),
+  balances: (year?: number) => data<LeaveBalance[]>(api.get('/hr/me/leave-balances', { params: clean({ year }) })),
+  leaveTypes: () => data<LeaveType[]>(api.get('/hr/me/leave-types')),
+  leaveRequests: () => data<LeaveRequest[]>(api.get('/hr/me/leave-requests')),
+  requestLeave: (body: Record<string, any>) => data<LeaveRequest>(api.post('/hr/me/leave-requests', clean(body))),
+  cancelLeave: (id: string) => data<LeaveRequest>(api.post(`/hr/me/leave-requests/${id}/cancel`)),
+  loans: () => data<EmployeeLoan[]>(api.get('/hr/me/loans')),
+  overtime: () => data<OvertimeRequest[]>(api.get('/hr/me/overtime-requests')),
+  requestOvertime: (body: { date: string; hours: number; reason?: string }) =>
+    data<OvertimeRequest>(api.post('/hr/me/overtime-requests', clean(body))),
 };
