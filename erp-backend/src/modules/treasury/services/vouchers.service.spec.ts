@@ -8,6 +8,7 @@ describe('VouchersService', () => {
   let stored: any;
   let autoPosting: Record<string, jest.Mock>;
   let ledger: Record<string, jest.Mock>;
+  let treasuries: Record<string, jest.Mock>;
   const box = {
     id: 'box',
     code: 'BOX',
@@ -28,10 +29,16 @@ describe('VouchersService', () => {
     const lineRepo = { create: jest.fn((l) => l), delete: jest.fn() };
     autoPosting = { post: jest.fn(), preflight: jest.fn(), reverseSource: jest.fn() };
     ledger = { assertNotReconciled: jest.fn() };
+    treasuries = {
+      getActive: jest.fn().mockResolvedValue(box),
+      getUsable: jest.fn().mockResolvedValue(box),
+      assertUsable: jest.fn(),
+      assertFunds: jest.fn(),
+    };
     service = new VouchersService(
       voucherRepo as any,
       lineRepo as any,
-      { getActive: jest.fn().mockResolvedValue(box) } as any,
+      treasuries as any,
       ledger as any,
       autoPosting as any,
       { next: jest.fn().mockResolvedValue('PV-000001') } as any,

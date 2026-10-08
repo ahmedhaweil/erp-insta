@@ -1,9 +1,19 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { RbacService } from '@modules/auth/services/rbac.service';
+import {
+  TREASURY_ALL_PERMISSION,
+  assertSufficientFunds,
+  canUseTreasury,
+  isRestricted,
+  treasuryAllowsNegative,
+} from './treasury-access.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Treasury, TreasuryType } from '../entities/treasury.entity';
@@ -24,16 +34,68 @@ export class TreasuriesService {
     private readonly accountRepo: Repository<Account>,
     private readonly ledger: TreasuryLedgerService,
     private readonly autoPosting: AutoPostingService,
+    @Optional() private readonly rbac?: RbacService,
   ) {}
+
+  // ------------------------------------------------------------ access rules
+
+  /** Whether the user holds treasury/treasuries/all (may use every treasury). */
+  async hasAllAccess(tenantId: string, userId: string): Promise<boolean> {
+    return this.rbac ? this.rbac.hasPermission(tenantId, userId, TREASURY_ALL_PERMISSION) : false;
+  }
+
+  /** A treasury with custodians can only be used by them or by holders of treasury/treasuries/all. */
+  async canUse(tenantId: string, userId: string, treasury: Treasury): Promise<boolean> {
+    if (!isRestricted(treasury)) return true;
+    if (canUseTreasury(treasury, userId, false)) return true;
+    return this.hasAllAccess(tenantId, userId);
+  }
+
+  async assertUsable(tenantId: string, userId: string, treasury: Treasury): Promise<void> {
+    if (!(await this.canUse(tenantId, userId, treasury))) {
+      throw new ForbiddenException(`You are not a custodian of treasury ${treasury.code}`);
+    }
+  }
+
+  /** Active treasury (optionally of a type) the user may use. */
+  async getUsable(tenantId: string, userId: string, id: string, type?: TreasuryType): Promise<Treasury> {
+    const treasury = await this.getActive(tenantId, id, type);
+    await this.assertUsable(tenantId, userId, treasury);
+    return treasury;
+  }
+
+  /**
+   * Refuses an outflow (treasury currency) that would take a treasury that
+   * may not go negative below zero, today or at the document date.
+   */
+  async assertFunds(tenantId: string, treasury: Treasury, outflow: number, date?: string): Promise<void> {
+    if (!(outflow > 0) || treasuryAllowsNegative(treasury)) return;
+    const total = await this.ledger.balance(tenantId, treasury);
+    assertSufficientFunds(treasury, total.balance, outflow);
+    if (date) {
+      const atDate = await this.ledger.balance(tenantId, treasury, { asOf: date });
+      assertSufficientFunds(treasury, atDate.balance, outflow);
+    }
+  }
 
   async findAll(
     tenantId: string,
-    filter: { type?: TreasuryType; activeOnly?: boolean; withBalance?: boolean } = {},
+    filter: {
+      type?: TreasuryType;
+      activeOnly?: boolean;
+      withBalance?: boolean;
+      /** Only the treasuries this user may use. */
+      usableBy?: string;
+    } = {},
   ) {
     const where: any = { tenantId };
     if (filter.type) where.type = filter.type;
     if (filter.activeOnly) where.isActive = true;
-    const treasuries = await this.treasuryRepo.find({ where, order: { code: 'ASC' } });
+    let treasuries = await this.treasuryRepo.find({ where, order: { code: 'ASC' } });
+    if (filter.usableBy) {
+      const all = await this.hasAllAccess(tenantId, filter.usableBy);
+      treasuries = treasuries.filter((t) => canUseTreasury(t, filter.usableBy as string, all));
+    }
     if (!filter.withBalance) return treasuries;
     return Promise.all(
       treasuries.map(async (t) => ({ ...t, ...(await this.ledger.balance(tenantId, t)) })),
@@ -140,8 +202,9 @@ export class TreasuriesService {
    * Cash book / bank movement report: opening balance before `from`, every
    * movement in the range with its running balance, and the closing balance.
    */
-  async movements(tenantId: string, id: string, from?: string, to?: string) {
+  async movements(tenantId: string, id: string, from?: string, to?: string, userId?: string) {
     const treasury = await this.findById(tenantId, id);
+    if (userId) await this.assertUsable(tenantId, userId, treasury);
     const opening = from
       ? await this.ledger.balance(tenantId, treasury, { before: from })
       : { balance: 0, baseBalance: 0 };

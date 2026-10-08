@@ -76,7 +76,7 @@ export class VouchersService {
     dto: CreateVoucherDto,
     extra: { statementLineId?: string } = {},
   ): Promise<TreasuryVoucher> {
-    const treasury = await this.treasuries.getActive(tenantId, dto.treasuryId);
+    const treasury = await this.treasuries.getUsable(tenantId, userId, dto.treasuryId);
     const exchangeRate = this.rateFor(treasury, dto.exchangeRate);
     const lines = this.buildLines(dto.lines, dto.branchId ?? treasury.branchId);
 
@@ -138,6 +138,11 @@ export class VouchersService {
       throw new ConflictException('Only draft vouchers can be posted');
     }
     const treasury = await this.treasuries.getActive(tenantId, voucher.treasuryId);
+    // Treasury rules: custodian only; a payment cannot take a cash box below zero.
+    await this.treasuries.assertUsable(tenantId, userId, treasury);
+    if (voucher.type === VoucherType.PAYMENT) {
+      await this.treasuries.assertFunds(tenantId, treasury, Number(voucher.amount), voucher.date);
+    }
     await this.autoPosting.preflight(tenantId, voucher.date, []);
 
     await this.autoPosting.post({

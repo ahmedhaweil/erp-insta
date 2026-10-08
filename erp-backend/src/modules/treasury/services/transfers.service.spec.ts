@@ -124,7 +124,13 @@ describe('TransfersService', () => {
     let service: TransfersService;
     let stored: any;
     let autoPosting: Record<string, jest.Mock>;
-    const treasuries = { getActive: jest.fn(), findById: jest.fn() };
+    const treasuries = {
+      getActive: jest.fn(),
+      getUsable: jest.fn(),
+      findById: jest.fn(),
+      assertUsable: jest.fn(),
+      assertFunds: jest.fn(),
+    };
     const ledger = { assertNotReconciled: jest.fn() };
 
     beforeEach(() => {
@@ -137,6 +143,7 @@ describe('TransfersService', () => {
       autoPosting = { post: jest.fn(), preflight: jest.fn() };
       const byId = (_t: string, id: string) => (id === 'cash' ? cash : bank);
       treasuries.getActive.mockImplementation(async (t, id) => byId(t, id));
+      treasuries.getUsable.mockImplementation(async (t, _u, id) => byId(t, id));
       treasuries.findById.mockImplementation(async (t, id) => byId(t, id));
       service = new TransfersService(
         repo as any,

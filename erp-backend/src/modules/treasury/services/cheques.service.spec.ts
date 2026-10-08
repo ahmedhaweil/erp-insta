@@ -52,7 +52,12 @@ describe('ChequesService', () => {
     ledger = { assertNotReconciled: jest.fn() };
     service = new ChequesService(
       repo as any,
-      { getActive: jest.fn().mockResolvedValue(bank) } as any,
+      {
+        getActive: jest.fn().mockResolvedValue(bank),
+        getUsable: jest.fn().mockResolvedValue(bank),
+        assertFunds: jest.fn(),
+        findById: jest.fn().mockResolvedValue(bank),
+      } as any,
       ledger as any,
       payments as any,
       salesInvoices as any,
