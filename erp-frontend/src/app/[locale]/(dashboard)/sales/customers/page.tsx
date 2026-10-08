@@ -1,114 +1,111 @@
 'use client';
 
-import { useState } from 'react';
-import { useTranslations, useLocale } from 'next-intl';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useTranslations } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
-import StatusBadge from '@/components/ui/StatusBadge';
-import { useCustomers, useCreateCustomer } from '@/hooks/use-customers';
-import { customerSchema, type CustomerFormData } from '@/lib/validations/customer.schema';
-import type { Customer } from '@/types';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { EntityForm, type FieldDef, toOptions } from '@/components/operations/form';
+import { byId, fmtMoney, num, RowAction, RowActions, Status, useModal, useNamer } from '@/components/operations/common';
+import { useOpsCustomerCategories, useOpsCustomers, useOpsMutation, useOpsPriceLists, useOpsReps } from '@/hooks/use-operations';
+import { opsSales } from '@/services/operations-sales.service';
+import type { Row } from '@/services/operations-api';
 
 export default function CustomersPage() {
-  const t = useTranslations('sales');
-  const tc = useTranslations('common');
-  const locale = useLocale();
-  const [showModal, setShowModal] = useState(false);
+  const t = useTranslations('ops');
+  const name = useNamer();
+  const { data: customers = [], isLoading } = useOpsCustomers();
+  const { data: categories = [] } = useOpsCustomerCategories();
+  const { data: priceLists = [] } = useOpsPriceLists();
+  const { data: reps = [] } = useOpsReps();
+  const catMap = byId(categories);
+  const plMap = byId(priceLists);
+  const repMap = byId(reps);
+  const form = useModal<Row>();
+  const del = useModal<Row>();
 
-  const { data: customers = [], isLoading } = useCustomers();
-  const createMutation = useCreateCustomer();
+  const save = useOpsMutation(
+    (body: any) => (form.data ? opsSales.updateCustomer(form.data.id, body) : opsSales.createCustomer(body)),
+    { invalidate: ['customers'], onSuccess: () => form.close() },
+  );
+  const remove = useOpsMutation((id: string) => opsSales.deleteCustomer(id), { invalidate: ['customers'], success: 'deleted', onSuccess: () => del.close() });
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<CustomerFormData>({
-    resolver: zodResolver(customerSchema),
-  });
-
-  const onSubmit = async (data: CustomerFormData) => {
-    await createMutation.mutateAsync({
-      ...data,
-      creditLimit: Number(data.creditLimit) || 0,
-    });
-    setShowModal(false);
-    reset();
-  };
-
-  const columns = [
-    { key: 'code', header: t('customerCode') },
-    { key: 'name', header: t('customerName'), render: (item: Customer) => locale === 'ar' ? item.nameAr : (item.nameEn || item.nameAr) },
-    { key: 'phone', header: tc('phone') },
-    { key: 'taxId', header: t('taxId') },
-    { key: 'balance', header: t('balance'), render: (item: Customer) => Number(item.balance).toFixed(2) },
-    { key: 'creditLimit', header: t('creditLimit'), render: (item: Customer) => Number(item.creditLimit).toFixed(2) },
-    { key: 'isActive', header: tc('status'), render: (item: Customer) => <StatusBadge status={item.isActive ? 'active' : 'inactive'} label={item.isActive ? tc('active') : tc('inactive')} /> },
+  const fields: FieldDef[] = [
+    { name: 'code', label: t('common.code'), required: true },
+    { name: 'phone', label: t('common.phone'), required: true },
+    { name: 'nameAr', label: t('common.nameAr'), required: true },
+    { name: 'nameEn', label: t('common.nameEn'), required: true },
+    { name: 'email', label: t('common.email'), type: 'email' },
+    { name: 'taxId', label: t('common.taxId') },
+    { name: 'categoryId', label: t('sales.customerCategory'), type: 'select', options: toOptions(categories, name) },
+    { name: 'priceListId', label: t('sales.priceList'), type: 'select', options: priceLists.map((p) => ({ value: p.id, label: p.name })), hint: t('sales.priceListHint') },
+    { name: 'salesRepId', label: t('sales.salesRep'), type: 'select', options: reps.map((r) => ({ value: r.id, label: `${r.code} - ${r.name}` })) },
+    { name: 'creditLimit', label: t('sales.creditLimit'), type: 'number', min: 0, hint: t('sales.creditLimitHint') },
+    { name: 'paymentTermDays', label: t('sales.paymentTermDays'), type: 'number', min: 0, step: '1' },
+    { name: 'city', label: t('common.city') },
+    { name: 'country', label: t('common.country') },
+    { name: 'isActive', label: t('common.active'), type: 'checkbox' },
+    { name: 'address', label: t('common.address'), wide: true },
   ];
+
+  const submit = (p: any) => {
+    if (p.paymentTermDays != null) p.paymentTermDays = Math.round(p.paymentTermDays);
+    save.mutate(p);
+  };
 
   return (
     <div>
-      <PageHeader title={t('customers')} action={{ label: t('newCustomer'), onClick: () => setShowModal(true) }} />
+      <PageHeader title={t('sales.customers')} action={{ label: t('sales.newCustomer'), onClick: () => form.open() }} />
       <DataTable
-        columns={columns}
         data={customers}
         loading={isLoading}
         searchable
+        pageSize={20}
+        columns={[
+          { key: 'code', header: t('common.code') },
+          { key: 'nameAr', header: t('common.name'), render: (c: Row) => name(c) },
+          { key: 'phone', header: t('common.phone') },
+          { key: 'categoryId', header: t('sales.customerCategory'), render: (c: Row) => (c.categoryId ? name(catMap[c.categoryId]) : '-') },
+          { key: 'priceListId', header: t('sales.priceList'), render: (c: Row) => plMap[c.priceListId]?.name ?? '-' },
+          { key: 'salesRepId', header: t('sales.salesRep'), render: (c: Row) => repMap[c.salesRepId]?.name ?? '-' },
+          { key: 'creditLimit', header: t('sales.creditLimit'), render: (c: Row) => (num(c.creditLimit) ? fmtMoney(c.creditLimit) : t('sales.unlimited')) },
+          { key: 'paymentTermDays', header: t('sales.paymentTermDays') },
+          {
+            key: 'balance',
+            header: t('sales.balance'),
+            render: (c: Row) => (
+              <span className={num(c.creditLimit) && num(c.balance) > num(c.creditLimit) ? 'text-red-600 font-medium' : ''}>{fmtMoney(c.balance)}</span>
+            ),
+          },
+          { key: 'isActive', header: t('common.status'), render: (c: Row) => <Status status={c.isActive ? 'active' : 'inactive'} /> },
+        ]}
+        actions={(c: Row) => (
+          <RowActions>
+            <RowAction onClick={() => form.open(c)}>{t('common.edit')}</RowAction>
+            <RowAction tone="red" onClick={() => del.open(c)}>{t('common.delete')}</RowAction>
+          </RowActions>
+        )}
       />
-
-      <Modal isOpen={showModal} onClose={() => { setShowModal(false); reset(); }} title={t('newCustomer')} size="lg">
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('customerCode')}</label>
-              <input {...register('code')} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
-              {errors.code && <p className="text-xs text-red-500 mt-1">{errors.code.message}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{tc('phone')}</label>
-              <input {...register('phone')} dir="ltr" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
-              {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone.message}</p>}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('customerName')} (عربي)</label>
-            <input {...register('nameAr')} dir="rtl" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
-            {errors.nameAr && <p className="text-xs text-red-500 mt-1">{errors.nameAr.message}</p>}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('customerName')} (English)</label>
-            <input {...register('nameEn')} dir="ltr" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{tc('email')}</label>
-              <input type="email" {...register('email')} dir="ltr" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
-              {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('taxId')}</label>
-              <input {...register('taxId')} dir="ltr" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{tc('address')}</label>
-            <input {...register('address')} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('creditLimit')}</label>
-            <input type="number" step="0.01" {...register('creditLimit')} dir="ltr" className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
-          </div>
-          <div className="flex gap-3 justify-end pt-2">
-            <button type="button" onClick={() => { setShowModal(false); reset(); }} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm">{tc('cancel')}</button>
-            <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm disabled:opacity-50">
-              {createMutation.isPending ? tc('loading') : tc('save')}
-            </button>
-          </div>
-        </form>
+      <Modal isOpen={form.isOpen} onClose={form.close} title={form.data ? t('sales.editCustomer') : t('sales.newCustomer')} size="xl">
+        <EntityForm
+          key={form.data?.id ?? 'new'}
+          fields={fields}
+          mode={form.data ? 'edit' : 'create'}
+          initial={form.data ?? { isActive: true, paymentTermDays: 0 }}
+          loading={save.isPending}
+          onSubmit={submit}
+          onCancel={form.close}
+        />
       </Modal>
+      <ConfirmDialog
+        isOpen={del.isOpen}
+        onClose={del.close}
+        onConfirm={() => del.data && remove.mutate(del.data.id)}
+        title={t('common.delete')}
+        message={t('common.confirmDelete')}
+        destructive
+        loading={remove.isPending}
+      />
     </div>
   );
 }
