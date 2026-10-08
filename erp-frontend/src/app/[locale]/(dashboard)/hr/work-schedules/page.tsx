@@ -30,7 +30,7 @@ export default function WorkSchedulesPage() {
         { key: 'dailyHours', header: t('dailyHours'), render: (s) => Number(s.dailyHours) },
         { key: 'startTime', header: t('startTime') },
         { key: 'graceMinutes', header: t('graceMinutes') },
-        { key: 'weekendDays', header: t('weekendDays'), render: (s) => (s.weekendDays ?? []).map((d) => tp(`weekday${d}`)).join('، ') },
+        { key: 'weekendDays', header: t('weekendDays'), render: (s) => (s.weekendDays ?? []).map((d) => tp(`weekday${d}`)).join(', ') },
         { key: 'isDefault', header: t('isDefault'), render: (s) => (s.isDefault ? tc('yes') : tc('no')) },
       ]}
     />
