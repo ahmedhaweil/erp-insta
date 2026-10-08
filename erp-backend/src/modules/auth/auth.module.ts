@@ -1,4 +1,14 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR, DiscoveryModule } from '@nestjs/core';
+import { UsersService } from './services/users.service';
+import { RolesService } from './services/roles.service';
+import { AuditInterceptor, AuditService } from './services/audit.service';
+import { PermissionCatalogService } from './services/permission-catalog.service';
+import {
+  AuditLogsController,
+  RolesController,
+  UsersController,
+} from './controllers/admin.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -28,9 +38,19 @@ import { TenantsModule } from '@modules/tenants/tenants.module';
       }),
     }),
     TenantsModule,
+    DiscoveryModule,
   ],
-  controllers: [AuthController],
-  providers: [AuthService, RbacService, JwtStrategy],
-  exports: [AuthService, RbacService, JwtModule],
+  controllers: [AuthController, UsersController, RolesController, AuditLogsController],
+  providers: [
+    AuthService,
+    RbacService,
+    JwtStrategy,
+    UsersService,
+    RolesService,
+    AuditService,
+    PermissionCatalogService,
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+  ],
+  exports: [AuthService, RbacService, AuditService, JwtModule],
 })
 export class AuthModule {}

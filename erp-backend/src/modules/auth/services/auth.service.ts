@@ -49,6 +49,9 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
+    if (!user.isActive) {
+      throw new ForbiddenException('User account is deactivated');
+    }
 
     // Check locked
     if (user.lockedUntil && user.lockedUntil > new Date()) {
@@ -94,7 +97,9 @@ export class AuthService {
       where: { id: payload.sub },
       relations: ['userRoles', 'userRoles.role'],
     });
-    if (!user) throw new UnauthorizedException('User not found');
+    if (!user || !user.isActive || user.tenantId !== payload.tenantId) {
+      throw new UnauthorizedException('User not found');
+    }
 
     const isValid = authenticator.verify({ token: code, secret: user.twoFaSecret });
     if (!isValid) {
@@ -109,11 +114,18 @@ export class AuthService {
       secret: this.configService.get('jwt.refreshSecret'),
     });
 
-    const tokenHash = await bcrypt.hash(refreshToken, 10);
-    const session = await this.sessionRepo.findOne({
+    // The refresh token must match a live session: a revoked (logged out or
+    // already rotated) token is refused even while its signature is valid.
+    const sessions = await this.sessionRepo.find({
       where: { userId: payload.sub, revoked: false },
     });
-
+    let session: Session | undefined;
+    for (const candidate of sessions) {
+      if (candidate.expiresAt > new Date() && (await bcrypt.compare(refreshToken, candidate.tokenHash))) {
+        session = candidate;
+        break;
+      }
+    }
     if (!session) {
       throw new UnauthorizedException('Session not found or revoked');
     }
@@ -122,7 +134,9 @@ export class AuthService {
       where: { id: payload.sub },
       relations: ['userRoles', 'userRoles.role'],
     });
-    if (!user) throw new UnauthorizedException('User not found');
+    if (!user || !user.isActive || user.tenantId !== payload.tenantId) {
+      throw new UnauthorizedException('User not found');
+    }
 
     // Revoke old session
     session.revoked = true;

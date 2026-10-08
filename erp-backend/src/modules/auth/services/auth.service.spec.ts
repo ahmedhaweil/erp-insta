@@ -39,6 +39,7 @@ describe('AuthService', () => {
     twoFaEnabled: false,
     twoFaSecret: null,
     lastLogin: null,
+    isActive: true,
     tenantId: 'tenant-1',
     userRoles: [{ role: { name: 'admin' }, branchIds: ['branch-1'] }],
   };
@@ -50,6 +51,7 @@ describe('AuthService', () => {
       create: jest.fn((dto) => dto),
     };
     sessionRepo = {
+      find: jest.fn(),
       findOne: jest.fn(),
       save: jest.fn(),
       create: jest.fn((dto) => dto),
@@ -164,6 +166,58 @@ describe('AuthService', () => {
       const result = await service.login(loginDto);
 
       expect(result).toEqual({ requires2fa: true, tempToken: 'mock-token' });
+    });
+  });
+
+  describe('login (inactive user)', () => {
+    it('refuses a deactivated user even with the right password', async () => {
+      tenantsService.findBySlug.mockResolvedValue(mockTenant);
+      userRepo.findOne.mockResolvedValue({ ...mockUser, isActive: false });
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await expect(
+        service.login({ email: 'test@example.com', password: 'x', tenantSlug: 'acme' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('refreshToken', () => {
+    const liveSession = {
+      userId: 'user-1',
+      tokenHash: 'stored-hash',
+      revoked: false,
+      expiresAt: new Date(Date.now() + 60_000),
+    };
+
+    beforeEach(() => {
+      jwtService.verify.mockReturnValue({ sub: 'user-1', tenantId: 'tenant-1' });
+    });
+
+    it('rotates the session whose stored hash matches the token', async () => {
+      sessionRepo.find.mockResolvedValue([{ ...liveSession }]);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('new-hash');
+      userRepo.findOne.mockResolvedValue({ ...mockUser });
+
+      const result = await service.refreshToken('refresh-token');
+
+      expect(bcrypt.compare).toHaveBeenCalledWith('refresh-token', 'stored-hash');
+      expect(sessionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ revoked: true }));
+      expect(result).toHaveProperty('accessToken');
+    });
+
+    it('refuses a token that matches no live session (revoked or already rotated)', async () => {
+      sessionRepo.find.mockResolvedValue([{ ...liveSession }]);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.refreshToken('stolen-token')).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('refuses an expired session', async () => {
+      sessionRepo.find.mockResolvedValue([{ ...liveSession, expiresAt: new Date(Date.now() - 1) }]);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await expect(service.refreshToken('refresh-token')).rejects.toThrow(UnauthorizedException);
     });
   });
 

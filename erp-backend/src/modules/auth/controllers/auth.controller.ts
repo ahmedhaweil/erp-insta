@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Body, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AuthService } from '../services/auth.service';
@@ -10,11 +10,50 @@ import { ResetPasswordDto } from '../dto/reset-password.dto';
 import { Public } from '@common/decorators/public.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { JwtPayload } from '@common/interfaces/request-with-user.interface';
+import { UsersService } from '../services/users.service';
+import { ChangePasswordDto, TwoFaCodeDto } from '../dto/admin.dto';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly usersService: UsersService,
+  ) {}
+
+  @Get('me')
+  me(@CurrentUser() user: JwtPayload) {
+    return this.usersService.findById(user.tenantId, user.sub);
+  }
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  changePassword(@CurrentUser() user: JwtPayload, @Body() dto: ChangePasswordDto) {
+    return this.usersService.changeOwnPassword(
+      user.tenantId,
+      user.sub,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+  }
+
+  @Post('2fa/setup')
+  @HttpCode(HttpStatus.OK)
+  setupTwoFa(@CurrentUser() user: JwtPayload) {
+    return this.usersService.setupTwoFa(user.tenantId, user.sub);
+  }
+
+  @Post('2fa/enable')
+  @HttpCode(HttpStatus.OK)
+  enableTwoFa(@CurrentUser() user: JwtPayload, @Body() dto: TwoFaCodeDto) {
+    return this.usersService.enableTwoFa(user.tenantId, user.sub, dto.code);
+  }
+
+  @Post('2fa/disable')
+  @HttpCode(HttpStatus.OK)
+  disableTwoFa(@CurrentUser() user: JwtPayload, @Body() dto: TwoFaCodeDto) {
+    return this.usersService.disableTwoFa(user.tenantId, user.sub, dto.code);
+  }
 
   @Public()
   @Post('login')
