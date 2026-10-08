@@ -46,7 +46,16 @@ No posting rules or schema changes were added.
 
 - PDF export.
 - Multi-currency partner statements (shown in document currency).
-- A real salesperson dimension in sales analysis (it groups by document creator; the sales module
-  now has sales representatives that the report should use).
 - VAT categories beyond the rate (exports, exempt, imports, reverse charge) are reported as 0.
 - Submitting returns to ETA/ZATCA, comparative periods, merging a template into an existing chart.
+
+## Phase 2
+
+- Sales analysis `groupBy=salesperson` groups by the document's sales
+  representative (`sales_invoices.sales_rep_id`, `pos_orders.sales_rep_id`),
+  falling back to the user who created the document (keys `rep:<id>` /
+  `user:<id>`).
+- Sales and purchase analysis quantities are in base units
+  (`quantity x unit_factor`), so documents in alternate units add up correctly.
+- Commission vs sales per rep: `GET /sales/commission-statements/rep-performance`
+  (see `docs/gaps/sales-purchasing.md`).
