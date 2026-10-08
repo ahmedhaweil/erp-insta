@@ -447,7 +447,14 @@
     "totalEarnings": "Total due",
     "totalLiability": "Total liability",
     "treasuryHint": "Optional: the balance must cover the amount and you must be its custodian",
-    "year": "Year"
+    "year": "Year",
+    "eosAccounts": "End-of-service accounts",
+    "eosAccountsMissing": "Choose the expense and provision accounts before posting provisions or settlements.",
+    "eosExpenseAccount": "End-of-service expense",
+    "eosProvisionAccount": "End-of-service provision (liability)",
+    "martyrsFundAccount": "Martyrs fund payable",
+    "martyrsFundHint": "Egypt; default: payroll tax payable",
+    "paySettlement": "Pay"
   },
   "mfg": {
     "actCost": "Actual cost",

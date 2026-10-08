@@ -502,9 +502,16 @@ export interface PayrollRules {
   };
 }
 
+export interface HrAccounts {
+  eosExpenseAccountId: string | null;
+  eosProvisionAccountId: string | null;
+  martyrsFundAccountId: string | null;
+}
+
 export interface HrSettings {
   overrides: Record<string, any>;
   effective: PayrollRules;
+  accounts?: HrAccounts;
 }
 
 export const clean = (params: Record<string, any> = {}) =>
@@ -526,6 +533,8 @@ export const hrService = {
   deleteHoliday: (id: string) => data(api.delete(`/hr/holidays/${id}`)),
   settings: () => data<HrSettings>(api.get('/hr/settings')),
   updateSettings: (rules: Record<string, any>) => data<HrSettings>(api.put('/hr/settings', { rules })),
+  /** Sets only the HR accounts (rules are left untouched). */
+  updateAccounts: (accounts: Partial<HrAccounts>) => data<HrSettings>(api.put('/hr/settings', accounts)),
   gratuity: (body: Record<string, any>) => data<GratuityResult>(api.post('/hr/gratuity', clean(body))),
 
   // employees

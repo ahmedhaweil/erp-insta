@@ -9,6 +9,8 @@ import Modal from '@/components/ui/Modal';
 import { Field, FormActions, Input, LinkButton, SimpleTable, currentPeriod, td, useMoney } from '@/components/people/ui';
 import { useEmployeesLookup, useLabelMap, usePeopleMutation, usePeopleQuery } from '@/hooks/use-people';
 import { hrService, type EosProvision } from '@/services/people-hr.service';
+import AccountPicker from '@/components/finance/AccountPicker';
+import { Button, Card } from '@/components/people/ui';
 
 function previousPeriod() {
   const d = new Date();
@@ -45,6 +47,25 @@ export default function EosProvisionsPage() {
     onSuccess: () => setReversing(null),
   });
 
+  // GL accounts of the provision (HR settings)
+  const { data: settings } = usePeopleQuery(['hr-settings'], hrService.settings);
+  const [accounts, setAccounts] = useState<{ eosExpenseAccountId: string; eosProvisionAccountId: string; martyrsFundAccountId: string } | null>(null);
+  const acc = accounts ?? {
+    eosExpenseAccountId: settings?.accounts?.eosExpenseAccountId ?? '',
+    eosProvisionAccountId: settings?.accounts?.eosProvisionAccountId ?? '',
+    martyrsFundAccountId: settings?.accounts?.martyrsFundAccountId ?? '',
+  };
+  const accountsMissing = !!settings && (!settings.accounts?.eosExpenseAccountId || !settings.accounts?.eosProvisionAccountId);
+  const saveAccounts = usePeopleMutation(
+    () =>
+      hrService.updateAccounts({
+        eosExpenseAccountId: acc.eosExpenseAccountId || null,
+        eosProvisionAccountId: acc.eosProvisionAccountId || null,
+        martyrsFundAccountId: acc.martyrsFundAccountId || null,
+      }),
+    { invalidate: ['hr-settings'], onSuccess: () => setAccounts(null) },
+  );
+
   // Only the latest posted provision can be reversed.
   const latestPosted = data.filter((p) => p.status === 'posted').sort((a, b) => b.period.localeCompare(a.period))[0];
 
@@ -52,6 +73,25 @@ export default function EosProvisionsPage() {
     <div>
       <PageHeader title={t('eosProvisions')} action={{ label: t('runProvision'), onClick: () => setRunOpen(true) }} />
       <p className="text-sm text-gray-500 -mt-4 mb-4">{t('eosIntro')}</p>
+      <Card title={t('eosAccounts')} className="mb-4">
+        {accountsMissing && <p className="text-sm text-amber-700 bg-amber-50 rounded-lg p-2 mb-3">{t('eosAccountsMissing')}</p>}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+          <Field label={t('eosExpenseAccount')}>
+            <AccountPicker value={acc.eosExpenseAccountId} onChange={(id) => setAccounts({ ...acc, eosExpenseAccountId: id })} />
+          </Field>
+          <Field label={t('eosProvisionAccount')}>
+            <AccountPicker value={acc.eosProvisionAccountId} onChange={(id) => setAccounts({ ...acc, eosProvisionAccountId: id })} />
+          </Field>
+          <Field label={t('martyrsFundAccount')} hint={t('martyrsFundHint')}>
+            <AccountPicker value={acc.martyrsFundAccountId} onChange={(id) => setAccounts({ ...acc, martyrsFundAccountId: id })} />
+          </Field>
+        </div>
+        <div className="flex justify-end mt-3">
+          <Button disabled={!accounts || saveAccounts.isPending} onClick={() => saveAccounts.mutate(undefined)}>
+            {tc('save')}
+          </Button>
+        </div>
+      </Card>
       <DataTable<EosProvision>
         data={data}
         loading={isLoading}

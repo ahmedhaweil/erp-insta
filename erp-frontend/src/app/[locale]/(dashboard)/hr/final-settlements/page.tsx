@@ -187,7 +187,7 @@ export default function FinalSettlementsPage() {
               )}
               {d.status === 'posted' && (
                 <Button variant="success" onClick={() => startAction('pay')}>
-                  {t('pay')}
+                  {t('paySettlement')}
                 </Button>
               )}
               {d.status !== 'cancelled' && (
@@ -203,7 +203,7 @@ export default function FinalSettlementsPage() {
       <Modal
         isOpen={!!action}
         onClose={() => setAction(null)}
-        title={action === 'post' ? t('postSettlement') : action === 'pay' ? t('pay') : tc('cancel')}
+        title={action === 'post' ? t('postSettlement') : action === 'pay' ? t('paySettlement') : tc('cancel')}
         size="sm"
       >
         <form onSubmit={(e) => { e.preventDefault(); act.mutate(undefined); }} className="space-y-4">
@@ -238,7 +238,7 @@ export default function FinalSettlementsPage() {
           <FormActions
             onCancel={() => setAction(null)}
             submitting={act.isPending}
-            submitLabel={action === 'post' ? t('postSettlement') : action === 'pay' ? t('pay') : tc('confirm')}
+            submitLabel={action === 'post' ? t('postSettlement') : action === 'pay' ? t('paySettlement') : tc('confirm')}
           />
         </form>
       </Modal>
