@@ -15,6 +15,7 @@ import CreatePurchaseDocModal from '@/components/operations/purchasing/CreatePur
 import { useOpsMutation, useOpsProducts, useOpsQuery, useOpsSuppliers, useOpsWarehouses } from '@/hooks/use-operations';
 import { opsPurchasing } from '@/services/operations-purchasing.service';
 import type { Row } from '@/services/operations-api';
+import { PrintButton } from '@/components/platform/PrintButton';
 
 const STATUSES = ['draft', 'sent', 'to_approve', 'confirmed', 'received', 'cancelled'];
 
@@ -90,6 +91,7 @@ export default function PurchaseOrdersPage() {
           const received = (o.lines ?? []).every((l: any) => num(l.qtyReceived) >= num(l.quantity));
           return (
             <RowActions>
+              <PrintButton path={`/print/purchase-orders/${o.id}`} />
               {o.status === 'draft' && <RowAction onClick={() => send.mutate(o.id)}>{t('pur.markSent')}</RowAction>}
               {['draft', 'sent'].includes(o.status) && <RowAction tone="green" onClick={() => confirm.mutate(o.id)}>{t('pur.confirmOrder')}</RowAction>}
               {o.status === 'to_approve' && (

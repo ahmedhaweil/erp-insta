@@ -10,9 +10,11 @@ import { byId, fmtMoney, num, RowAction, RowActions, Status, useModal, useNamer 
 import { useOpsCustomerCategories, useOpsCustomers, useOpsMutation, useOpsPriceLists, useOpsReps } from '@/hooks/use-operations';
 import { opsSales } from '@/services/operations-sales.service';
 import type { Row } from '@/services/operations-api';
+import { PrintButton } from '@/components/platform/PrintButton';
 
 export default function CustomersPage() {
   const t = useTranslations('ops');
+  const tPl = useTranslations('platform');
   const name = useNamer();
   const { data: customers = [], isLoading } = useOpsCustomers();
   const { data: categories = [] } = useOpsCustomerCategories();
@@ -82,6 +84,7 @@ export default function CustomersPage() {
         actions={(c: Row) => (
           <RowActions>
             <RowAction onClick={() => form.open(c)}>{t('common.edit')}</RowAction>
+            <PrintButton path={`/print/statements/customer/${c.id}`} label={tPl('print.statement')} />
             <RowAction tone="red" onClick={() => del.open(c)}>{t('common.delete')}</RowAction>
           </RowActions>
         )}

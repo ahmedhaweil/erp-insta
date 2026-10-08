@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { useQuery } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { PrintButton } from '@/components/platform/PrintButton';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
 import StatusBadge from '@/components/ui/StatusBadge';
@@ -48,6 +49,7 @@ function monthBounds(year: number, month: number) {
 export default function ChequesPage() {
   const t = useTranslations('treasury');
   const tc = useTranslations('common');
+  const tPl = useTranslations('platform');
   const locale = useLocale();
   const name = useLocalName();
   const { data: customers = [] } = useCustomersLookup();
@@ -148,6 +150,7 @@ export default function ChequesPage() {
 
   const actionsCell = (c: Cheque) => (
     <div className="flex flex-wrap gap-1">
+      {c.type === 'issued' && !['cancelled'].includes(c.status) && <PrintButton path={`/print/cheques/${c.id}`} label={tPl('print.cheque')} />}
       {allowedActions(c).map((a) => (
         <Btn key={a} size="sm" variant="ghost" onClick={() => setPending({ action: a, cheque: c })}>
           {t(`act_${a}`)}

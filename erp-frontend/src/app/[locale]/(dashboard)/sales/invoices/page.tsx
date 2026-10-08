@@ -16,6 +16,7 @@ import InstallmentPlanModal from '@/components/operations/sales/InstallmentPlanM
 import { useOpsCustomers, useOpsMutation, useOpsProducts, useOpsQuery } from '@/hooks/use-operations';
 import { opsSales } from '@/services/operations-sales.service';
 import type { Row } from '@/services/operations-api';
+import { PrintButton } from '@/components/platform/PrintButton';
 
 const OPEN = ['posted', 'sent', 'partial', 'overdue'];
 const STATUSES = ['draft', 'posted', 'partial', 'paid', 'overdue', 'cancelled'];
@@ -94,6 +95,7 @@ export default function SalesInvoicesPage() {
           const isInvoice = i.moveType !== 'credit_note';
           return (
             <RowActions>
+              <PrintButton path={`/print/sales-invoices/${i.id}`} />
               {i.status === 'draft' && <RowAction onClick={() => post.mutate(i.id)}>{t('sales.post')}</RowAction>}
               {isInvoice && OPEN.includes(i.status) && (
                 <>

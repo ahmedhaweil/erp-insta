@@ -16,12 +16,14 @@ import {
 } from '@/hooks/use-operations';
 import { opsSales } from '@/services/operations-sales.service';
 import type { Row } from '@/services/operations-api';
+import { PrintButton, PrintMenu } from '@/components/platform/PrintButton';
 
 const STATUSES = ['draft', 'sent', 'confirmed', 'delivered', 'cancelled'];
 
 /** Quotations and sales orders: send, confirm, deliver from a warehouse, invoice. */
 export default function SalesOrdersPage() {
   const t = useTranslations('ops');
+  const tPl = useTranslations('platform');
   const name = useNamer();
   const [status, setStatus] = useState('');
   const { data: orders = [], isLoading } = useOpsQuery(['sales-orders'], opsSales.orders);
@@ -76,6 +78,17 @@ export default function SalesOrdersPage() {
         ]}
         actions={(o: Row) => (
           <RowActions>
+            <PrintMenu
+              items={[
+                { label: tPl('print.quotation'), path: `/print/sales-orders/${o.id}`, params: { kind: 'quotation' } },
+                { label: tPl('print.salesOrder'), path: `/print/sales-orders/${o.id}`, params: { kind: 'order' }, hidden: !['confirmed', 'done'].includes(o.status) },
+                {
+                  label: tPl('print.deliveryNote'),
+                  path: `/print/sales-orders/${o.id}/delivery-note`,
+                  hidden: !o.deliveryStatus || ['nothing', 'pending', 'to_deliver'].includes(o.deliveryStatus),
+                },
+              ]}
+            />
             {o.status === 'draft' && <RowAction onClick={() => send.mutate(o.id)}>{t('sales.markSent')}</RowAction>}
             {['draft', 'sent'].includes(o.status) && <RowAction tone="green" onClick={() => confirm.mutate(o.id)}>{t('sales.confirmOrder')}</RowAction>}
             {['confirmed'].includes(o.status) && o.deliveryStatus !== 'delivered' && (

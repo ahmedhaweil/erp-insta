@@ -10,9 +10,11 @@ import { fmtMoney, RowAction, RowActions, Status, useModal, useNamer } from '@/c
 import { useOpsMutation, useOpsSuppliers } from '@/hooks/use-operations';
 import { opsPurchasing } from '@/services/operations-purchasing.service';
 import type { Row } from '@/services/operations-api';
+import { PrintButton } from '@/components/platform/PrintButton';
 
 export default function SuppliersPage() {
   const t = useTranslations('ops');
+  const tPl = useTranslations('platform');
   const name = useNamer();
   const { data: suppliers = [], isLoading } = useOpsSuppliers();
   const form = useModal<Row>();
@@ -59,6 +61,7 @@ export default function SuppliersPage() {
         actions={(s: Row) => (
           <RowActions>
             <RowAction onClick={() => form.open(s)}>{t('common.edit')}</RowAction>
+            <PrintButton path={`/print/statements/supplier/${s.id}`} label={tPl('print.statement')} />
             <RowAction tone="red" onClick={() => del.open(s)}>{t('common.delete')}</RowAction>
           </RowActions>
         )}
