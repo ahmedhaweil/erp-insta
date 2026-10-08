@@ -1,5 +1,5 @@
 import { IsString, IsEnum, IsOptional, IsBoolean, IsUUID, IsNumber, Min, Max } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { ProductType, TrackingType } from '../entities/product.entity';
 
 export class CreateProductDto {
@@ -115,3 +115,6 @@ export class CreateProductDto {
   @IsBoolean()
   hasExpiry?: boolean;
 }
+
+/** Every field optional, still validated and whitelisted (a TS Partial<> type is not). */
+export class UpdateProductDto extends PartialType(CreateProductDto) {}

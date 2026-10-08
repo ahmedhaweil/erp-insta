@@ -1,5 +1,5 @@
 import { IsString, IsEnum, IsOptional, IsBoolean, IsUUID } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { AccountType } from '../entities/account.entity';
 
 export class CreateAccountDto {
@@ -40,3 +40,6 @@ export class CreateAccountDto {
   @IsString()
   description?: string;
 }
+
+/** Every field optional, still validated and whitelisted (a TS Partial<> type is not). */
+export class UpdateAccountDto extends PartialType(CreateAccountDto) {}

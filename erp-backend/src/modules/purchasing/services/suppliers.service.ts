@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Supplier } from '../entities/supplier.entity';
-import { CreateSupplierDto } from '../dto/create-supplier.dto';
+import { CreateSupplierDto, UpdateSupplierDto } from '../dto/create-supplier.dto';
 
 @Injectable()
 export class SuppliersService {
@@ -45,7 +45,7 @@ export class SuppliersService {
   async update(
     tenantId: string,
     id: string,
-    dto: Partial<CreateSupplierDto>,
+    dto: UpdateSupplierDto,
   ): Promise<Supplier> {
     const supplier = await this.findById(tenantId, id);
     Object.assign(supplier, dto);

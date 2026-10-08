@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { CustomersService } from '../services/customers.service';
-import { CreateCustomerDto } from '../dto/create-customer.dto';
+import { CreateCustomerDto, UpdateCustomerDto } from '../dto/create-customer.dto';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { RequirePermissions } from '@common/decorators/require-permissions.decorator';
 
@@ -34,7 +34,7 @@ export class CustomersController {
   update(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: Partial<CreateCustomerDto>,
+    @Body() dto: UpdateCustomerDto,
   ) {
     return this.customersService.update(tenantId, id, dto);
   }
