@@ -4,96 +4,16 @@ import { useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import { Link } from '@/i18n/navigation';
 import { clsx } from 'clsx';
-import {
-  LayoutDashboard,
-  BookOpen,
-  Package,
-  ShoppingCart,
-  Truck,
-  Monitor,
-  Shield,
-  Bell,
-  Settings,
-  ChevronDown,
-} from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { buildNav } from './nav';
 
-interface NavGroup {
-  key: string;
-  icon: React.ReactNode;
-  items: { key: string; href: string }[];
-}
+const navGroups = buildNav();
 
 export default function Sidebar() {
   const t = useTranslations('nav');
   const pathname = usePathname();
   const [openGroups, setOpenGroups] = useState<string[]>(['dashboard']);
-
-  const navGroups: NavGroup[] = [
-    {
-      key: 'dashboard',
-      icon: <LayoutDashboard size={20} />,
-      items: [{ key: 'dashboard', href: '/' }],
-    },
-    {
-      key: 'accounting',
-      icon: <BookOpen size={20} />,
-      items: [
-        { key: 'chartOfAccounts', href: '/accounting/accounts' },
-        { key: 'journalEntries', href: '/accounting/journal-entries' },
-      ],
-    },
-    {
-      key: 'inventory',
-      icon: <Package size={20} />,
-      items: [
-        { key: 'products', href: '/inventory/products' },
-        { key: 'warehouses', href: '/inventory/warehouses' },
-        { key: 'stockMovements', href: '/inventory/stock' },
-      ],
-    },
-    {
-      key: 'sales',
-      icon: <ShoppingCart size={20} />,
-      items: [
-        { key: 'customers', href: '/sales/customers' },
-        { key: 'salesOrders', href: '/sales/orders' },
-        { key: 'salesInvoices', href: '/sales/invoices' },
-      ],
-    },
-    {
-      key: 'purchasing',
-      icon: <Truck size={20} />,
-      items: [
-        { key: 'suppliers', href: '/purchasing/suppliers' },
-        { key: 'purchaseOrders', href: '/purchasing/orders' },
-        { key: 'purchaseInvoices', href: '/purchasing/invoices' },
-      ],
-    },
-    {
-      key: 'pos',
-      icon: <Monitor size={20} />,
-      items: [{ key: 'pos', href: '/pos' }],
-    },
-    {
-      key: 'compliance',
-      icon: <Shield size={20} />,
-      items: [
-        { key: 'taxConfig', href: '/compliance/tax-config' },
-        { key: 'eInvoices', href: '/compliance/e-invoices' },
-      ],
-    },
-    {
-      key: 'notifications',
-      icon: <Bell size={20} />,
-      items: [{ key: 'notifications', href: '/notifications' }],
-    },
-    {
-      key: 'settings',
-      icon: <Settings size={20} />,
-      items: [{ key: 'settings', href: '/settings' }],
-    },
-  ];
 
   const toggleGroup = (key: string) => {
     setOpenGroups((prev) =>
@@ -125,7 +45,7 @@ export default function Sidebar() {
                     : 'text-gray-300 hover:bg-sidebar-hover hover:text-white',
                 )}
               >
-                {group.icon}
+                <group.icon size={20} />
                 <span>{t(item.key)}</span>
               </Link>
             );
@@ -138,7 +58,7 @@ export default function Sidebar() {
                 className="flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-sidebar-hover hover:text-white transition"
               >
                 <span className="flex items-center gap-3">
-                  {group.icon}
+                  <group.icon size={20} />
                   <span>{t(group.key)}</span>
                 </span>
                 <ChevronDown
