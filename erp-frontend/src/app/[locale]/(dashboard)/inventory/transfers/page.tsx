@@ -6,7 +6,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
-import { Btn, Field, inputCls, SelectBox, toOptions } from '@/components/operations/form';
+import { Btn, Field, inputCls, inputSm, SelectBox, toOptions } from '@/components/operations/form';
 import {
   byId, DetailGrid, FilterBar, fmtDate, fmtMoney, fmtQty, num, RowAction, RowActions, SimpleTable, Status, today, useModal, useNamer,
 } from '@/components/operations/common';
@@ -256,7 +256,7 @@ function ReceiveTransferModal({ transfer, onClose }: { transfer: Row; onClose: (
               key: 'now',
               header: t('inv.receiveNow'),
               render: (l) => (
-                <input type="number" step="any" min="0" value={qty[l.id] ?? ''} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} className={`${inputCls} w-28`} />
+                <input type="number" step="any" min="0" value={qty[l.id] ?? ''} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} className={`${inputSm} w-28`} />
               ),
             },
           ]}

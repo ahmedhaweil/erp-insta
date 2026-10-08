@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
-import { EntityForm, inputCls, toOptions, type FieldDef } from '@/components/operations/form';
+import { EntityForm, inputCls, inputSm, toOptions, type FieldDef } from '@/components/operations/form';
 import {
   byId, DetailGrid, fmtDate, fmtMoney, fmtQty, num, RowAction, RowActions, SimpleTable, Status, Tabs, today, useModal, useNamer,
 } from '@/components/operations/common';
@@ -167,7 +167,7 @@ function CreatePurchaseReturnModal({ billId, onClose }: { billId: string | null;
                     key: 'ret',
                     header: t('sales.returnQty'),
                     render: (l) => (
-                      <input type="number" step="any" min="0" max={num(l.quantity) - num(l.qtyReturned)} value={qty[l.id] ?? ''} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} className={`${inputCls} w-28`} />
+                      <input type="number" step="any" min="0" max={num(l.quantity) - num(l.qtyReturned)} value={qty[l.id] ?? ''} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} className={`${inputSm} w-28`} />
                     ),
                   },
                 ]}

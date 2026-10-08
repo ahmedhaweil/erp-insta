@@ -7,6 +7,9 @@ import { clsx } from 'clsx';
 export const inputCls =
   'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-100';
 
+/** Same look as inputCls without the full width, for inputs sized with a w-* class. */
+export const inputSm = inputCls.replace('w-full ', '');
+
 export function Field({
   label,
   children,

@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { Link } from '@/i18n/navigation';
-import { Btn, Field, inputCls, SelectBox, toOptions } from '@/components/operations/form';
+import { Btn, Field, inputCls, inputSm, SelectBox, toOptions } from '@/components/operations/form';
 import { Card, DetailGrid, fmtDate, fmtMoney, fmtQty, num, SimpleTable, Stat, Status, useNamer } from '@/components/operations/common';
 import { useOpsMutation, useOpsProducts, useOpsQuery } from '@/hooks/use-operations';
 import { opsInventory } from '@/services/operations-inventory.service';
@@ -188,7 +188,7 @@ export default function StockCountDetailPage() {
                     min="0"
                     value={edits[l.id] ?? (l.countedQty == null ? '' : String(num(l.countedQty)))}
                     onChange={(e) => setEdits({ ...edits, [l.id]: e.target.value })}
-                    className={`${inputCls} w-28`}
+                    className={`${inputSm} w-28`}
                   />
                 ) : l.countedQty == null ? '-' : fmtQty(l.countedQty),
             },

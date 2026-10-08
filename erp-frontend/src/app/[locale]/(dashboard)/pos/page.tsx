@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { Minus, Plus, ScanLine, Trash2, Wifi, WifiOff, RefreshCw } from 'lucide-react';
-import { Btn, Field, inputCls, SelectBox, toOptions } from '@/components/operations/form';
+import { Btn, Field, inputCls, inputSm, SelectBox, toOptions } from '@/components/operations/form';
 import { byId, Card, fmtDateTime, fmtMoney, num, useNamer } from '@/components/operations/common';
 import { cartTotals, effectiveDiscountPct, lineAmounts, type CartLine } from '@/components/operations/pos/cart';
 import { CashModal, CloseSessionModal, OrdersModal, PaymentModal, SessionReport, type PayMethod } from '@/components/operations/pos/PosModals';
@@ -199,7 +199,7 @@ function Till({ session, onEnd }: { session: StoredSession; onEnd: () => void })
 
   // ----- cart -----
   const addProduct = (p: Row, qty = 1, unitPrice?: number) => {
-    const price = unitPrice ?? num(p.sellPrice);
+    const price = Math.round((unitPrice ?? num(p.sellPrice)) * 10000) / 10000;
     setCart((prev) => {
       const idx = prev.findIndex((l) => l.productId === p.id && l.unitPrice === price);
       if (idx >= 0) return prev.map((l, i) => (i === idx ? { ...l, quantity: l.quantity + qty } : l));
@@ -338,6 +338,12 @@ function Till({ session, onEnd }: { session: StoredSession; onEnd: () => void })
                 autoFocus
                 value={barcode}
                 onChange={(e) => setBarcode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    scan(barcode);
+                  }
+                }}
                 placeholder={t('pos.scanPlaceholder')}
                 className={`${inputCls} ps-10 text-lg py-3`}
               />
@@ -407,14 +413,14 @@ function Till({ session, onEnd }: { session: StoredSession; onEnd: () => void })
                     <button type="button" aria-label="-" onClick={() => updateLine(i, { quantity: Math.max(0, l.quantity - 1) })} className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
                       <Minus size={18} />
                     </button>
-                    <input type="number" step="any" min="0" value={l.quantity} onChange={(e) => updateLine(i, { quantity: num(e.target.value) })} className={`${inputCls} w-20 text-center`} />
+                    <input type="number" step="any" min="0" value={l.quantity} onChange={(e) => updateLine(i, { quantity: num(e.target.value) })} className={`${inputSm} w-20 text-center`} />
                     <button type="button" aria-label="+" onClick={() => updateLine(i, { quantity: l.quantity + 1 })} className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
                       <Plus size={18} />
                     </button>
                     <span className="text-xs text-gray-500">×</span>
-                    <input type="number" step="any" min="0" value={l.unitPrice} onChange={(e) => updateLine(i, { unitPrice: num(e.target.value) })} className={`${inputCls} w-24`} title={t('common.unitPrice')} />
+                    <input type="number" step="any" min="0" value={l.unitPrice} onChange={(e) => updateLine(i, { unitPrice: num(e.target.value) })} className={`${inputSm} w-24`} title={t('common.unitPrice')} />
                     <span className="text-xs text-gray-500">{t('pos.discountPct')}</span>
-                    <input type="number" step="any" min="0" max="100" value={l.discountPct} onChange={(e) => updateLine(i, { discountPct: num(e.target.value) })} className={clsx(inputCls, 'w-16', over && 'border-red-500')} />
+                    <input type="number" step="any" min="0" max="100" value={l.discountPct} onChange={(e) => updateLine(i, { discountPct: num(e.target.value) })} className={clsx(inputSm, 'w-16', over && 'border-red-500')} />
                     <button type="button" aria-label={t('common.remove')} onClick={() => setCart(cart.filter((_, idx) => idx !== i))} className="ms-auto p-2 text-red-500">
                       <Trash2 size={18} />
                     </button>

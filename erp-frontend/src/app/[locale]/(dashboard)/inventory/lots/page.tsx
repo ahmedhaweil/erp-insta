@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
-import { Btn, Field, inputCls, SelectBox, toOptions } from '@/components/operations/form';
+import { Btn, Field, inputCls, inputSm, SelectBox, toOptions } from '@/components/operations/form';
 import { Card, FilterBar, fmtDate, fmtDateTime, fmtMoney, fmtQty, num, SimpleTable, Stat, Tabs, useNamer } from '@/components/operations/common';
 import { useOpsProducts, useOpsQuery, useOpsWarehouses } from '@/hooks/use-operations';
 import { opsInventory } from '@/services/operations-inventory.service';
@@ -86,7 +86,7 @@ export default function LotsPage() {
           )}
           {tab === 'expiring' && (
             <Field label={t('inv.withinDays')}>
-              <input type="number" min="1" value={days} onChange={(e) => setDays(e.target.value)} className={`${inputCls} w-28`} />
+              <input type="number" min="1" value={days} onChange={(e) => setDays(e.target.value)} className={`${inputSm} w-28`} />
             </Field>
           )}
         </FilterBar>

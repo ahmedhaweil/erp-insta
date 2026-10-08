@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Modal from '@/components/ui/Modal';
-import { Btn, EntityForm, inputCls, type FieldDef } from './form';
+import { Btn, EntityForm, inputSm, type FieldDef } from './form';
 import { fmtQty, num, SimpleTable } from './common';
 
 export interface QtyLine {
@@ -74,7 +74,7 @@ export default function LineQtyModal({
                   max={l.max}
                   value={qty[l.id] ?? ''}
                   onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })}
-                  className={`${inputCls} w-28`}
+                  className={`${inputSm} w-28`}
                 />
               ),
             },

@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Modal from '@/components/ui/Modal';
-import { EntityForm, inputCls, toOptions, type FieldDef } from '@/components/operations/form';
+import { EntityForm, inputCls, inputSm, toOptions, type FieldDef } from '@/components/operations/form';
 import {
   byId, DetailGrid, fmtDate, fmtMoney, fmtQty, num, RowAction, RowActions, SimpleTable, Status, Tabs, today, useModal, useNamer,
 } from '@/components/operations/common';
@@ -190,7 +190,7 @@ function CreateReturnModal({ invoiceId, onClose }: { invoiceId: string | null; o
                         max={num(l.quantity) - num(l.qtyReturned)}
                         value={qty[l.id] ?? ''}
                         onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })}
-                        className={`${inputCls} w-28`}
+                        className={`${inputSm} w-28`}
                       />
                     ),
                   },

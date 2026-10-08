@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import PageHeader from '@/components/ui/PageHeader';
-import { Field, inputCls, SelectBox, toOptions } from '@/components/operations/form';
+import { Field, inputCls, inputSm, SelectBox, toOptions } from '@/components/operations/form';
 import { byId, Card, FilterBar, fmtDate, fmtMoney, fmtQty, num, SimpleTable, Stat, Tabs, useNamer } from '@/components/operations/common';
 import { useOpsProducts, useOpsQuery, useOpsSuppliers, useOpsWarehouses } from '@/hooks/use-operations';
 import { opsInventory } from '@/services/operations-inventory.service';
@@ -53,7 +53,7 @@ export default function InventoryReportsPage() {
         </Field>
         {tab === 'slow' && (
           <Field label={t('inv.noIssueDays')}>
-            <input type="number" min="1" value={days} onChange={(e) => setDays(e.target.value)} className={`${inputCls} w-28`} />
+            <input type="number" min="1" value={days} onChange={(e) => setDays(e.target.value)} className={`${inputSm} w-28`} />
           </Field>
         )}
       </FilterBar>

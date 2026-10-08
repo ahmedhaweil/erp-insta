@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { clsx } from 'clsx';
 import Modal from '@/components/ui/Modal';
-import { Btn, EntityForm, Field, inputCls } from '@/components/operations/form';
+import { Btn, EntityForm, Field, inputCls, inputSm } from '@/components/operations/form';
 import { DetailGrid, fmtDateTime, fmtMoney, fmtQty, num, SimpleTable, Status, Stat } from '@/components/operations/common';
 import { useOpsMutation, useOpsQuery } from '@/hooks/use-operations';
 import { opsPos } from '@/services/operations-pos.service';
@@ -137,7 +137,7 @@ export function OrdersModal({
               key: 'r',
               header: t('pos.refundQty'),
               render: (l) => (
-                <input type="number" step="any" min="0" max={num(l.quantity) - num(l.refundedQty)} value={qty[l.id] ?? ''} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} className={`${inputCls} w-24`} />
+                <input type="number" step="any" min="0" max={num(l.quantity) - num(l.refundedQty)} value={qty[l.id] ?? ''} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} className={`${inputSm} w-24`} />
               ),
             },
           ]}
