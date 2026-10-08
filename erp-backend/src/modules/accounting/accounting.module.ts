@@ -28,7 +28,7 @@ import {
   RecurringEntryRun,
 } from './entities/recurring-entry.entity';
 import { DeferralSchedule, DeferralScheduleLine } from './entities/deferral-schedule.entity';
-import { FxRevaluation, OpeningBalance, PeriodClosing } from './entities/closing.entities';
+import { FxRevaluation, OpeningBalance, PeriodClosing } from './entities/closing.entity';
 import { SalesInvoice } from '@modules/sales/entities/sales-invoice.entity';
 import { PurchaseInvoice } from '@modules/purchasing/entities/purchase-invoice.entity';
 import { Customer } from '@modules/sales/entities/customer.entity';

@@ -11,7 +11,7 @@ import {
   FxRevaluation,
   FxRevaluationItem,
   FxRevaluationStatus,
-} from '../entities/closing.entities';
+} from '../entities/closing.entity';
 import { JournalType } from '../entities/journal.entity';
 import { FxRevaluationDto } from '../dto/accounting-depth.dto';
 import { AccountingSettingsService } from './accounting-settings.service';

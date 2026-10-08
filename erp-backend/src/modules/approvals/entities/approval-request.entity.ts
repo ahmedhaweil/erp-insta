@@ -53,7 +53,7 @@ export class ApprovalRequest extends TenantBaseEntity {
   documentRef: string;
 
   /** Identifies a document that does not exist yet (hash of the request payload). */
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   fingerprint: string | null;
 
   /** Amount in base currency used for rule matching. */

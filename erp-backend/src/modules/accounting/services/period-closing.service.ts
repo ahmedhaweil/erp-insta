@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AccountingSettings } from '../entities/accounting-settings.entity';
-import { PeriodClosing } from '../entities/closing.entities';
+import { PeriodClosing } from '../entities/closing.entity';
 import { PeriodLockDto, PeriodReopenDto } from '../dto/accounting-depth.dto';
 
 export interface ClosingCheck {

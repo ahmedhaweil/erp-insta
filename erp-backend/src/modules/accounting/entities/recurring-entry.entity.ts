@@ -38,7 +38,7 @@ export class RecurringEntry extends TenantBaseEntity {
   @Column({ type: 'enum', enum: RecurringFrequency, default: RecurringFrequency.MONTHLY })
   frequency: RecurringFrequency;
 
-  @Column({ name: 'interval_days', nullable: true })
+  @Column({ name: 'interval_days', type: 'int', nullable: true })
   intervalDays: number | null;
 
   @Column({ name: 'start_date', type: 'date' })

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { OpeningBalance, OpeningBalanceKind } from '../entities/closing.entities';
+import { OpeningBalance, OpeningBalanceKind } from '../entities/closing.entity';
 import { Account } from '../entities/account.entity';
 import { JournalType } from '../entities/journal.entity';
 import { OpeningAccountsDto, OpeningPartnerDocumentDto, OpeningPartnersDto } from '../dto/accounting-depth.dto';

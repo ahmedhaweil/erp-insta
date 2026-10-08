@@ -10,7 +10,7 @@ import { FxRevaluationService } from '../services/fx-revaluation.service';
 import { OpeningBalancesService } from '../services/opening-balances.service';
 import { PeriodClosingService } from '../services/period-closing.service';
 import { DeferralType } from '../entities/deferral-schedule.entity';
-import { OpeningBalanceKind } from '../entities/closing.entities';
+import { OpeningBalanceKind } from '../entities/closing.entity';
 import {
   CancelDeferralDto,
   CreateDeferralDto,

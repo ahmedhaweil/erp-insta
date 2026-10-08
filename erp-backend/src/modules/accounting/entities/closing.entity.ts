@@ -98,7 +98,7 @@ export class OpeningBalance extends TenantBaseEntity {
   @Column({ name: 'document_id', type: 'uuid', nullable: true })
   documentId: string | null;
 
-  @Column({ name: 'document_number', nullable: true })
+  @Column({ name: 'document_number', type: 'varchar', nullable: true })
   documentNumber: string | null;
 
   /** Signed amount in document currency (partner) or total debit (accounts). */
