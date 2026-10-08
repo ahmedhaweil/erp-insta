@@ -355,4 +355,5 @@ export const myNotificationsService = {
 export const platformLookups = {
   users: () => d<{ id: string; name: string; email: string; isActive: boolean }[]>(api.get('/users')),
   roles: () => d<{ id: string; name: string }[]>(api.get('/roles')),
+  warehouses: () => d<{ id: string; code: string; nameAr: string; nameEn: string | null }[]>(api.get('/inventory/warehouses')),
 };
