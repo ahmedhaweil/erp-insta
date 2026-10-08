@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, IsNumber, IsEmail } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber, IsEmail, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCustomerDto {
@@ -57,4 +57,19 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsNumber()
   paymentTermDays?: number;
+
+  @ApiPropertyOptional({ description: 'Customer category / group' })
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ description: 'Price list (overrides the category price list)' })
+  @IsOptional()
+  @IsUUID()
+  priceListId?: string;
+
+  @ApiPropertyOptional({ description: 'Default sales representative' })
+  @IsOptional()
+  @IsUUID()
+  salesRepId?: string;
 }

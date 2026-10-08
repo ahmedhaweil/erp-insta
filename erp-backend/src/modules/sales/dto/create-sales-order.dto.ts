@@ -6,6 +6,7 @@ import {
   IsArray,
   ValidateNested,
   ArrayMinSize,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -19,9 +20,12 @@ export class CreateSalesOrderLineDto {
   @IsNumber()
   quantity: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description: 'Omit to price the line from the customer price list (or product sales price)',
+  })
+  @IsOptional()
   @IsNumber()
-  unitPrice: number;
+  unitPrice?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -82,6 +86,21 @@ export class CreateSalesOrderDto {
   @IsOptional()
   @IsString()
   validityDate?: string;
+
+  @ApiPropertyOptional({ description: 'Sales representative; defaults to the customer rep' })
+  @IsOptional()
+  @IsUUID()
+  salesRepId?: string;
+
+  @ApiPropertyOptional({ description: 'Price list; defaults to the customer / customer category list' })
+  @IsOptional()
+  @IsUUID()
+  priceListId?: string;
+
+  @ApiPropertyOptional({ description: 'Unit prices include VAT' })
+  @IsOptional()
+  @IsBoolean()
+  pricesIncludeTax?: boolean;
 
   @ApiProperty({ type: [CreateSalesOrderLineDto] })
   @IsArray()

@@ -43,4 +43,16 @@ export class Customer extends TenantBaseEntity {
   /** Payment terms in days; drives the default invoice due date. */
   @Column({ name: 'payment_term_days', type: 'int', default: 0 })
   paymentTermDays: number;
+
+  /** Customer group / category (drives the default price list). */
+  @Column({ name: 'category_id', type: 'uuid', nullable: true })
+  categoryId: string | null;
+
+  /** Price list of the customer; overrides the category price list. */
+  @Column({ name: 'price_list_id', type: 'uuid', nullable: true })
+  priceListId: string | null;
+
+  /** Default sales representative proposed on orders and invoices. */
+  @Column({ name: 'sales_rep_id', type: 'uuid', nullable: true })
+  salesRepId: string | null;
 }

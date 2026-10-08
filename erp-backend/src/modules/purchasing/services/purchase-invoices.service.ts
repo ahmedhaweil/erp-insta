@@ -23,6 +23,7 @@ import {
   addDays,
   computeLine,
   computeTotals,
+  computeWithholding,
   paymentState,
   residual,
   round,
@@ -76,13 +77,19 @@ export class PurchaseInvoicesService {
       }
     }
 
+    const taxIncluded = !!dto.pricesIncludeTax;
     const lines = dto.lines.map((l) => ({
-      ...computeLine(l),
+      ...computeLine(l, { taxIncluded }),
       productId: l.productId,
       description: l.description,
       orderLineId: l.orderLineId,
+      withholdingRate:
+        l.withholdingRate === undefined || l.withholdingRate === null
+          ? null
+          : Number(l.withholdingRate),
     }));
     const totals = computeTotals(lines);
+    const withholdingAmount = computeWithholding(lines, dto.withholdingRate);
 
     const isRefund = extra.moveType === PurchaseInvoiceType.REFUND;
     const invoiceNumber = isRefund
@@ -99,8 +106,11 @@ export class PurchaseInvoicesService {
       status: PurchaseInvoiceStatus.DRAFT,
       dueDate: dto.dueDate || addDays(dto.date, supplier.paymentTermDays || 0),
       paidAmount: 0,
+      pricesIncludeTax: taxIncluded,
+      withholdingRate: Number(dto.withholdingRate ?? 0),
+      withholdingAmount,
       ...totals,
-      lines: lines.map((l) => this.lineRepo.create(l)),
+      lines: lines.map(({ taxAmount: _t, ...l }) => this.lineRepo.create(l)),
     });
 
     return this.invoiceRepo.save(invoice);
@@ -154,12 +164,17 @@ export class PurchaseInvoicesService {
       sourceId: invoice.id,
       currencyId: invoice.currencyId,
       exchangeRate: Number(invoice.exchangeRate),
-      buildLines: (_s, account) => {
+      buildLines: (s, account) => {
+        // Refunds of services / consumables go to the purchase return account when configured.
+        const expenseAccount = () =>
+          isRefund && s.purchaseReturnAccountId
+            ? s.purchaseReturnAccountId
+            : account('purchaseAccountId');
         const expenseLines: PostingLine[] = invoice.lines.map((line) => ({
           accountId:
             productType.get(line.productId) === ProductType.GOODS
               ? account('inventoryAccountId')
-              : account('purchaseAccountId'),
+              : expenseAccount(),
           [isRefund ? 'credit' : 'debit']: Number(line.lineTotal),
         }));
         return [
@@ -290,6 +305,7 @@ export class PurchaseInvoicesService {
           discount: round((Number(line.discount) * quantity) / Number(line.quantity), 4),
           taxRate: Number(line.taxRate),
           description: line.description,
+          withholdingRate: line.withholdingRate ?? undefined,
         };
       })
       .filter((l) => l.quantity > 0);
@@ -307,6 +323,8 @@ export class PurchaseInvoicesService {
         exchangeRate: Number(original.exchangeRate),
         branchId: original.branchId,
         notes: dto.reason ? `Refund of ${original.invoiceNumber}: ${dto.reason}` : `Refund of ${original.invoiceNumber}`,
+        pricesIncludeTax: original.pricesIncludeTax,
+        withholdingRate: Number(original.withholdingRate ?? 0),
         lines,
       },
       { moveType: PurchaseInvoiceType.REFUND, reversedInvoiceId: original.id },

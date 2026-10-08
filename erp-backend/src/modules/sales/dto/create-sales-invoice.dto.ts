@@ -6,6 +6,9 @@ import {
   IsArray,
   ValidateNested,
   ArrayMinSize,
+  IsBoolean,
+  Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -19,9 +22,12 @@ export class CreateSalesInvoiceLineDto {
   @IsNumber()
   quantity: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description: 'Omit to price the line from the customer price list (or product sales price)',
+  })
+  @IsOptional()
   @IsNumber()
-  unitPrice: number;
+  unitPrice?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -42,6 +48,13 @@ export class CreateSalesInvoiceLineDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({ description: 'Line withholding tax rate (%); overrides the document rate' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  withholdingRate?: number;
 }
 
 export class CreateSalesInvoiceDto {
@@ -82,6 +95,28 @@ export class CreateSalesInvoiceDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Sales representative; defaults to the customer rep' })
+  @IsOptional()
+  @IsUUID()
+  salesRepId?: string;
+
+  @ApiPropertyOptional({ description: 'Price list; defaults to the customer / customer category list' })
+  @IsOptional()
+  @IsUUID()
+  priceListId?: string;
+
+  @ApiPropertyOptional({ description: 'Unit prices include VAT' })
+  @IsOptional()
+  @IsBoolean()
+  pricesIncludeTax?: boolean;
+
+  @ApiPropertyOptional({ description: 'Withholding tax rate (%) deducted by the customer, e.g. 1, 3 or 5' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  withholdingRate?: number;
 
   @ApiProperty({ type: [CreateSalesInvoiceLineDto] })
   @IsArray()

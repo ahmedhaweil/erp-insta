@@ -6,6 +6,9 @@ import {
   IsArray,
   ValidateNested,
   ArrayMinSize,
+  IsBoolean,
+  Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -47,6 +50,13 @@ export class PurchaseInvoiceLineDto {
   @IsOptional()
   @IsUUID()
   orderLineId?: string;
+
+  @ApiPropertyOptional({ description: 'Line withholding tax rate (%); overrides the document rate' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  withholdingRate?: number;
 }
 
 export class CreatePurchaseInvoiceDto {
@@ -107,6 +117,20 @@ export class CreatePurchaseInvoiceDto {
   @IsOptional()
   @IsUUID()
   branchId?: string;
+
+  @ApiPropertyOptional({ description: 'Unit prices include VAT' })
+  @IsOptional()
+  @IsBoolean()
+  pricesIncludeTax?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Withholding tax rate (%) we deduct from the vendor at payment, e.g. 1, 3 or 5',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  withholdingRate?: number;
 
   @ApiProperty({ type: [PurchaseInvoiceLineDto] })
   @IsArray()

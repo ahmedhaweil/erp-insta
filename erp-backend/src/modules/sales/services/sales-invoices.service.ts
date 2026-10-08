@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -18,10 +19,13 @@ import { CreateCreditNoteDto } from '../dto/sales-actions.dto';
 import { SequenceService } from '@shared/services/sequence.service';
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
 import { JournalType } from '@modules/accounting/entities/journal.entity';
+import { SalesPricingService } from './sales-pricing.service';
+import { InstallmentScheduleService } from './installment-schedule.service';
 import {
   addDays,
   computeLine,
   computeTotals,
+  computeWithholding,
   paymentState,
   residual,
   round,
@@ -38,11 +42,20 @@ const OPEN_STATUSES = [
 export interface InvoiceLineInput {
   productId: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
   discount?: number;
   taxRate?: number;
   description?: string;
   orderLineId?: string;
+  withholdingRate?: number | null;
+}
+
+export interface CreateInvoiceOptions {
+  /**
+   * Skip price list pricing and the minimum selling price check (documents
+   * derived from an already validated order, credit notes and returns).
+   */
+  skipPriceChecks?: boolean;
 }
 
 @Injectable()
@@ -56,25 +69,63 @@ export class SalesInvoicesService {
     private readonly customerRepo: Repository<Customer>,
     private readonly sequenceService: SequenceService,
     private readonly autoPosting: AutoPostingService,
+    @Optional() private readonly pricing?: SalesPricingService,
+    @Optional() private readonly installments?: InstallmentScheduleService,
   ) {}
 
-  /** Creates a draft invoice. Amounts are always recomputed from the lines. */
+  /**
+   * Creates a draft invoice. Amounts are always recomputed from the lines;
+   * lines without a unit price are priced from the customer price list.
+   */
   async create(
     tenantId: string,
     userId: string,
     dto: CreateSalesInvoiceDto,
     extra: Partial<SalesInvoice> = {},
+    options: CreateInvoiceOptions = {},
   ): Promise<SalesInvoice> {
     const customer = await this.getCustomer(tenantId, dto.customerId);
-    const lines = dto.lines.map((l: InvoiceLineInput) => ({
-      ...computeLine(l),
+    const isCreditNote = extra.moveType === SalesInvoiceType.CREDIT_NOTE;
+    const checkPrices = !isCreditNote && !options.skipPriceChecks;
+
+    let inputLines: InvoiceLineInput[] = dto.lines;
+    let priceListId: string | null = dto.priceListId ?? null;
+    if (this.pricing && inputLines.some((l) => l.unitPrice === undefined || l.unitPrice === null)) {
+      const priced = await this.pricing.priceLines(
+        tenantId,
+        { customer, priceListId: dto.priceListId, date: dto.date },
+        inputLines,
+      );
+      inputLines = priced.lines;
+      priceListId = priced.priceListId;
+    }
+    if (inputLines.some((l) => l.unitPrice === undefined || l.unitPrice === null)) {
+      throw new BadRequestException('Every line needs a unit price');
+    }
+
+    const taxIncluded = !!dto.pricesIncludeTax;
+    const lines = inputLines.map((l) => ({
+      ...computeLine(l as InvoiceLineInput & { unitPrice: number }, { taxIncluded }),
       productId: l.productId,
       description: l.description,
       orderLineId: l.orderLineId,
+      withholdingRate:
+        l.withholdingRate === undefined || l.withholdingRate === null
+          ? null
+          : Number(l.withholdingRate),
     }));
     const totals = computeTotals(lines);
+    const withholdingAmount = computeWithholding(lines, dto.withholdingRate);
 
-    const isCreditNote = extra.moveType === SalesInvoiceType.CREDIT_NOTE;
+    if (checkPrices && this.pricing) {
+      await this.pricing.enforceMinPrice(
+        tenantId,
+        userId,
+        lines.filter((l) => !l.orderLineId),
+        Number(dto.exchangeRate ?? 1),
+      );
+    }
+
     const invoiceNumber = isCreditNote
       ? await this.sequenceService.next(tenantId, 'sales_credit_note', 'RINV')
       : await this.sequenceService.next(tenantId, 'sales_invoice', 'INV');
@@ -88,8 +139,13 @@ export class SalesInvoicesService {
       status: SalesInvoiceStatus.DRAFT,
       dueDate: dto.dueDate || addDays(dto.date, customer.paymentTermDays || 0),
       paidAmount: 0,
+      salesRepId: dto.salesRepId ?? extra.salesRepId ?? customer.salesRepId ?? null,
+      priceListId,
+      pricesIncludeTax: taxIncluded,
+      withholdingRate: Number(dto.withholdingRate ?? 0),
+      withholdingAmount,
       ...totals,
-      lines: lines.map((l) => this.lineRepo.create(l)),
+      lines: lines.map(({ taxAmount: _t, ...l }) => this.lineRepo.create(l)),
     });
 
     return this.invoiceRepo.save(invoice);
@@ -148,10 +204,11 @@ export class SalesInvoicesService {
       sourceId: invoice.id,
       currencyId: invoice.currencyId,
       exchangeRate: Number(invoice.exchangeRate),
-      buildLines: (_s, account) =>
+      buildLines: (s, account) =>
         isCreditNote
           ? [
-              { accountId: account('salesAccountId'), debit: subtotal },
+              // Returns / allowances go to the sales return account when configured.
+              { accountId: s.salesReturnAccountId || account('salesAccountId'), debit: subtotal },
               { accountId: account('outputTaxAccountId'), debit: tax },
               { accountId: account('receivableAccountId'), credit: total },
             ]
@@ -242,7 +299,12 @@ export class SalesInvoicesService {
         : state === 'partial'
           ? SalesInvoiceStatus.PARTIAL
           : SalesInvoiceStatus.POSTED;
-    return this.invoiceRepo.save(invoice);
+    const saved = await this.invoiceRepo.save(invoice);
+    // Payments applied to an installment invoice settle its installments by due date.
+    if (this.installments && invoice.moveType !== SalesInvoiceType.CREDIT_NOTE) {
+      await this.installments.syncInvoice(invoice.tenantId, invoice.id, Number(invoice.paidAmount));
+    }
+    return saved;
   }
 
   /**
@@ -303,6 +365,7 @@ export class SalesInvoicesService {
           discount: round((Number(line.discount) * quantity) / Number(line.quantity), 4),
           taxRate: Number(line.taxRate),
           description: line.description,
+          withholdingRate: line.withholdingRate ?? undefined,
         };
       })
       .filter((l) => l.quantity > 0);
@@ -320,9 +383,13 @@ export class SalesInvoicesService {
         exchangeRate: Number(original.exchangeRate),
         branchId: original.branchId,
         notes: dto.reason ? `Credit note for ${original.invoiceNumber}: ${dto.reason}` : `Credit note for ${original.invoiceNumber}`,
+        salesRepId: original.salesRepId ?? undefined,
+        pricesIncludeTax: original.pricesIncludeTax,
+        withholdingRate: Number(original.withholdingRate ?? 0),
         lines,
       },
       { moveType: SalesInvoiceType.CREDIT_NOTE, reversedInvoiceId: original.id },
+      { skipPriceChecks: true },
     );
 
     return dto.post ? this.post(tenantId, userId, creditNote.id) : creditNote;

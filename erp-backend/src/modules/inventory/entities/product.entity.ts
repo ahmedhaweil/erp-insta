@@ -70,6 +70,13 @@ export class Product extends TenantBaseEntity {
   @Column({ name: 'purchase_tax_rate', type: 'decimal', precision: 5, scale: 2, default: 0 })
   purchaseTaxRate: number;
 
+  /**
+   * Minimum selling price (net of tax, per unit). Sales documents below it
+   * are refused unless the user holds sales/price_override/update.
+   */
+  @Column({ name: 'min_sell_price', type: 'decimal', precision: 18, scale: 4, nullable: true })
+  minSellPrice: number | null;
+
   @ManyToOne(() => Category)
   @JoinColumn({ name: 'category_id' })
   category: Category;
