@@ -11,6 +11,8 @@ import { AccountingSettingsService } from '../services/accounting-settings.servi
 import { FiscalYearsService } from '../services/fiscal-years.service';
 import { FixedAssetsService } from '../services/fixed-assets.service';
 import { UpdateAccountingSettingsDto } from '../dto/update-accounting-settings.dto';
+import { AccountingSetupService } from '../services/accounting-setup.service';
+import { AccountingSetupDto } from '../dto/accounting-setup.dto';
 import {
   CreateBudgetDto,
   CreateFiscalYearDto,
@@ -27,9 +29,33 @@ export class AccountingConfigController {
     private readonly settingsService: AccountingSettingsService,
     private readonly fiscalYearsService: FiscalYearsService,
     private readonly fixedAssetsService: FixedAssetsService,
+    private readonly setupService: AccountingSetupService,
     @InjectRepository(Budget)
     private readonly budgetRepo: Repository<Budget>,
   ) {}
+
+  @RequirePermissions({ module: 'accounting', screen: 'setup', action: 'read' })
+  @Get('setup/templates')
+  listChartTemplates() {
+    return this.setupService.listTemplates();
+  }
+
+  @RequirePermissions({ module: 'accounting', screen: 'setup', action: 'read' })
+  @Get('setup/templates/:code')
+  previewChartTemplate(@Param('code') code: string) {
+    return this.setupService.previewTemplate(code as 'eg' | 'sa');
+  }
+
+  /**
+   * Setup wizard: creates the chart of accounts from a country template, fills
+   * every default account, opens the fiscal year and creates journals and
+   * currencies. Refused when the tenant already has accounts.
+   */
+  @RequirePermissions({ module: 'accounting', screen: 'setup', action: 'create' })
+  @Post('setup')
+  setupAccounting(@CurrentTenant() tenantId: string, @Body() dto: AccountingSetupDto) {
+    return this.setupService.setup(tenantId, dto);
+  }
 
   @RequirePermissions({ module: 'accounting', screen: 'budgets', action: 'read' })
   @Get('budgets')
