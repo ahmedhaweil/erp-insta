@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import { DataSource } from 'typeorm';
+import { addTransactionalDataSource, getDataSourceByName } from 'typeorm-transactional';
 
 @Module({
   imports: [
@@ -19,6 +21,15 @@ import { ConfigService } from '@nestjs/config';
         logging: config.get('database.logging'),
         subscribers: [],
       }),
+      // Registers the DataSource with typeorm-transactional so repositories
+      // join the request transaction opened by TransactionInterceptor.
+      async dataSourceFactory(options) {
+        if (!options) throw new Error('Invalid TypeORM options');
+        return (
+          getDataSourceByName('default') ||
+          addTransactionalDataSource(await new DataSource(options).initialize())
+        );
+      },
     }),
   ],
 })

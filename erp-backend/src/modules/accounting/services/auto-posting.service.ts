@@ -16,6 +16,8 @@ export interface PostingLine {
   accountId: string;
   debit?: number;
   credit?: number;
+  /** Set by the conversion to base currency; callers give document amounts. */
+  amountCurrency?: number;
   description?: string;
   costCenterId?: string;
   branchId?: string;
@@ -30,6 +32,10 @@ export interface PostingRequest {
   sourceType: string;
   sourceId: string;
   currencyId?: string;
+  /**
+   * Base-currency units per unit of the document currency. Line amounts are
+   * given in document currency and converted; 1 (default) means base currency.
+   */
   exchangeRate?: number;
   /** Builds the lines once settings are known; return [] to skip posting. */
   buildLines: (
@@ -86,8 +92,9 @@ export class AutoPostingService {
       return id;
     };
 
-    const lines = this.mergeLines(request.buildLines(settings, account));
-    if (lines.length === 0) return null;
+    const merged = this.mergeLines(request.buildLines(settings, account));
+    if (merged.length === 0) return null;
+    const lines = this.toBaseCurrency(merged, Number(request.exchangeRate ?? 1) || 1);
 
     const journal = await this.resolveJournal(request.tenantId, request.journalType);
 
@@ -104,6 +111,7 @@ export class AutoPostingService {
           accountId: l.accountId,
           debit: l.debit ?? 0,
           credit: l.credit ?? 0,
+          amountCurrency: l.amountCurrency,
           description: l.description ?? request.description,
           costCenterId: l.costCenterId,
           branchId: l.branchId,
@@ -158,6 +166,34 @@ export class AutoPostingService {
     return this.journalRepo.save(
       this.journalRepo.create({ tenantId, type, name: JOURNAL_NAMES[type] }),
     );
+  }
+
+  /**
+   * Converts document-currency lines to base currency at `rate`, keeping the
+   * original signed amount in amountCurrency. Rounding differences (at most a
+   * few hundredths) are absorbed by the largest line of the lighter side so
+   * the entry stays balanced, as Odoo does with its rounding line.
+   */
+  toBaseCurrency(lines: PostingLine[], rate: number): PostingLine[] {
+    if (rate === 1) return lines;
+    if (!(rate > 0)) throw new BadRequestException('Exchange rate must be positive');
+    const converted = lines.map((l) => ({
+      ...l,
+      amountCurrency: round((l.debit ?? 0) - (l.credit ?? 0), 4),
+      debit: round((l.debit ?? 0) * rate, 2),
+      credit: round((l.credit ?? 0) * rate, 2),
+    }));
+    const debit = round(converted.reduce((s, l) => s + l.debit, 0), 2);
+    const credit = round(converted.reduce((s, l) => s + l.credit, 0), 2);
+    const diff = round(debit - credit, 2);
+    if (diff !== 0) {
+      const side: 'debit' | 'credit' = diff > 0 ? 'credit' : 'debit';
+      const target = converted
+        .filter((l) => l[side] > 0)
+        .sort((a, b) => b[side] - a[side])[0];
+      target[side] = round(target[side] + Math.abs(diff), 2);
+    }
+    return converted;
   }
 
   /** Nets lines per account/side, drops zero amounts and validates balance. */

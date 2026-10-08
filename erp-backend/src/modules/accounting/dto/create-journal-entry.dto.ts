@@ -28,6 +28,11 @@ export class JournalLineDto {
   @IsNumber()
   credit: number;
 
+  @ApiPropertyOptional({ description: 'Signed amount in the entry currency (foreign-currency entries)' })
+  @IsOptional()
+  @IsNumber()
+  amountCurrency?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

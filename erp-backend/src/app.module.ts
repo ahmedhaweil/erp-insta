@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RbacGuard } from './common/guards/rbac.guard';
+import { TenantGuard } from './common/guards/tenant.guard';
+import { TransactionInterceptor } from './common/interceptors/transaction.interceptor';
+import { HealthController } from './health.controller';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { BullModule } from '@nestjs/bullmq';
@@ -85,11 +88,16 @@ function buildImports() {
 
 @Module({
   imports: buildImports(),
+  controllers: [HealthController],
   providers: [
-    // Authenticate every route except those marked @Public(), then enforce
-    // @RequirePermissions. Guards run in registration order.
+    // Authenticate every route except those marked @Public(), reject users of
+    // suspended tenants, then enforce @RequirePermissions. Guards run in
+    // registration order.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: TenantGuard },
     { provide: APP_GUARD, useClass: RbacGuard },
+    // One database transaction per request.
+    { provide: APP_INTERCEPTOR, useClass: TransactionInterceptor },
   ],
 })
 export class AppModule {}

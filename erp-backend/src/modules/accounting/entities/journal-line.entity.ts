@@ -19,6 +19,14 @@ export class JournalLine extends BaseEntity {
   @Column({ type: 'decimal', precision: 18, scale: 4, default: 0 })
   credit: number;
 
+  /**
+   * Signed amount (debit positive, credit negative) in the entry's currency
+   * when it differs from the base currency; debit/credit are always in base
+   * currency so the ledger balances in one currency.
+   */
+  @Column({ name: 'amount_currency', type: 'decimal', precision: 18, scale: 4, nullable: true })
+  amountCurrency: number | null;
+
   @Column({ nullable: true })
   description: string;
 
