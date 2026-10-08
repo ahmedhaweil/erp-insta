@@ -52,7 +52,12 @@ describe('ChequesService', () => {
     ledger = { assertNotReconciled: jest.fn() };
     service = new ChequesService(
       repo as any,
-      { getActive: jest.fn().mockResolvedValue(bank) } as any,
+      {
+        getActive: jest.fn().mockResolvedValue(bank),
+        getUsable: jest.fn().mockResolvedValue(bank),
+        assertFunds: jest.fn(),
+        findById: jest.fn().mockResolvedValue(bank),
+      } as any,
       ledger as any,
       payments as any,
       salesInvoices as any,
@@ -184,6 +189,102 @@ describe('ChequesService', () => {
     await expect(
       service.clear('t1', 'u1', 'chq-1', { date: '2026-04-01', treasuryId: 'bank' }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('collects a foreign cheque at the collection rate and posts the FX gain', async () => {
+    Object.assign(cheque, { currencyId: 'usd', exchangeRate: 48, status: ChequeStatus.UNDER_COLLECTION, treasuryId: 'bank' });
+    await service.collect('t1', 'u1', 'chq-1', { date: '2026-04-01', exchangeRate: 50 });
+    expect(autoPosting.preflight).toHaveBeenCalledWith(
+      't1',
+      '2026-04-01',
+      expect.arrayContaining(['chequesUnderCollectionAccountId', 'fxGainAccountId', 'fxLossAccountId']),
+    );
+    const request = autoPosting.post.mock.calls[0][0];
+    expect(request).toMatchObject({ currencyId: 'usd', exchangeRate: 1 });
+    expect(lines()).toEqual([
+      { accountId: 'acc-bank', debit: 250000, amountCurrency: 5000, branchId: undefined },
+      { accountId: 'chequesUnderCollectionAccountId', credit: 240000, amountCurrency: -5000 },
+      { accountId: 'fxGainAccountId', credit: 10000 },
+    ]);
+  });
+
+  it('collects at a lower rate with an FX loss, and at the booked rate without FX', async () => {
+    Object.assign(cheque, { currencyId: 'usd', exchangeRate: 48 });
+    await service.collect('t1', 'u1', 'chq-1', { date: '2026-04-01', treasuryId: 'bank', exchangeRate: 47.5 });
+    expect(lines()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ accountId: 'notesReceivableAccountId', credit: 240000 }),
+        { accountId: 'fxLossAccountId', debit: 2500 },
+      ]),
+    );
+    cheque.status = ChequeStatus.IN_PORTFOLIO;
+    await service.collect('t1', 'u1', 'chq-1', { date: '2026-04-02', treasuryId: 'bank' });
+    expect(lines(1)).toHaveLength(2);
+  });
+
+  it('clears a foreign issued cheque: paying more than booked is an FX loss', async () => {
+    Object.assign(cheque, {
+      type: ChequeType.ISSUED,
+      status: ChequeStatus.ISSUED,
+      treasuryId: 'bank',
+      currencyId: 'usd',
+      exchangeRate: 48,
+    });
+    await service.clear('t1', 'u1', 'chq-1', { date: '2026-04-01', exchangeRate: 49 });
+    const posted = lines();
+    expect(posted).toEqual([
+      { accountId: 'notesPayableAccountId', debit: 240000, amountCurrency: 5000 },
+      { accountId: 'acc-bank', credit: 245000, amountCurrency: -5000, branchId: undefined },
+      { accountId: 'fxLossAccountId', debit: 5000 },
+    ]);
+  });
+
+  it('refuses an exchange rate on a base-currency cheque', async () => {
+    await expect(
+      service.collect('t1', 'u1', 'chq-1', { date: '2026-04-01', treasuryId: 'bank', exchangeRate: 2 }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('posts bank charges on a bounced issued cheque', async () => {
+    Object.assign(cheque, {
+      type: ChequeType.ISSUED,
+      status: ChequeStatus.ISSUED,
+      treasuryId: 'bank',
+      partnerType: PaymentPartnerType.SUPPLIER,
+    });
+    await service.bounce('t1', 'u1', 'chq-1', { date: '2026-04-02', bankCharge: 75 });
+    expect(payments.revertChequePayment).toHaveBeenCalledWith('t1', 'u1', 'pay-1', '2026-04-02');
+    expect(lines()).toEqual([
+      { accountId: 'bankChargesAccountId', debit: 75 },
+      { accountId: 'acc-bank', credit: 75, branchId: undefined },
+    ]);
+    cheque.status = ChequeStatus.ISSUED;
+    await expect(
+      service.bounce('t1', 'u1', 'chq-1', { date: '2026-04-02', bankCharge: 75, chargeToCustomer: true }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('lists post-dated cheque reminders per treasury, with overdue ones', async () => {
+    const issued = {
+      ...cheque,
+      id: 'chq-2',
+      type: ChequeType.ISSUED,
+      status: ChequeStatus.ISSUED,
+      treasuryId: 'bank',
+      amount: 3000,
+      dueDate: '2026-03-28',
+    };
+    const later = { ...cheque, id: 'chq-3', dueDate: '2026-05-30' };
+    (service as any).chequeRepo.find = jest.fn(async () => [issued, cheque, later]);
+    const result = await service.reminders('t1', { asOf: '2026-03-30', days: 7 });
+    expect(result).toMatchObject({ until: '2026-04-06', count: 2, overdue: 1, totalReceivable: 5000, totalPayable: 3000 });
+    const bankGroup = result.treasuries.find((g: any) => g.treasuryId === 'bank');
+    expect(bankGroup).toMatchObject({ treasuryCode: 'NBE', issued: 3000, overdue: 1 });
+    expect(bankGroup.cheques[0]).toMatchObject({ daysToDue: -2, overdue: true });
+    const portfolio = result.treasuries.find((g: any) => g.treasuryId === null);
+    expect(portfolio.cheques[0]).toMatchObject({ id: 'chq-1', daysToDue: 2 });
+    const upcoming = await service.reminders('t1', { asOf: '2026-03-30', days: 7, includeOverdue: 'false' });
+    expect(upcoming.count).toBe(1);
   });
 
   it('due lists outstanding cheques in the range with totals per day', async () => {

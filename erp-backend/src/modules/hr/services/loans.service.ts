@@ -182,6 +182,29 @@ export class LoansService {
   }
 
   /**
+   * Allocates `amount` to all the employee's outstanding installments
+   * (whatever their due month), oldest first: used by the final settlement.
+   */
+  async allocateOutstanding(tenantId: string, employeeId: string, amount: number): Promise<InstallmentRecovery[]> {
+    const outstanding = await this.dueInstallments(tenantId, employeeId, '9999-12');
+    const out: InstallmentRecovery[] = [];
+    let left = round(amount, 2);
+    for (const installment of outstanding) {
+      if (left <= 0) break;
+      const take = round(Math.min(installment.amount, left), 2);
+      out.push({ ...installment, amount: take });
+      left = round(left - take, 2);
+    }
+    return out;
+  }
+
+  /** Outstanding loan balance of an employee. */
+  async outstandingBalance(tenantId: string, employeeId: string): Promise<number> {
+    const outstanding = await this.dueInstallments(tenantId, employeeId, '9999-12');
+    return round(outstanding.reduce((s, i) => s + i.amount, 0), 2);
+  }
+
+  /**
    * Records (sign = 1) or undoes (sign = -1) installment recoveries made by
    * an approved payroll, updating the loans' repaid amount and status.
    */

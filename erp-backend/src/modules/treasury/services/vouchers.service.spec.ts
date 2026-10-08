@@ -8,6 +8,7 @@ describe('VouchersService', () => {
   let stored: any;
   let autoPosting: Record<string, jest.Mock>;
   let ledger: Record<string, jest.Mock>;
+  let treasuries: Record<string, jest.Mock>;
   const box = {
     id: 'box',
     code: 'BOX',
@@ -28,10 +29,16 @@ describe('VouchersService', () => {
     const lineRepo = { create: jest.fn((l) => l), delete: jest.fn() };
     autoPosting = { post: jest.fn(), preflight: jest.fn(), reverseSource: jest.fn() };
     ledger = { assertNotReconciled: jest.fn() };
+    treasuries = {
+      getActive: jest.fn().mockResolvedValue(box),
+      getUsable: jest.fn().mockResolvedValue(box),
+      assertUsable: jest.fn(),
+      assertFunds: jest.fn(),
+    };
     service = new VouchersService(
       voucherRepo as any,
       lineRepo as any,
-      { getActive: jest.fn().mockResolvedValue(box) } as any,
+      treasuries as any,
       ledger as any,
       autoPosting as any,
       { next: jest.fn().mockResolvedValue('PV-000001') } as any,
@@ -104,6 +111,30 @@ describe('VouchersService', () => {
     );
     expect(cancelled.status).toBe(VoucherStatus.CANCELLED);
     await expect(service.post('t1', 'u1', 'v-1')).rejects.toThrow(ConflictException);
+  });
+
+  it('enforces custodianship and the no-negative rule when posting', async () => {
+    await service.create('t1', 'u1', { ...expenseVoucher, post: true });
+    expect(treasuries.getUsable).toHaveBeenCalledWith('t1', 'u1', 'box');
+    expect(treasuries.assertUsable).toHaveBeenCalledWith('t1', 'u1', box);
+    expect(treasuries.assertFunds).toHaveBeenCalledWith('t1', box, 1050.5, '2026-03-01');
+
+    stored = null;
+    treasuries.assertFunds.mockClear();
+    await service.create('t1', 'u1', {
+      ...expenseVoucher,
+      type: VoucherType.RECEIPT,
+      lines: [{ accountId: 'acc-other-income', amount: 200 }],
+      post: true,
+    });
+    expect(treasuries.assertFunds).not.toHaveBeenCalled();
+
+    stored = null;
+    treasuries.assertFunds.mockRejectedValueOnce(new BadRequestException('cannot go negative'));
+    await expect(service.create('t1', 'u1', { ...expenseVoucher, post: true })).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(autoPosting.post).toHaveBeenCalledTimes(2);
   });
 
   it('only drafts can be edited', async () => {

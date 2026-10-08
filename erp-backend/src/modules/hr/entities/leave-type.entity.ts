@@ -1,5 +1,6 @@
 import { Entity, Column, Unique } from 'typeorm';
 import { TenantBaseEntity } from '@shared/entities/tenant-base.entity';
+import { LeaveAccrualMethod } from '../calculators/leave-calculator';
 
 @Entity('hr_leave_types')
 @Unique(['tenantId', 'code'])
@@ -42,4 +43,27 @@ export class LeaveType extends TenantBaseEntity {
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
+
+  /** annual = full entitlement on 1 January; monthly = earned at each month end. */
+  @Column({ name: 'accrual_method', type: 'varchar', default: 'annual' })
+  accrualMethod: LeaveAccrualMethod;
+
+  /** Unused days are carried into the next year. */
+  @Column({ name: 'carry_forward', default: false })
+  carryForward: boolean;
+
+  /** Maximum days carried into the next year; null = unlimited. */
+  @Column({ name: 'carry_forward_max', type: 'decimal', precision: 6, scale: 2, nullable: true })
+  carryForwardMax: number | null;
+
+  /** Carried days expire after this many months of the new year; null = never. */
+  @Column({ name: 'carry_forward_expiry_months', type: 'int', nullable: true })
+  carryForwardExpiryMonths: number | null;
+
+  @Column({ name: 'allow_half_day', default: true })
+  allowHalfDay: boolean;
+
+  /** The remaining balance can be paid out (encashment / end of service). */
+  @Column({ default: false })
+  encashable: boolean;
 }

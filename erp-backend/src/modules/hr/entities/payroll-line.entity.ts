@@ -33,6 +33,9 @@ export class PayrollLine extends BaseEntity {
   @Column({ name: 'department_id', type: 'uuid', nullable: true })
   departmentId: string | null;
 
+  @Column({ name: 'cost_center_id', type: 'uuid', nullable: true })
+  costCenterId: string | null;
+
   @Column({ type: 'decimal', precision: 18, scale: 4, default: 0 })
   basic: number;
 
@@ -69,6 +72,14 @@ export class PayrollLine extends BaseEntity {
 
   @Column({ name: 'income_tax', type: 'decimal', precision: 18, scale: 4, default: 0 })
   incomeTax: number;
+
+  /** Martyrs fund (Law 4/2021) deducted from the employee. */
+  @Column({ name: 'martyrs_fund', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  martyrsFund: number;
+
+  /** Martyrs fund borne by the employer. */
+  @Column({ name: 'martyrs_fund_employer', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  martyrsFundEmployer: number;
 
   @Column({ name: 'loan_deduction', type: 'decimal', precision: 18, scale: 4, default: 0 })
   loanDeduction: number;

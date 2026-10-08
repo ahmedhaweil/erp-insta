@@ -65,13 +65,50 @@ Permissions module `treasury`, screens `treasuries`, `vouchers`, `transfers`, `c
 - New tables: `treasuries`, `treasury_vouchers`, `treasury_voucher_lines`, `treasury_transfers`, `cheques`, `bank_statements`, `bank_statement_lines`, `bank_reconciliation_matches`.
 - `payments` gains `withholding_amount`, `exchange_rate`, `treasury_id` and `cheque_id`; the status enum gains `bounced`.
 
+## Phase 2 additions
+
+- **Custodians enforced**: a treasury may have custodians (`custodianUserId` plus
+  `custodianUserIds[]`). When it has any, only they, or users holding the permission
+  `treasury/treasuries/all` (or a module wildcard such as the seeded admin), can use it: voucher
+  create/post, transfer create/post (source treasury), cheque deposit/collect/clear/bounce charges
+  (bank used), the cash book (`/movements`) and payments with a `treasuryId` (payments module).
+  Treasuries without custodians stay open. `GET /treasury/treasuries?usableOnly=true` lists the
+  caller's usable treasuries. Shared rules live in `services/treasury-access.util.ts` (pure helpers
+  also used by `PaymentsService`, which cannot import the treasury services).
+- **No negative cash**: `allowNegative` per treasury (null = default by type: cash boxes false, banks
+  true). Payment vouchers, transfers (amount + fee from the source), issued cheque clearing and
+  outbound non-cheque payments are refused when the balance (overall and at the document date, in
+  the treasury currency) would go below zero.
+- **FX at cheque settlement**: `collect` and `clear` accept `exchangeRate` (base units per cheque
+  currency unit). The notes leave at the cheque's booked rate and the bank moves at the settlement
+  rate (amounts in currency kept on both lines); the difference is posted to `fxGain`/`fxLoss`.
+  Collection: Dr bank (amount x new rate) / Cr notes or cheques under collection (amount x booked
+  rate) / Cr fxGain or Dr fxLoss. Clearing: Dr notes payable (booked) / Cr bank (new) / Dr fxLoss or
+  Cr fxGain.
+- **Bank charges on bounced issued cheques**: `bankCharge` on bounce now works for issued cheques
+  too: Dr bankCharges / Cr the bank the cheque is drawn on (no re-charge to suppliers).
+- **MT940 import**: `POST /treasury/bank-statements` accepts `mt940` (SWIFT MT940 text). Parser
+  (`services/mt940.parser.ts`, pure, unit-tested) reads :20:, :25:, :28C:, :60F/M:, :61: (value and
+  entry date, C/D/RC/RD mark, funds code, amount with decimal comma, transaction type, customer and
+  bank reference, supplementary details), :86: (multi-line) and :62F/M:; block wrappers are
+  ignored. Opening/closing balances, dates and the statement reference default from the file.
+- **Post-dated cheque reminders**: `GET /treasury/cheques/reminders?days=7&type&treasuryId&asOf&includeOverdue`
+  returns open cheques due within N days (and overdue ones unless `includeOverdue=false`), grouped
+  per treasury (received cheques still in the portfolio are grouped under `treasuryId: null`) with
+  the treasury custodian, totals and `daysToDue` per cheque, for the alerts module to consume.
+
+Schema: `treasuries.custodian_user_ids uuid[]`, `treasuries.allow_negative boolean null`.
+Payments module change: `PaymentsService.create` calls `enforceTreasuryRules` after resolving the
+treasury (and `PaymentsModule` imports `AuthModule` for `RbacService`).
+
 ## Still missing
 
-- Restricting users to their own treasury. `custodianUserId` is stored but not enforced.
-- No rule against a cash box going negative.
+- Cancelling an inbound payment or a receipt voucher can still take a cash box below zero (only
+  outflows are checked). Treasury listings other than `usableOnly` are not filtered.
 - Cheques that are a partial payment of an invoice work. Splitting one payment into several cheques is not supported (use one payment per cheque).
-- An FX revaluation of an open cheque between receipt and collection is not posted: notes move at the cheque's original rate.
-- Bank charges on a bounced issued cheque have to be entered as a payment voucher.
-- Bank statement import reads JSON and simple CSV only (no MT940 or OFX). Dates must be `YYYY-MM-DD`.
+- Open foreign cheques are not revalued at period end (only at collection/clearing). Endorsements
+  still move at the booked rate.
+- Bank statement import reads JSON, simple CSV and MT940 (no OFX / CAMT.053). CSV dates must be `YYYY-MM-DD`.
 - The generic `JournalEntriesService.reverse` (accounting module) drops `amount_currency` on reversal lines. The treasury ledger works around this by deriving the currency amount as base / entry rate, and transfers are cancelled with an explicit mirror entry. Fixing `reverse` itself would be cleaner.
-- Cheque printing, promissory notes with installment schedules, and post-dated cheque reminders or notifications are not built.
+- Cheque printing and promissory notes with installment schedules are not built; reminders are a
+  data endpoint (notifications are up to the alerts module).

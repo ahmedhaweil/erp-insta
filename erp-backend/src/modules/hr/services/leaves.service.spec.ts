@@ -8,11 +8,18 @@ import { EmployeeStatus } from '../entities/employee.entity';
 import { EmployeesService } from './employees.service';
 import { HrOrganizationService, FALLBACK_SCHEDULE } from './hr-organization.service';
 import { SequenceService } from '@shared/services/sequence.service';
+import { LeaveEncashment } from '../entities/leave-encashment.entity';
+import { PayrollAdjustment } from '../entities/payroll-adjustment.entity';
+import { HrSettingsService } from './hr-settings.service';
+import { PayrollLockService } from './payroll-lock.service';
+import { mergeRules } from '../calculators/payroll-rules';
 
 describe('LeavesService', () => {
   let service: LeavesService;
   let requests: any[];
   let saved: any;
+  let encashments: any[];
+  let payrollLock: Record<string, jest.Mock>;
 
   const annual = {
     id: 'lt-annual',
@@ -30,6 +37,8 @@ describe('LeavesService', () => {
   beforeEach(async () => {
     requests = [];
     saved = null;
+    encashments = [];
+    payrollLock = { assertOpen: jest.fn(), lockedPeriods: jest.fn(async () => []) };
     const requestRepo = {
       create: jest.fn((x) => x),
       save: jest.fn(async (x) => (saved = { id: 'lr-new', ...x })),
@@ -44,7 +53,10 @@ describe('LeavesService', () => {
           useValue: { findOne: jest.fn(async () => annual), find: jest.fn(async () => [annual]) },
         },
         { provide: getRepositoryToken(LeaveRequest), useValue: requestRepo },
-        { provide: EmployeesService, useValue: { findById: jest.fn(async () => employee) } },
+        {
+          provide: EmployeesService,
+          useValue: { findById: jest.fn(async () => employee), monthlyWage: jest.fn(() => 9000) },
+        },
         {
           provide: HrOrganizationService,
           useValue: {
@@ -53,6 +65,16 @@ describe('LeavesService', () => {
           },
         },
         { provide: SequenceService, useValue: { next: jest.fn().mockResolvedValue('LV-000001') } },
+        {
+          provide: getRepositoryToken(LeaveEncashment),
+          useValue: { find: jest.fn(async () => encashments), create: jest.fn((x) => x), save: jest.fn(async (x) => x) },
+        },
+        {
+          provide: getRepositoryToken(PayrollAdjustment),
+          useValue: { create: jest.fn((x) => x), save: jest.fn(async (x) => ({ id: 'adj-1', ...x })) },
+        },
+        { provide: HrSettingsService, useValue: { getRules: jest.fn(async () => mergeRules({})) } },
+        { provide: PayrollLockService, useValue: payrollLock },
       ],
     }).compile();
     service = module.get(LeavesService);
@@ -100,6 +122,80 @@ describe('LeavesService', () => {
       },
     ];
     await expect(service.approve('t1', 'u1', 'new')).rejects.toThrow(BadRequestException);
+  });
+
+  it('creates a half-day request of 0.5 day', async () => {
+    await service.create('t1', 'u1', {
+      employeeId: 'e1',
+      leaveTypeId: 'lt-annual',
+      startDate: '2026-10-04',
+      endDate: '2026-10-04',
+      halfDay: true,
+      halfDayPeriod: 'pm',
+    });
+    expect(saved).toMatchObject({ days: 0.5, halfDay: true, halfDayPeriod: 'pm' });
+    await expect(
+      service.create('t1', 'u1', {
+        employeeId: 'e1',
+        leaveTypeId: 'lt-annual',
+        startDate: '2026-10-04',
+        endDate: '2026-10-05',
+        halfDay: true,
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('marks half days in the leave-day map used by attendance', async () => {
+    requests = [{ id: 'h', leaveTypeId: 'lt-annual', status: LeaveRequestStatus.APPROVED, startDate: '2026-10-04', endDate: '2026-10-04', days: 0.5, halfDay: true }];
+    const map = await service.leaveDays('t1', 'e1', '2026-10-01', '2026-10-31');
+    expect(map.get('2026-10-04')).toEqual({ paid: true, fraction: 0.5 });
+  });
+
+  it('blocks approving or cancelling leave in a month with an approved payroll', async () => {
+    payrollLock.assertOpen.mockRejectedValue(new ConflictException('locked'));
+    requests = [
+      { id: 'd', status: LeaveRequestStatus.DRAFT, leaveTypeId: 'lt-annual', employeeId: 'e1', startDate: '2026-09-01', endDate: '2026-09-02', days: 2 },
+      { id: 'a', status: LeaveRequestStatus.APPROVED, leaveTypeId: 'lt-annual', employeeId: 'e1', startDate: '2026-09-06', endDate: '2026-09-06', days: 1 },
+    ];
+    await expect(service.approve('t1', 'u1', 'd')).rejects.toThrow(ConflictException);
+    await expect(service.cancel('t1', 'u1', 'a')).rejects.toThrow(ConflictException);
+    expect(payrollLock.assertOpen).toHaveBeenCalledWith('t1', 'e1', '2026-09-06', '2026-09-06', expect.any(String));
+    // A draft can still be withdrawn.
+    payrollLock.assertOpen.mockClear();
+    await service.cancel('t1', 'u1', 'd');
+    expect(payrollLock.assertOpen).not.toHaveBeenCalled();
+  });
+
+  it('includes carry-forward and encashments in the balance', async () => {
+    const carrying = { ...annual, carryForward: true, carryForwardMax: 5 } as unknown as LeaveType;
+    requests = [
+      { id: 'a', status: LeaveRequestStatus.APPROVED, startDate: '2025-03-01', endDate: '2025-03-05', days: 3 },
+      { id: 'b', status: LeaveRequestStatus.APPROVED, startDate: '2026-03-01', endDate: '2026-03-03', days: 2 },
+    ];
+    encashments = [{ year: 2026, days: 4 }];
+    const balance = await service.balanceFor('t1', employee as any, carrying, 2026, '2026-06-30');
+    // 2025: 21 - 3 = 18 -> capped at 5 ; 2026: 5 + 21 - 2 - 4 encashed
+    expect(balance).toMatchObject({ carriedIn: 5, taken: 2, encashed: 4, remaining: 20 });
+  });
+
+  it('encashes leave as a taxable payroll addition within the balance', async () => {
+    const encashable = { ...annual, encashable: true } as unknown as LeaveType;
+    (service as any).typeRepo.findOne = jest.fn(async () => encashable);
+    const result = await service.createEncashment('t1', 'u1', {
+      employeeId: 'e1',
+      leaveTypeId: 'lt-annual',
+      year: 2026,
+      days: 3,
+      period: '2026-12',
+    });
+    expect(result).toMatchObject({ days: 3, dailyRate: 300, amount: 900, payrollAdjustmentId: 'adj-1' });
+    await expect(
+      service.createEncashment('t1', 'u1', { employeeId: 'e1', leaveTypeId: 'lt-annual', year: 2026, days: 30, period: '2026-12' }),
+    ).rejects.toThrow(BadRequestException);
+    (service as any).typeRepo.findOne = jest.fn(async () => annual);
+    await expect(
+      service.createEncashment('t1', 'u1', { employeeId: 'e1', leaveTypeId: 'lt-annual', year: 2026, days: 1, period: '2026-12' }),
+    ).rejects.toThrow('not encashable');
   });
 
   it('only approves drafts', async () => {

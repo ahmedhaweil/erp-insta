@@ -13,6 +13,7 @@ import { Account } from '@modules/accounting/entities/account.entity';
 import { JournalLine } from '@modules/accounting/entities/journal-line.entity';
 import { AccountingModule } from '@modules/accounting/accounting.module';
 import { PaymentsModule } from '@modules/payments/payments.module';
+import { AuthModule } from '@modules/auth/auth.module';
 import { SalesModule } from '@modules/sales/sales.module';
 import { ApprovalsModule } from '@modules/approvals/approvals.module';
 import { TreasuryLedgerService } from './services/treasury-ledger.service';
@@ -46,6 +47,7 @@ import { BankReconciliationController } from './controllers/bank-reconciliation.
       JournalLine,
     ]),
     AccountingModule,
+    AuthModule,
     PaymentsModule,
     SalesModule,
     ApprovalsModule,

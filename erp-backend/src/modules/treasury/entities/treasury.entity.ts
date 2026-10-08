@@ -63,9 +63,24 @@ export class Treasury extends TenantBaseEntity {
   @Column({ name: 'opening_rate', type: 'decimal', precision: 12, scale: 6, default: 1 })
   openingRate: number;
 
-  /** User responsible for the cash box; access restriction can build on it later. */
+  /**
+   * User responsible for the cash box. When a treasury has custodians
+   * (this one and/or custodianUserIds) only they, or users holding
+   * treasury/treasuries/all, can use it; without custodians it is open.
+   */
   @Column({ name: 'custodian_user_id', type: 'uuid', nullable: true })
   custodianUserId: string;
+
+  /** Additional custodians (deputy cashiers). */
+  @Column({ name: 'custodian_user_ids', type: 'uuid', array: true, default: '{}' })
+  custodianUserIds: string[];
+
+  /**
+   * Whether the balance may go below zero. Null = default by type: cash
+   * boxes cannot, bank accounts can (overdraft facility).
+   */
+  @Column({ name: 'allow_negative', type: 'boolean', nullable: true })
+  allowNegative: boolean | null;
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;

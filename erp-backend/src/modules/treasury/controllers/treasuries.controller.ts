@@ -19,16 +19,25 @@ export class TreasuriesController {
   @ApiQuery({ name: 'type', enum: TreasuryType, required: false })
   @ApiQuery({ name: 'activeOnly', required: false, type: Boolean })
   @ApiQuery({ name: 'withBalance', required: false, type: Boolean })
+  @ApiQuery({
+    name: 'usableOnly',
+    required: false,
+    type: Boolean,
+    description: 'Only the treasuries the current user is custodian of (or all with treasury/treasuries/all)',
+  })
   findAll(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Query('type') type?: TreasuryType,
     @Query('activeOnly') activeOnly?: string,
     @Query('withBalance') withBalance?: string,
+    @Query('usableOnly') usableOnly?: string,
   ) {
     return this.treasuries.findAll(tenantId, {
       type,
       activeOnly: activeOnly === 'true',
       withBalance: withBalance === 'true',
+      usableBy: usableOnly === 'true' ? user.sub : undefined,
     });
   }
 
@@ -69,9 +78,10 @@ export class TreasuriesController {
   @ApiOperation({ summary: 'Cash book / bank movements with opening and running balance' })
   movements(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
     @Param('id') id: string,
     @Query() query: DateRangeQueryDto,
   ) {
-    return this.treasuries.movements(tenantId, id, query.from, query.to);
+    return this.treasuries.movements(tenantId, id, query.from, query.to, user.sub);
   }
 }

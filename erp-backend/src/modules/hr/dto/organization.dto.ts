@@ -72,10 +72,26 @@ export class CreatePublicHolidayDto {
 }
 
 export class UpdateHrSettingsDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'Partial override of the payroll rules ({ general, EG, SA }); see GET /hr/settings for the effective values',
+      'Partial override of the payroll rules ({ general, EG, SA }); see GET /hr/settings for the effective values. Omit to keep the current overrides.',
   })
+  @IsOptional()
   @IsObject()
-  rules: Record<string, any>;
+  rules?: Record<string, any>;
+
+  @ApiPropertyOptional({ description: 'End-of-service expense account (provision and settlements)' })
+  @IsOptional()
+  @IsUUID()
+  eosExpenseAccountId?: string | null;
+
+  @ApiPropertyOptional({ description: 'End-of-service provision (liability) account' })
+  @IsOptional()
+  @IsUUID()
+  eosProvisionAccountId?: string | null;
+
+  @ApiPropertyOptional({ description: 'Martyrs fund payable account (defaults to payroll tax payable)' })
+  @IsOptional()
+  @IsUUID()
+  martyrsFundAccountId?: string | null;
 }

@@ -64,7 +64,8 @@ export class TransfersService {
     if (dto.fromTreasuryId === dto.toTreasuryId) {
       throw new BadRequestException('Source and destination treasuries must differ');
     }
-    const from = await this.treasuries.getActive(tenantId, dto.fromTreasuryId);
+    // The user must be custodian of the source; any active destination is allowed.
+    const from = await this.treasuries.getUsable(tenantId, userId, dto.fromTreasuryId);
     const to = await this.treasuries.getActive(tenantId, dto.toTreasuryId);
     const values = TransfersService.computeAmounts(from, to, dto);
 
@@ -177,6 +178,8 @@ export class TransfersService {
     const from = await this.treasuries.getActive(tenantId, transfer.fromTreasuryId);
     const to = await this.treasuries.getActive(tenantId, transfer.toTreasuryId);
     const fee = Number(transfer.fee || 0);
+    await this.treasuries.assertUsable(tenantId, userId, from);
+    await this.treasuries.assertFunds(tenantId, from, round(Number(transfer.amount) + fee, 4), transfer.date);
     await this.autoPosting.preflight(tenantId, transfer.date, fee > 0 ? ['bankChargesAccountId'] : []);
 
     await this.autoPosting.post({

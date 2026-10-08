@@ -8,6 +8,7 @@ import { ChequesService } from '../services/cheques.service';
 import {
   BounceChequeDto,
   ChequeDueQueryDto,
+  ChequeReminderQueryDto,
   ChequeQueryDto,
   DepositChequeDto,
   EndorseChequeDto,
@@ -36,6 +37,16 @@ export class ChequesController {
   @ApiOperation({ summary: 'Cheque calendar: outstanding cheques due in a date range' })
   due(@CurrentTenant() tenantId: string, @Query() query: ChequeDueQueryDto) {
     return this.cheques.due(tenantId, query);
+  }
+
+  @RequirePermissions({ module: 'treasury', screen: 'cheques', action: 'read' })
+  @Get('reminders')
+  @ApiOperation({
+    summary:
+      'Post-dated cheque reminders: open cheques due within N days (and overdue), grouped per treasury (alerts feed)',
+  })
+  reminders(@CurrentTenant() tenantId: string, @Query() query: ChequeReminderQueryDto) {
+    return this.cheques.reminders(tenantId, query);
   }
 
   @RequirePermissions({ module: 'treasury', screen: 'cheques', action: 'read' })

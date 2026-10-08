@@ -56,6 +56,17 @@ export class CreateTreasuryDto {
   @IsPositive()
   openingRate?: number;
   @ApiPropertyOptional() @IsOptional() @IsUUID() custodianUserId?: string;
+  @ApiPropertyOptional({ type: [String], description: 'Additional custodians' })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  custodianUserIds?: string[];
+  @ApiPropertyOptional({
+    description: 'Allow a negative balance (default: false for cash boxes, true for banks)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowNegative?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
 }
@@ -182,6 +193,26 @@ export class ChequeQueryDto {
   @ApiPropertyOptional() @IsOptional() @IsDateString() dueTo?: string;
 }
 
+export class ChequeReminderQueryDto {
+  @ApiPropertyOptional({ description: 'Days ahead (default 7)', default: 7 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(365)
+  days?: number;
+  @ApiPropertyOptional({ enum: ChequeType }) @IsOptional() @IsEnum(ChequeType) type?: ChequeType;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() treasuryId?: string;
+  @ApiPropertyOptional({ description: 'Reference date (default today)' })
+  @IsOptional()
+  @IsDateString()
+  asOf?: string;
+  @ApiPropertyOptional({ description: 'Include overdue cheques (default true)' })
+  @IsOptional()
+  @IsString()
+  includeOverdue?: string;
+}
+
 export class ChequeDueQueryDto {
   @ApiProperty() @IsDateString() from: string;
   @ApiProperty() @IsDateString() to: string;
@@ -198,6 +229,14 @@ export class DepositChequeDto {
 
 export class SettleChequeDto {
   @ApiProperty() @IsDateString() date: string;
+  @ApiPropertyOptional({
+    description:
+      'Foreign-currency cheques: base units per cheque-currency unit at collection/clearing; the difference with the booked rate goes to fxGain / fxLoss',
+  })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  exchangeRate?: number;
   @ApiPropertyOptional({
     description:
       'Bank treasury; defaults to the deposit bank (received) or the bank it is drawn on (issued)',
@@ -219,7 +258,9 @@ export class BounceChequeDto {
   @IsOptional()
   @IsBoolean()
   chargeToCustomer?: boolean;
-  @ApiPropertyOptional({ description: 'Bank treasury paying the charge (defaults to deposit bank)' })
+  @ApiPropertyOptional({
+    description: 'Bank treasury paying the charge (defaults to the deposit bank / the bank the cheque is drawn on)',
+  })
   @IsOptional()
   @IsUUID()
   treasuryId?: string;
@@ -284,6 +325,13 @@ export class ImportStatementDto {
   @IsOptional()
   @IsString()
   csv?: string;
+  @ApiPropertyOptional({
+    description:
+      'SWIFT MT940 statement text; its :60F:/:62F: balances are used unless openingBalance/closingBalance are given',
+  })
+  @IsOptional()
+  @IsString()
+  mt940?: string;
 }
 
 export class AutoMatchDto {

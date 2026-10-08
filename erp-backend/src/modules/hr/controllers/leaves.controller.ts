@@ -9,13 +9,15 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { RequirePermissions } from '@common/decorators/require-permissions.decorator';
 import { JwtPayload } from '@common/interfaces/request-with-user.interface';
 import { LeavesService } from '../services/leaves.service';
 import {
+  CreateLeaveEncashmentDto,
+  LeaveEncashmentQueryDto,
   CreateLeaveRequestDto,
   CreateLeaveTypeDto,
   DecideLeaveDto,
@@ -113,12 +115,37 @@ export class LeavesController {
   @RequirePermissions(READ)
   @Get('employees/:id/leave-balances')
   @ApiQuery({ name: 'year', required: true })
+  @ApiQuery({ name: 'asOf', required: false, description: 'Balance date (accrual / carry expiry)' })
   balances(
     @CurrentTenant() tenantId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Query('year', ParseIntPipe) year: number,
+    @Query('asOf') asOf?: string,
   ) {
-    return this.leaves.balances(tenantId, id, year);
+    return this.leaves.balances(tenantId, id, year, asOf);
+  }
+
+  @RequirePermissions(READ)
+  @Get('leave-encashments')
+  findEncashments(@CurrentTenant() tenantId: string, @Query() query: LeaveEncashmentQueryDto) {
+    return this.leaves.findEncashments(tenantId, query);
+  }
+
+  @RequirePermissions(APPROVE)
+  @Post('leave-encashments')
+  @ApiOperation({ summary: 'Encash unused leave days: a taxable payroll addition of the given month' })
+  createEncashment(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateLeaveEncashmentDto,
+  ) {
+    return this.leaves.createEncashment(tenantId, user.sub, dto);
+  }
+
+  @RequirePermissions(APPROVE)
+  @Post('leave-encashments/:id/cancel')
+  cancelEncashment(@CurrentTenant() tenantId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.leaves.cancelEncashment(tenantId, id);
   }
 
   @RequirePermissions(READ)

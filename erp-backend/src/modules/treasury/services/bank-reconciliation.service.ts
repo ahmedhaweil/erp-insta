@@ -26,6 +26,7 @@ import { round } from '@shared/utils/document-totals.util';
 import { TreasuriesService } from './treasuries.service';
 import { LedgerLine, TreasuryLedgerService } from './treasury-ledger.service';
 import { VOUCHER_SOURCE, VouchersService } from './vouchers.service';
+import { Mt940Error, Mt940Statement, parseMt940 } from './mt940.parser';
 
 const AMOUNT_TOLERANCE = 0.005;
 
@@ -192,11 +193,47 @@ export class BankReconciliationService {
     };
   }
 
+  /** Parses an MT940 statement into statement lines (BadRequest on malformed input). */
+  static parseMt940(text: string): { statement: Mt940Statement; lines: StatementLineDto[] } {
+    let statement: Mt940Statement;
+    try {
+      statement = parseMt940(text);
+    } catch (err) {
+      if (err instanceof Mt940Error) throw new BadRequestException(`MT940: ${err.message}`);
+      throw err;
+    }
+    return {
+      statement,
+      lines: statement.lines.map((l) => ({
+        date: l.date,
+        amount: l.amount,
+        reference: l.reference ?? l.bankReference,
+        description: [l.transactionType, l.description].filter(Boolean).join(' ') || undefined,
+      })),
+    };
+  }
+
   async import(tenantId: string, userId: string, dto: ImportStatementDto) {
     const treasury = await this.treasuries.getActive(tenantId, dto.treasuryId, TreasuryType.BANK);
-    const lines = [...(dto.lines ?? []), ...(dto.csv ? BankReconciliationService.parseCsv(dto.csv) : [])];
+    const mt940 = dto.mt940 ? BankReconciliationService.parseMt940(dto.mt940) : null;
+    const lines = [
+      ...(dto.lines ?? []),
+      ...(dto.csv ? BankReconciliationService.parseCsv(dto.csv) : []),
+      ...(mt940?.lines ?? []),
+    ];
     if (!lines.length) throw new BadRequestException('The statement has no lines');
     const sorted = [...lines].sort((a, b) => a.date.localeCompare(b.date));
+    if (mt940) {
+      dto = {
+        ...dto,
+        reference:
+          dto.reference ?? mt940.statement.statementNumber ?? mt940.statement.transactionReference ?? undefined,
+        openingBalance: dto.openingBalance ?? mt940.statement.opening?.amount,
+        closingBalance: dto.closingBalance ?? mt940.statement.closing?.amount,
+        startDate: dto.startDate ?? mt940.statement.opening?.date,
+        endDate: dto.endDate ?? mt940.statement.closing?.date,
+      };
+    }
     const openingBalance = round(dto.openingBalance ?? 0, 4);
     const movement = round(
       lines.reduce((s, l) => s + Number(l.amount), 0),

@@ -41,7 +41,26 @@ export interface EgyptRules {
   highIncomeTiers: HighIncomeTier[];
   /** Overtime premium multiplier on the hourly wage. */
   overtimeMultiplier: number;
+  /**
+   * Martyrs, victims and missing persons fund (Law 4/2021): 0.05% of the
+   * gross salary, borne by the employee (deducted) or the employer.
+   */
+  martyrsFund: MartyrsFundRules;
+  /**
+   * Contractual end-of-service award in months of wage per service year
+   * (Egypt has no statutory private-sector gratuity; 0 = none).
+   */
+  contractualGratuityMonthsPerYear: number;
 }
+
+export interface MartyrsFundRules {
+  enabled: boolean;
+  /** Fraction of the gross salary (0.0005 = 0.05%). */
+  rate: number;
+  bearer: 'employee' | 'employer';
+}
+
+export type OvertimeMode = 'auto' | 'approved_only';
 
 export interface SaudiRules {
   /** GOSI employee share for Saudi nationals (annuities 9% + SANED 0.75%). */
@@ -69,6 +88,12 @@ export interface GeneralRules {
   absenceDeductionMultiplier: number;
   /** Multiplier applied to the hourly wage for late minutes; 0 disables. */
   lateDeductionMultiplier: number;
+  /**
+   * Overtime source: `auto` = hours computed from attendance plus approved
+   * overtime requests; `approved_only` = approved overtime requests only
+   * (capped at the attendance overtime of that day for tracked employees).
+   */
+  overtimeMode: OvertimeMode;
 }
 
 export interface PayrollRules {
@@ -86,6 +111,7 @@ export const DEFAULT_PAYROLL_RULES: PayrollRules = {
     daysPerMonth: 30,
     absenceDeductionMultiplier: 1,
     lateDeductionMultiplier: 1,
+    overtimeMode: 'auto',
   },
   EG: {
     siEmployeeRate: 0.11,
@@ -110,6 +136,8 @@ export const DEFAULT_PAYROLL_RULES: PayrollRules = {
       { above: 1200000, startBracket: 5 },
     ],
     overtimeMultiplier: 1.35,
+    martyrsFund: { enabled: false, rate: 0.0005, bearer: 'employee' },
+    contractualGratuityMonthsPerYear: 0,
   },
   SA: {
     gosiSaudiEmployeeRate: 0.0975,

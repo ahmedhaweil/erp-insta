@@ -14,6 +14,7 @@ import { AccountingModule } from '@modules/accounting/accounting.module';
 import { SalesModule } from '@modules/sales/sales.module';
 import { PurchasingModule } from '@modules/purchasing/purchasing.module';
 import { ApprovalsModule } from '@modules/approvals/approvals.module';
+import { AuthModule } from '@modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ApprovalsModule } from '@modules/approvals/approvals.module';
     SalesModule,
     PurchasingModule,
     ApprovalsModule,
+    AuthModule,
   ],
   controllers: [PaymentsController],
   providers: [PaymentsService],
