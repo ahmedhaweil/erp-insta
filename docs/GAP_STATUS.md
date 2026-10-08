@@ -58,7 +58,7 @@ Legend: ✅ available · 🟡 partial · ❌ not available.
 | Products, alternate units, barcodes, price lists, minimum price | ✅ | |
 | Warehouses, transfers, stock counts, negative-stock policy per warehouse | ✅ | |
 | Lots, serials and expiry (FEFO), traceability | ✅ | |
-| Average-cost valuation | 🟡 | Average cost is per product. Per-warehouse cost, FIFO and landed costs are missing. |
+| Average-cost valuation, landed costs | 🟡 | Landed costs (freight, customs) are split by value, quantity or equally (`/purchasing/landed-costs`). Average cost is per product; per-warehouse cost and FIFO are missing. |
 | Sales: quotations, orders, deliveries, invoices, credit notes, returns | ✅ | |
 | Sales reps and commissions; instalment sales | ✅ | |
 | Purchasing: requisitions, RFQ/PO with approval, receipts, bills, returns, replenishment | ✅ | |
@@ -91,7 +91,7 @@ Legend: ✅ available · 🟡 partial · ❌ not available.
 
 1. **Keep migrations in step.** The initial migration (`src/database/migrations`) creates the whole schema. Production runs it at startup with `DB_RUN_MIGRATIONS=true`, then seeds with `SEED_SYNC=false`. Generate a new migration (`npm run migration:generate`) with every entity change.
 2. **Real-environment checks.** Run ETA/ZATCA preprod validation and the ZATCA SDK hash check.
-3. **Inventory valuation.** Per-warehouse average cost, FIFO and landed costs are missing.
+3. **Inventory valuation.** Per-warehouse average cost and FIFO are missing.
 4. **Restaurant POS and offline catalogue.** Tables, kitchen screen, and a product cache for offline selling.
 5. **Email/SMS notification channels and approver notifications.**
 6. **Official HR filings and bank-specific salary files.**

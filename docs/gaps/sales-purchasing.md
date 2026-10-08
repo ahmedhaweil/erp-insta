@@ -239,3 +239,20 @@ New columns:
 - Purchase returns do not default to the lots received on the original bill
   (FEFO unless lots are given).
 - Units are not converted on price list rules (rules are per base unit).
+
+## Landed costs
+
+`POST /purchasing/landed-costs {date, purchaseOrderIds[], splitMethod: by_value|by_quantity|equal, charges[{description, amount, accountId?}]}`
+creates a draft. `GET .../:id/preview` shows the split; `POST .../:id/post` posts it and `POST .../:id/cancel` reverses it.
+Permission: `purchasing/landed_costs`.
+
+- Charges are spread over the goods received on the purchase orders. The basis is the stock movements of the
+  receipts: the value or quantity received per product, or an equal share.
+- Shares are rounded to the cent, and the last share absorbs the difference.
+- Average costing: the part of a product's share matching units still on hand (capped at the received quantity)
+  raises the product's average cost. Posting: Dr inventory. The part matching units already sold or consumed
+  goes to Dr cost of goods sold. Each charge's account is credited (default: the purchase account, where a freight
+  or customs service bill was booked).
+- Cancelling reverses the entry and takes the capitalised amount back out of the average cost of the stock on hand.
+- Not built: allocation by weight or volume, landed costs in foreign currency, and per-warehouse costs (average
+  cost is per product).

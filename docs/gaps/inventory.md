@@ -121,7 +121,7 @@ requests, an `options` argument on `receive`, `issue` and `adjust`, `lots` in th
   printed count sheets.
 - Goods in transit are not on a separate GL account; the valuation report
   excludes them (see `inTransitValue` on transfers).
-- No putaway/removal rules other than FEFO, no multi-step routes, no landed costs.
+- No putaway/removal rules other than FEFO, no multi-step routes. Landed costs are built in purchasing (`/purchasing/landed-costs`, see sales-purchasing.md).
 - Lot attributes beyond number/expiry (manufacturing date, supplier lot) are not stored.
 
 ## Phase 2: units and lots on documents (operations integration)
