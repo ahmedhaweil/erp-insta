@@ -28,6 +28,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { ManufacturingModule } from './modules/manufacturing/manufacturing.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { TreasuryModule } from './modules/treasury/treasury.module';
+import { ApprovalsModule } from './modules/approvals/approvals.module';
 
 function buildImports() {
   const imports: any[] = [
@@ -65,6 +66,7 @@ function buildImports() {
     PosModule,
     PaymentsModule,
     TreasuryModule,
+    ApprovalsModule,
     ComplianceModule,
     NotificationsModule,
     RealtimeModule,

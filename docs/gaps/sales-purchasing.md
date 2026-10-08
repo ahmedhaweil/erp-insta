@@ -190,7 +190,7 @@ New columns:
   no deferred or effective-interest recognition and no late-payment penalties.
 - Commission payout (Dr commissionPayable / Cr cash) is left to payroll or the treasury
   module.
-- There is no multi-level approval and no approval for vendor bills. Requisitions have no
+- Multi-level approvals for purchase orders and vendor bills come from the approvals module (see `accounting-approvals.md`). Requisitions have no
   department master; they use `departmentId` / `departmentName` as free text.
 
 ## Phase 2: units, lots, return cancellation, POS sales reps

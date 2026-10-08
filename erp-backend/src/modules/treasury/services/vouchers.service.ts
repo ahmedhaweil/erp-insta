@@ -3,6 +3,8 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
@@ -26,6 +28,8 @@ import { SequenceService } from '@shared/services/sequence.service';
 import { round } from '@shared/utils/document-totals.util';
 import { TreasuriesService } from './treasuries.service';
 import { TreasuryLedgerService } from './treasury-ledger.service';
+import { ApprovalsService } from '@modules/approvals/services/approvals.service';
+import { ApprovalDocumentType } from '@modules/approvals/entities/approval-rule.entity';
 
 export const VOUCHER_SOURCE = 'treasury_voucher';
 
@@ -35,7 +39,7 @@ export const VOUCHER_SOURCE = 'treasury_voucher';
  * Draft -> posted -> cancelled (posted vouchers are reversed).
  */
 @Injectable()
-export class VouchersService {
+export class VouchersService implements OnModuleInit {
   constructor(
     @InjectRepository(TreasuryVoucher)
     private readonly voucherRepo: Repository<TreasuryVoucher>,
@@ -45,7 +49,21 @@ export class VouchersService {
     private readonly ledger: TreasuryLedgerService,
     private readonly autoPosting: AutoPostingService,
     private readonly sequenceService: SequenceService,
+    @Optional() private readonly approvals?: ApprovalsService,
   ) {}
+
+  /** Approval engine: the last approver posts the payment voucher. */
+  onModuleInit(): void {
+    this.approvals?.registerHandler(ApprovalDocumentType.TREASURY_VOUCHER, {
+      onApproved: async (request, userId) => {
+        if (!request.documentId) return;
+        const voucher = await this.findById(request.tenantId, request.documentId);
+        if (voucher.status !== VoucherStatus.DRAFT) return;
+        await this.approvals!.markExecuted(request);
+        await this.post(request.tenantId, userId, voucher.id);
+      },
+    });
+  }
 
   findAll(tenantId: string, query: VoucherQueryDto = {}) {
     const where: any = { tenantId };

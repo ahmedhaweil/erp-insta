@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  OnModuleInit,
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -22,6 +23,8 @@ import { Product, ProductType } from '@modules/inventory/entities/product.entity
 import { SequenceService } from '@shared/services/sequence.service';
 import { AutoPostingService, PostingLine } from '@modules/accounting/services/auto-posting.service';
 import { JournalType } from '@modules/accounting/entities/journal.entity';
+import { ApprovalsService } from '@modules/approvals/services/approvals.service';
+import { ApprovalDocumentType } from '@modules/approvals/entities/approval-rule.entity';
 import {
   addDays,
   computeLine,
@@ -41,7 +44,7 @@ const OPEN_STATUSES = [
 ];
 
 @Injectable()
-export class PurchaseInvoicesService {
+export class PurchaseInvoicesService implements OnModuleInit {
   constructor(
     @InjectRepository(PurchaseInvoice)
     private readonly invoiceRepo: Repository<PurchaseInvoice>,
@@ -54,7 +57,23 @@ export class PurchaseInvoicesService {
     private readonly sequenceService: SequenceService,
     private readonly autoPosting: AutoPostingService,
     @Optional() private readonly products?: ProductsService,
+    @Optional() private readonly approvals?: ApprovalsService,
   ) {}
+
+  /** Approval engine hook: a fully approved vendor bill is posted by the last approver. */
+  onModuleInit(): void {
+    this.approvals?.registerHandler(ApprovalDocumentType.VENDOR_BILL, {
+      onApproved: async (request, userId) => {
+        if (!request.documentId) return;
+        const bill = await this.invoiceRepo.findOne({
+          where: { id: request.documentId, tenantId: request.tenantId },
+        });
+        if (bill?.status === PurchaseInvoiceStatus.DRAFT) {
+          await this.approve(request.tenantId, request.documentId, userId);
+        }
+      },
+    });
+  }
 
   /** Creates a draft vendor bill. Amounts are always recomputed from the lines. */
   async create(
@@ -159,6 +178,19 @@ export class PurchaseInvoicesService {
 
     const isRefund = invoice.moveType === PurchaseInvoiceType.REFUND;
     const actor = userId ?? invoice.createdBy;
+
+    // Approval engine: no-op unless an active vendor_bill rule matches the amount;
+    // otherwise a pending request is recorded and a 409 is thrown.
+    if (!isRefund && this.approvals) {
+      await this.approvals.ensureApproved(tenantId, actor, {
+        documentType: ApprovalDocumentType.VENDOR_BILL,
+        documentId: invoice.id,
+        documentRef: invoice.invoiceNumber,
+        documentTable: 'purchase_invoices',
+        amount: round(Number(invoice.totalAmount) * (Number(invoice.exchangeRate) || 1), 4),
+        description: `Vendor bill ${invoice.invoiceNumber}`,
+      });
+    }
     const products = await this.productRepo.find({
       where: { tenantId, id: In([...new Set(invoice.lines.map((l) => l.productId))]) },
     });

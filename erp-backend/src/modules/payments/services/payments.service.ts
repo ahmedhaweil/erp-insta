@@ -3,6 +3,8 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -42,6 +44,8 @@ import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { Treasury, TreasuryType } from '@modules/treasury/entities/treasury.entity';
 import { Cheque, ChequeStatus, ChequeType } from '@modules/treasury/entities/cheque.entity';
 import { SequenceService } from '@shared/services/sequence.service';
+import { ApprovalsService } from '@modules/approvals/services/approvals.service';
+import { ApprovalDocumentType } from '@modules/approvals/entities/approval-rule.entity';
 import { residual, round } from '@shared/utils/document-totals.util';
 
 const OPEN_SALES = [
@@ -83,7 +87,7 @@ function isSettlement(payment: Pick<Payment, 'partnerType' | 'direction'>): bool
  * withholding tax accounts while the partner is settled for the gross amount.
  */
 @Injectable()
-export class PaymentsService {
+export class PaymentsService implements OnModuleInit {
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepo: Repository<Payment>,
@@ -105,7 +109,23 @@ export class PaymentsService {
     private readonly purchaseInvoices: PurchaseInvoicesService,
     private readonly autoPosting: AutoPostingService,
     private readonly sequenceService: SequenceService,
+    @Optional() private readonly approvals?: ApprovalsService,
   ) {}
+
+  /** Approval engine: an approved outbound payment request creates the payment. */
+  onModuleInit(): void {
+    this.approvals?.registerHandler(ApprovalDocumentType.PAYMENT, {
+      onApproved: async (request) => {
+        if (!request.payload) return;
+        const payment = await this.create(
+          request.tenantId,
+          request.requestedBy,
+          request.payload as CreatePaymentDto,
+        );
+        await this.approvals!.markExecuted(request, payment.id);
+      },
+    });
+  }
 
   findAll(tenantId: string, partnerId?: string, treasuryId?: string): Promise<Payment[]> {
     const where: any = { tenantId };
