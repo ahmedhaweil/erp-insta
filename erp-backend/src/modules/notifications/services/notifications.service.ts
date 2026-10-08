@@ -29,21 +29,28 @@ export class NotificationsService {
     return this.notificationRepo.find({
       where: { tenantId, userId },
       order: { createdAt: 'DESC' },
+      take: 200,
     });
   }
 
   async markAsRead(
     tenantId: string,
     id: string,
+    userId?: string,
   ): Promise<Notification> {
-    const notification = await this.notificationRepo.findOne({
-      where: { id, tenantId },
-    });
+    const where: Record<string, string> = { id, tenantId };
+    // Users may only mark their own notifications
+    if (userId) where.userId = userId;
+    const notification = await this.notificationRepo.findOne({ where });
     if (!notification) throw new NotFoundException('Notification not found');
 
     notification.isRead = true;
     notification.readAt = new Date();
     return this.notificationRepo.save(notification);
+  }
+
+  countUnread(tenantId: string, userId: string): Promise<number> {
+    return this.notificationRepo.count({ where: { tenantId, userId, isRead: false } });
   }
 
   async markAllRead(
