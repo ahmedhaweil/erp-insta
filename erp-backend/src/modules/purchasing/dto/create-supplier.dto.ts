@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsBoolean, IsNumber, IsEmail } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 export class CreateSupplierDto {
   @ApiProperty()
@@ -50,13 +50,12 @@ export class CreateSupplierDto {
   @IsNumber()
   creditLimit?: number;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  balance?: number;
 
   @ApiPropertyOptional({ description: 'Payment terms in days' })
   @IsOptional()
   @IsNumber()
   paymentTermDays?: number;
 }
+
+/** Every field optional, still validated and whitelisted (a TS Partial<> type is not). */
+export class UpdateSupplierDto extends PartialType(CreateSupplierDto) {}

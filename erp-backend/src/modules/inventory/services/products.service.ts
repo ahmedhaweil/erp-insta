@@ -4,7 +4,7 @@ import { Not, Repository } from 'typeorm';
 import { Product, TrackingType } from '../entities/product.entity';
 import { ProductUnit } from '../entities/product-unit.entity';
 import { Unit } from '../entities/unit.entity';
-import { CreateProductDto } from '../dto/create-product.dto';
+import { CreateProductDto, UpdateProductDto } from '../dto/create-product.dto';
 import { ProductUnitDto } from '../dto/product-unit.dto';
 import { round } from '@shared/utils/document-totals.util';
 
@@ -54,7 +54,7 @@ export class ProductsService {
     return product;
   }
 
-  async update(tenantId: string, id: string, dto: Partial<CreateProductDto>): Promise<Product> {
+  async update(tenantId: string, id: string, dto: UpdateProductDto): Promise<Product> {
     const product = await this.findById(tenantId, id);
     this.assertTracking({
       trackingType: dto.trackingType ?? product.trackingType,

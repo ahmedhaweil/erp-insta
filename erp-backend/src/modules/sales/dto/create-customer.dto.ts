@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsBoolean, IsNumber, IsEmail, IsUUID } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 export class CreateCustomerDto {
   @ApiProperty()
@@ -73,3 +73,6 @@ export class CreateCustomerDto {
   @IsUUID()
   salesRepId?: string;
 }
+
+/** Every field optional, still validated and whitelisted (a TS Partial<> type is not). */
+export class UpdateCustomerDto extends PartialType(CreateCustomerDto) {}

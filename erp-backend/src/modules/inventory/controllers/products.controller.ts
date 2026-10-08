@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { ProductsService } from '../services/products.service';
-import { CreateProductDto } from '../dto/create-product.dto';
+import { CreateProductDto, UpdateProductDto } from '../dto/create-product.dto';
 import { ProductUnitDto } from '../dto/product-unit.dto';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { RequirePermissions } from '@common/decorators/require-permissions.decorator';
@@ -42,7 +42,7 @@ export class ProductsController {
   update(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: Partial<CreateProductDto>,
+    @Body() dto: UpdateProductDto,
   ) {
     return this.productsService.update(tenantId, id, dto);
   }
