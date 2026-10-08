@@ -42,6 +42,18 @@ export const opsPurchasing = {
   refundBill: (id: string, body: { reason?: string; date?: string; lines?: { invoiceLineId: string; quantity: number }[]; post?: boolean }) =>
     ops.post(`${U}/invoices/${id}/refund`, body),
 
+  /** Register-payment shortcut: a supplier payment allocated to one bill (payments module). */
+  registerPayment: (body: { partnerId: string; invoiceId: string; amount: number; date: string; method?: string; reference?: string }) =>
+    ops.post('/payments', {
+      partnerType: 'supplier',
+      partnerId: body.partnerId,
+      amount: body.amount,
+      date: body.date,
+      method: body.method,
+      reference: body.reference || undefined,
+      allocations: [{ invoiceId: body.invoiceId, amount: body.amount }],
+    }),
+
   // Returns
   returns: (params?: { supplierId?: string; billId?: string }) => ops.get<Row[]>(`${U}/returns`, params),
   createReturn: (body: any) => ops.post<Row>(`${U}/returns`, body),
