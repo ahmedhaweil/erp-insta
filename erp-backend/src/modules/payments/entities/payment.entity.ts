@@ -23,6 +23,8 @@ export enum PaymentMethod {
 export enum PaymentStatus {
   POSTED = 'posted',
   CANCELLED = 'cancelled',
+  /** Cheque payment undone because the cheque bounced or was handed back. */
+  BOUNCED = 'bounced',
 }
 
 @Entity('payments')
@@ -45,7 +47,14 @@ export class Payment extends TenantBaseEntity {
   @Column({ type: 'decimal', precision: 18, scale: 4 })
   amount: number;
 
-  /** Part of the amount reconciled with invoices; the rest is an advance/credit. */
+  /**
+   * Tax withheld at source (customer withheld from us, or we withheld from
+   * the supplier). The partner is settled for amount + withholdingAmount.
+   */
+  @Column({ name: 'withholding_amount', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  withholdingAmount: number;
+
+  /** Part of the settled amount reconciled with invoices; the rest is an advance/credit. */
   @Column({ name: 'allocated_amount', type: 'decimal', precision: 18, scale: 4, default: 0 })
   allocatedAmount: number;
 
@@ -60,6 +69,18 @@ export class Payment extends TenantBaseEntity {
 
   @Column({ name: 'currency_id', type: 'uuid', nullable: true })
   currencyId: string;
+
+  /** Base-currency units per unit of the payment currency. */
+  @Column({ name: 'exchange_rate', type: 'decimal', precision: 12, scale: 6, default: 1 })
+  exchangeRate: number;
+
+  /** Cash box / bank account the money went through (falls back to default cash/bank accounts). */
+  @Column({ name: 'treasury_id', type: 'uuid', nullable: true })
+  treasuryId: string;
+
+  /** Cheque payments: the cheque created (or endorsed) by this payment. */
+  @Column({ name: 'cheque_id', type: 'uuid', nullable: true })
+  chequeId: string;
 
   @Column({ name: 'created_by', type: 'uuid' })
   createdBy: string;
