@@ -1,0 +1,76 @@
+{
+  "nav": {
+    "approvals": "الموافقات",
+    "approvalInbox": "طلبات الموافقة",
+    "approvalRules": "قواعد الموافقة",
+    "hrSelfService": "شؤوني الوظيفية (خدمة ذاتية)",
+    "dataImport": "استيراد وتصدير البيانات",
+    "alertRules": "التنبيهات"
+  },
+  "platform": {
+    "common": {
+      "loading": "جارٍ التحميل...",
+      "save": "حفظ",
+      "cancel": "إلغاء",
+      "close": "إغلاق",
+      "edit": "تعديل",
+      "delete": "حذف",
+      "add": "إضافة",
+      "back": "رجوع",
+      "yes": "نعم",
+      "no": "لا",
+      "all": "الكل",
+      "active": "نشط",
+      "inactive": "غير نشط",
+      "status": "الحالة",
+      "date": "التاريخ",
+      "amount": "المبلغ",
+      "name": "الاسم",
+      "type": "النوع",
+      "notes": "ملاحظات",
+      "description": "الوصف",
+      "comment": "تعليق",
+      "user": "المستخدم",
+      "role": "الدور",
+      "from": "من",
+      "to": "إلى",
+      "saved": "تم الحفظ",
+      "failed": "تعذر تنفيذ العملية",
+      "noData": "لا توجد بيانات",
+      "actions": "إجراءات",
+      "view": "عرض",
+      "refresh": "تحديث",
+      "number": "الرقم",
+      "total": "الإجمالي"
+    },
+    "print": {
+      "print": "طباعة / PDF",
+      "pdf": "PDF",
+      "opening": "جارٍ الفتح...",
+      "failed": "تعذر فتح ملف PDF",
+      "receipt80": "إيصال (80 مم)",
+      "receiptA4": "إيصال (A4)",
+      "quotation": "عرض سعر",
+      "salesOrder": "أمر بيع",
+      "deliveryNote": "إذن تسليم",
+      "statement": "كشف حساب",
+      "payslip": "قسيمة الراتب (PDF)",
+      "allPayslips": "كل قسائم الرواتب (PDF)",
+      "register": "مسير الرواتب (PDF)",
+      "cheque": "طباعة الشيك",
+      "voucher": "طباعة السند"
+    },
+    "approvals": {
+      "blockedTitle": "مطلوب موافقة",
+      "blockedBody": "هذا الإجراء بانتظار طلب الموافقة {number}.",
+      "blockedBodyNoNumber": "هذا الإجراء بانتظار طلب موافقة.",
+      "viewRequest": "عرض الطلب"
+    },
+    "bell": {
+      "title": "الإشعارات",
+      "markAll": "تعليم الكل كمقروء",
+      "empty": "لا توجد إشعارات",
+      "viewAll": "عرض كل الإشعارات"
+    }
+  }
+}

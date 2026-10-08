@@ -1,0 +1,76 @@
+{
+  "nav": {
+    "approvals": "Approvals",
+    "approvalInbox": "Approval requests",
+    "approvalRules": "Approval rules",
+    "hrSelfService": "My HR (self-service)",
+    "dataImport": "Data import & export",
+    "alertRules": "Alerts"
+  },
+  "platform": {
+    "common": {
+      "loading": "Loading...",
+      "save": "Save",
+      "cancel": "Cancel",
+      "close": "Close",
+      "edit": "Edit",
+      "delete": "Delete",
+      "add": "Add",
+      "back": "Back",
+      "yes": "Yes",
+      "no": "No",
+      "all": "All",
+      "active": "Active",
+      "inactive": "Inactive",
+      "status": "Status",
+      "date": "Date",
+      "amount": "Amount",
+      "name": "Name",
+      "type": "Type",
+      "notes": "Notes",
+      "description": "Description",
+      "comment": "Comment",
+      "user": "User",
+      "role": "Role",
+      "from": "From",
+      "to": "To",
+      "saved": "Saved",
+      "failed": "The operation failed",
+      "noData": "No data",
+      "actions": "Actions",
+      "view": "View",
+      "refresh": "Refresh",
+      "number": "Number",
+      "total": "Total"
+    },
+    "print": {
+      "print": "Print / PDF",
+      "pdf": "PDF",
+      "opening": "Opening...",
+      "failed": "Could not open the PDF",
+      "receipt80": "Receipt (80mm)",
+      "receiptA4": "Receipt (A4)",
+      "quotation": "Quotation",
+      "salesOrder": "Sales order",
+      "deliveryNote": "Delivery note",
+      "statement": "Statement of account",
+      "payslip": "Payslip (PDF)",
+      "allPayslips": "All payslips (PDF)",
+      "register": "Payroll register (PDF)",
+      "cheque": "Print cheque",
+      "voucher": "Print voucher"
+    },
+    "approvals": {
+      "blockedTitle": "Approval required",
+      "blockedBody": "This action waits for approval request {number}.",
+      "blockedBodyNoNumber": "This action waits for an approval request.",
+      "viewRequest": "View request"
+    },
+    "bell": {
+      "title": "Notifications",
+      "markAll": "Mark all read",
+      "empty": "No notifications",
+      "viewAll": "View all notifications"
+    }
+  }
+}

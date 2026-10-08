@@ -6,7 +6,7 @@ import { routing } from './routing';
  * each area can be translated and extended independently; they are deep
  * merged, so several files may add keys to the same namespace (e.g. "nav").
  */
-const AREAS = ['core', 'finance', 'operations', 'people'] as const;
+const AREAS = ['core', 'finance', 'operations', 'people', 'platform'] as const;
 
 type Messages = Record<string, unknown>;
 
