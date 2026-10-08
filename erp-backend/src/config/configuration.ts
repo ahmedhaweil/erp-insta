@@ -38,11 +38,25 @@ export default () => ({
     env: process.env.ZATCA_ENV || 'sandbox',
     certPath: process.env.ZATCA_CERT_PATH,
     privateKeyPath: process.env.ZATCA_PRIVATE_KEY_PATH,
+    apiUrl: process.env.ZATCA_API_URL || undefined,
   },
   eta: {
     apiUrl: process.env.ETA_API_URL,
     clientId: process.env.ETA_CLIENT_ID,
     clientSecret: process.env.ETA_CLIENT_SECRET,
+    // Identity server for OAuth client credentials (defaults by environment).
+    idSrvUrl: process.env.ETA_ID_SRV_URL || undefined,
+    // Local USB-token signing middleware (receives the serialized document,
+    // returns the CAdES-BES signature).
+    signerUrl: process.env.ETA_SIGNER_URL || undefined,
+    signerToken: process.env.ETA_SIGNER_TOKEN || undefined,
+  },
+  compliance: {
+    // AES-256-GCM key material for ETA/ZATCA secrets stored per tenant.
+    secretKey: process.env.COMPLIANCE_SECRET_KEY || undefined,
+    httpTimeoutMs: parseInt(process.env.COMPLIANCE_HTTP_TIMEOUT_MS || '30000', 10),
+    // Background status polling of submitted documents (0 = disabled).
+    pollIntervalSec: parseInt(process.env.COMPLIANCE_POLL_INTERVAL_SEC || '0', 10),
   },
   smtp: {
     host: process.env.SMTP_HOST || 'localhost',

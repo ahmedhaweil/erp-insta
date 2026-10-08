@@ -37,6 +37,13 @@ export const configValidationSchema = Joi.object({
   ETA_API_URL: Joi.string().allow('').optional(),
   ETA_CLIENT_ID: Joi.string().allow('').optional(),
   ETA_CLIENT_SECRET: Joi.string().allow('').optional(),
+  ETA_ID_SRV_URL: Joi.string().allow('').optional(),
+  ETA_SIGNER_URL: Joi.string().allow('').optional(),
+  ETA_SIGNER_TOKEN: Joi.string().allow('').optional(),
+  ZATCA_API_URL: Joi.string().allow('').optional(),
+  COMPLIANCE_SECRET_KEY: Joi.string().allow('').optional(),
+  COMPLIANCE_HTTP_TIMEOUT_MS: Joi.number().default(30000),
+  COMPLIANCE_POLL_INTERVAL_SEC: Joi.number().default(0),
 
   SMTP_HOST: Joi.string().default('localhost'),
   SMTP_PORT: Joi.number().default(1025),
