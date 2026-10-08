@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  OnModuleInit,
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -25,6 +26,9 @@ import { StockService } from '@modules/inventory/services/stock.service';
 import { SequenceService } from '@shared/services/sequence.service';
 import { RbacService } from '@modules/auth/services/rbac.service';
 import { PurchasingSettingsService } from './purchasing-settings.service';
+import { ApprovalsService } from '@modules/approvals/services/approvals.service';
+import { ApprovalDocumentType } from '@modules/approvals/entities/approval-rule.entity';
+import { ApprovalRequestStatus } from '@modules/approvals/entities/approval-request.entity';
 
 export const PO_APPROVAL_PERMISSION = {
   module: 'purchasing',
@@ -34,7 +38,7 @@ export const PO_APPROVAL_PERMISSION = {
 import { computeLine, computeTotals, round, today, withDefaultTaxRates } from '@shared/utils/document-totals.util';
 
 @Injectable()
-export class PurchaseOrdersService {
+export class PurchaseOrdersService implements OnModuleInit {
   constructor(
     @InjectRepository(PurchaseOrder)
     private readonly orderRepo: Repository<PurchaseOrder>,
@@ -50,7 +54,39 @@ export class PurchaseOrdersService {
     private readonly invoicesService: PurchaseInvoicesService,
     @Optional() private readonly settingsService?: PurchasingSettingsService,
     @Optional() private readonly rbac?: RbacService,
+    @Optional() private readonly approvals?: ApprovalsService,
   ) {}
+
+  /**
+   * Approval engine: when the tenant has an active purchase_order rule the
+   * engine replaces the single-threshold approval. The last approver
+   * confirms the order; a rejection sends it back to draft.
+   */
+  onModuleInit(): void {
+    this.approvals?.registerHandler(ApprovalDocumentType.PURCHASE_ORDER, {
+      onApproved: async (request, userId) => {
+        const order = await this.findById(request.tenantId, request.documentId!);
+        if (order.status !== PurchaseOrderStatus.TO_APPROVE) return;
+        order.approvedBy = userId;
+        order.approvedAt = new Date();
+        order.rejectionReason = null;
+        await this.approvals!.markExecuted(request);
+        await this.doConfirm(request.tenantId, userId, order);
+      },
+      onRejected: async (request, _userId, comment) => {
+        const order = await this.findById(request.tenantId, request.documentId!);
+        if (order.status !== PurchaseOrderStatus.TO_APPROVE) return;
+        order.status = PurchaseOrderStatus.DRAFT;
+        order.rejectionReason = comment || `Approval request ${request.requestNumber} ${request.status}`;
+        await this.orderRepo.save(order);
+      },
+    });
+  }
+
+  /** True when purchase orders are governed by the approval engine. */
+  private async usesApprovalEngine(tenantId: string): Promise<boolean> {
+    return !!this.approvals && (await this.approvals.hasActiveRule(tenantId, ApprovalDocumentType.PURCHASE_ORDER));
+  }
 
   async create(
     tenantId: string,
@@ -136,7 +172,25 @@ export class PurchaseOrdersService {
       throw new ConflictException('Only draft orders can be confirmed');
     }
 
-    if (!order.approvedBy && (await this.requiresApproval(tenantId, order))) {
+    if (!order.approvedBy && (await this.usesApprovalEngine(tenantId))) {
+      const request = await this.approvals!.submit(tenantId, userId, {
+        documentType: ApprovalDocumentType.PURCHASE_ORDER,
+        documentId: order.id,
+        documentRef: order.orderNumber,
+        amount: round(Number(order.totalAmount) * (Number(order.exchangeRate) || 1), 4),
+        description: `Purchase order ${order.orderNumber}`,
+      });
+      if (request && request.status !== ApprovalRequestStatus.APPROVED) {
+        order.status = PurchaseOrderStatus.TO_APPROVE;
+        order.rejectionReason = null;
+        return this.orderRepo.save(order);
+      }
+      if (request) {
+        await this.approvals!.markExecuted(request);
+        order.approvedBy = request.decidedBy ?? userId;
+        order.approvedAt = request.decidedAt ?? new Date();
+      }
+    } else if (!order.approvedBy && (await this.requiresApproval(tenantId, order))) {
       const canApprove = this.rbac
         ? await this.rbac.hasPermission(tenantId, userId, PO_APPROVAL_PERMISSION)
         : false;
@@ -158,6 +212,7 @@ export class PurchaseOrdersService {
     if (order.status !== PurchaseOrderStatus.TO_APPROVE) {
       throw new ConflictException('Only orders waiting for approval can be approved');
     }
+    await this.assertNotEngineManaged(tenantId, order.id);
     order.approvedBy = userId;
     order.approvedAt = new Date();
     order.rejectionReason = null;
@@ -170,9 +225,24 @@ export class PurchaseOrdersService {
     if (order.status !== PurchaseOrderStatus.TO_APPROVE) {
       throw new ConflictException('Only orders waiting for approval can be rejected');
     }
+    await this.assertNotEngineManaged(tenantId, order.id);
     order.status = PurchaseOrderStatus.DRAFT;
     order.rejectionReason = reason || 'Rejected';
     return this.orderRepo.save(order);
+  }
+
+  /** Orders with an engine request are decided through /approvals/requests/:id. */
+  private async assertNotEngineManaged(tenantId: string, orderId: string): Promise<void> {
+    if (!this.approvals) return;
+    const request = await this.approvals.findOpenRequest(tenantId, {
+      documentType: ApprovalDocumentType.PURCHASE_ORDER,
+      documentId: orderId,
+    });
+    if (request?.status === ApprovalRequestStatus.PENDING) {
+      throw new ConflictException(
+        `This order is waiting for approval request ${request.requestNumber}; decide it in Approvals [approvalRequestId=${request.id}]`,
+      );
+    }
   }
 
   async requiresApproval(tenantId: string, order: PurchaseOrder): Promise<boolean> {

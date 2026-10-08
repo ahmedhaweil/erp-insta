@@ -32,6 +32,7 @@ import { PurchaseInvoicesController } from './controllers/purchase-invoices.cont
 import { ReplenishmentController } from './controllers/replenishment.controller';
 import { AccountingModule } from '@modules/accounting/accounting.module';
 import { InventoryModule } from '@modules/inventory/inventory.module';
+import { ApprovalsModule } from '@modules/approvals/approvals.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { InventoryModule } from '@modules/inventory/inventory.module';
     AccountingModule,
     InventoryModule,
     AuthModule,
+    ApprovalsModule,
   ],
   controllers: [
     SuppliersController,
