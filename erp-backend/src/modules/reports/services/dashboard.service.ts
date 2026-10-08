@@ -7,6 +7,10 @@ import { SalesOrder, SalesOrderStatus } from '@modules/sales/entities/sales-orde
 import { Stock } from '@modules/inventory/entities/stock.entity';
 import { Product } from '@modules/inventory/entities/product.entity';
 import { Notification } from '@modules/notifications/entities/notification.entity';
+import { AccountingSettings } from '@modules/accounting/entities/accounting-settings.entity';
+import { round } from '@shared/utils/document-totals.util';
+import { ManagementReportsService } from './management-reports.service';
+import { SalesAnalysisService } from './sales-analysis.service';
 
 @Injectable()
 export class DashboardService {
@@ -23,6 +27,10 @@ export class DashboardService {
     private readonly productRepo: Repository<Product>,
     @InjectRepository(Notification)
     private readonly notificationRepo: Repository<Notification>,
+    @InjectRepository(AccountingSettings)
+    private readonly settingsRepo: Repository<AccountingSettings>,
+    private readonly managementReports: ManagementReportsService,
+    private readonly salesAnalysis: SalesAnalysisService,
   ) {}
 
   async getDashboard(tenantId: string, userId: string) {
@@ -91,12 +99,48 @@ export class DashboardService {
     const totalRevenue = Number(revenueResult?.total) || 0;
     const totalExpenses = Number(expensesResult?.total) || 0;
 
+    // Sequential: the request runs on a single transactional connection
+    const receivables = await this.managementReports.getAgedReceivables(tenantId, today);
+    const payables = await this.managementReports.getAgedPayables(tenantId, today);
+    const cashAndBank = await this.getCashAndBank(tenantId);
+    const topProducts = (
+      await this.salesAnalysis.salesAnalysis(tenantId, {
+        from: startOfMonth,
+        to: today,
+        groupBy: 'product',
+        limit: 5,
+      })
+    ).rows;
+    const overdue = (totals: Record<string, number>) =>
+      round(Object.entries(totals).reduce((s, [k, v]) => (k === 'current' ? s : s + v), 0), 4);
+
     return {
       totalRevenue,
       totalExpenses,
       netProfit: totalRevenue - totalExpenses,
       pendingOrders,
       lowStockProducts,
+      lowStockCount: lowStockProducts,
+      receivables: {
+        total: receivables.total,
+        overdue: overdue(receivables.totals),
+        buckets: receivables.totals,
+      },
+      payables: {
+        total: payables.total,
+        overdue: overdue(payables.totals),
+        buckets: payables.totals,
+      },
+      cash: cashAndBank.cash,
+      bank: cashAndBank.bank,
+      topProducts: topProducts.map((p) => ({
+        productId: p.key,
+        code: p.code,
+        name: p.name,
+        quantity: p.quantity,
+        net: p.net,
+        grossProfit: p.grossProfit,
+      })),
       recentOrders: recentOrders.map((o) => ({
         id: o.id,
         orderNumber: o.orderNumber,
@@ -116,29 +160,71 @@ export class DashboardService {
     };
   }
 
+  /** Active products whose total on-hand quantity is at or below their reorder level. */
   private async getLowStockCount(tenantId: string): Promise<number> {
-    // Get products with reorder level > 0
-    const products = await this.productRepo.find({
-      where: { tenantId, isActive: true },
-    });
-
-    const productsWithReorder = products.filter(
-      (p) => Number(p.reorderLevel) > 0,
+    const rows: { count: string }[] = await this.productRepo.query(
+      `SELECT COUNT(*) AS count FROM (
+         SELECT p.id
+           FROM products p
+           LEFT JOIN stocks s ON s.product_id = p.id AND s.tenant_id = p.tenant_id
+          WHERE p.tenant_id = $1 AND p.is_active = true AND p.reorder_level > 0
+          GROUP BY p.id, p.reorder_level
+         HAVING COALESCE(SUM(s.quantity), 0) <= p.reorder_level
+       ) low`,
+      [tenantId],
     );
+    return Number(rows[0]?.count) || 0;
+  }
 
-    if (productsWithReorder.length === 0) return 0;
+  /**
+   * Ledger balances of the default cash and bank accounts and of their
+   * sibling postable accounts (other cash boxes and bank accounts).
+   */
+  private async getCashAndBank(tenantId: string) {
+    const settings = await this.settingsRepo.findOne({ where: { tenantId } });
+    const empty = { balance: 0, accounts: [] as { accountId: string; code: string; name: string; balance: number }[] };
+    if (!settings?.cashAccountId && !settings?.bankAccountId) return { cash: empty, bank: empty };
 
-    let lowCount = 0;
-    for (const product of productsWithReorder) {
-      const stocks = await this.stockRepo.find({
-        where: { tenantId, productId: product.id },
-      });
-      const totalQty = stocks.reduce((sum, s) => sum + Number(s.quantity), 0);
-      if (totalQty <= Number(product.reorderLevel)) {
-        lowCount++;
-      }
+    const balances = async (accountId?: string) => {
+      if (!accountId) return empty;
+      const rows: { accountId: string; code: string; nameAr: string; nameEn: string; balance: string }[] =
+        await this.productRepo.query(
+          `SELECT a.id AS "accountId", a.code, a.name_ar AS "nameAr", a.name_en AS "nameEn",
+                  COALESCE(SUM(CASE WHEN e.id IS NULL THEN 0 ELSE l.debit - l.credit END), 0) AS balance
+             FROM accounts a
+             JOIN accounts d ON d.id = $2 AND d.tenant_id = a.tenant_id
+             LEFT JOIN journal_lines l ON l.account_id = a.id
+             LEFT JOIN journal_entries e ON e.id = l.entry_id AND e.status = 'posted'
+            WHERE a.tenant_id = $1 AND a.allow_posting = true
+              AND (a.id = d.id OR (d.parent_id IS NOT NULL AND a.parent_id = d.parent_id AND a.type = d.type))
+            GROUP BY a.id, a.code, a.name_ar, a.name_en
+            ORDER BY a.code`,
+          [tenantId, accountId],
+        );
+      const accounts = rows.map((r) => ({
+        accountId: r.accountId,
+        code: r.code,
+        name: r.nameEn || r.nameAr,
+        balance: round(Number(r.balance), 4),
+      }));
+      return { balance: round(accounts.reduce((s, a) => s + a.balance, 0), 4), accounts };
+    };
+
+    // With both defaults under the same parent, report each account once (as bank unless it is the cash one)
+    const cash = await balances(settings.cashAccountId);
+    const bank = await balances(settings.bankAccountId);
+    if (cash.accounts.length && bank.accounts.length) {
+      const cashOnly = cash.accounts.filter(
+        (a) => a.accountId === settings.cashAccountId || !/bank|بنك/i.test(a.name),
+      );
+      const bankOnly = bank.accounts.filter(
+        (a) => a.accountId !== settings.cashAccountId && !cashOnly.some((c) => c.accountId === a.accountId),
+      );
+      return {
+        cash: { balance: round(cashOnly.reduce((s, a) => s + a.balance, 0), 4), accounts: cashOnly },
+        bank: { balance: round(bankOnly.reduce((s, a) => s + a.balance, 0), 4), accounts: bankOnly },
+      };
     }
-
-    return lowCount;
+    return { cash, bank };
   }
 }
