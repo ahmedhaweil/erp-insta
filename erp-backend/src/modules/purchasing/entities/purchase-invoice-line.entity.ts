@@ -39,6 +39,14 @@ export class PurchaseInvoiceLine extends BaseEntity {
   @Column({ name: 'qty_returned', type: 'decimal', precision: 18, scale: 4, default: 0 })
   qtyReturned: number;
 
+  /** Alternate unit the quantity and unit price are expressed in (null = base unit). */
+  @Column({ name: 'unit_id', type: 'uuid', nullable: true })
+  unitId: string | null;
+
+  /** Base units per line unit (1 for the base unit); stock moves use quantity x factor. */
+  @Column({ name: 'unit_factor', type: 'decimal', precision: 18, scale: 6, default: 1 })
+  unitFactor: number;
+
   @ManyToOne(() => PurchaseInvoice, (invoice) => invoice.lines)
   @JoinColumn({ name: 'invoice_id' })
   invoice: PurchaseInvoice;

@@ -20,4 +20,11 @@ export class Warehouse extends TenantBaseEntity {
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
+
+  /**
+   * Per-warehouse negative stock policy: true allows, false blocks, null
+   * follows the tenant setting (`tenants.settings.inventory.allowNegativeStock`).
+   */
+  @Column({ name: 'allow_negative_stock', type: 'boolean', nullable: true })
+  allowNegativeStock: boolean | null;
 }

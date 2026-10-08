@@ -21,6 +21,8 @@ import { AutoPostingService } from '@modules/accounting/services/auto-posting.se
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { SalesPricingService } from './sales-pricing.service';
 import { InstallmentScheduleService } from './installment-schedule.service';
+import { baseUnitLines, prepareSalesLines } from './sales-line-units';
+import { ProductsService } from '@modules/inventory/services/products.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   addDays,
@@ -31,7 +33,6 @@ import {
   residual,
   round,
   today,
-  withDefaultTaxRates,
 } from '@shared/utils/document-totals.util';
 
 const OPEN_STATUSES = [
@@ -50,6 +51,9 @@ export interface InvoiceLineInput {
   description?: string;
   orderLineId?: string;
   withholdingRate?: number | null;
+  /** Alternate unit; `unitFactor` reuses a stored factor (documents derived from another one). */
+  unitId?: string | null;
+  unitFactor?: number | null;
 }
 
 export interface CreateInvoiceOptions {
@@ -74,6 +78,7 @@ export class SalesInvoicesService {
     @Optional() private readonly pricing?: SalesPricingService,
     @Optional() private readonly installments?: InstallmentScheduleService,
     @Optional() private readonly eventEmitter?: EventEmitter2,
+    @Optional() private readonly products?: ProductsService,
   ) {}
 
   /**
@@ -91,26 +96,21 @@ export class SalesInvoicesService {
     const isCreditNote = extra.moveType === SalesInvoiceType.CREDIT_NOTE;
     const checkPrices = !isCreditNote && !options.skipPriceChecks;
 
-    let inputLines: InvoiceLineInput[] = dto.lines;
+    let inputLines = dto.lines as InvoiceLineInput[];
     let priceListId: string | null = dto.priceListId ?? null;
-    if (this.pricing && inputLines.some((l) => l.unitPrice === undefined || l.unitPrice === null)) {
-      const priced = await this.pricing.priceLines(
+    if (this.pricing || inputLines.some((l) => l.unitId)) {
+      const prepared = await prepareSalesLines(
+        this.pricing,
+        this.products,
         tenantId,
         { customer, priceListId: dto.priceListId, date: dto.date },
         inputLines,
       );
-      inputLines = priced.lines;
-      priceListId = priced.priceListId;
+      inputLines = prepared.lines;
+      priceListId = prepared.priceListId;
     }
     if (inputLines.some((l) => l.unitPrice === undefined || l.unitPrice === null)) {
       throw new BadRequestException('Every line needs a unit price');
-    }
-    const untaxed = inputLines.filter((l) => l.taxRate === undefined || l.taxRate === null);
-    if (this.pricing && untaxed.length) {
-      inputLines = withDefaultTaxRates(
-        inputLines,
-        await this.pricing.defaultTaxRates(tenantId, untaxed.map((l) => l.productId)),
-      );
     }
 
     const taxIncluded = !!dto.pricesIncludeTax;
@@ -119,6 +119,8 @@ export class SalesInvoicesService {
       productId: l.productId,
       description: l.description,
       orderLineId: l.orderLineId,
+      unitId: l.unitId ?? null,
+      unitFactor: l.unitId ? Number(l.unitFactor) || 1 : 1,
       withholdingRate:
         l.withholdingRate === undefined || l.withholdingRate === null
           ? null
@@ -131,7 +133,7 @@ export class SalesInvoicesService {
       await this.pricing.enforceMinPrice(
         tenantId,
         userId,
-        lines.filter((l) => !l.orderLineId),
+        baseUnitLines(lines.filter((l) => !l.orderLineId)),
         Number(dto.exchangeRate ?? 1),
       );
     }
@@ -378,6 +380,8 @@ export class SalesInvoicesService {
           taxRate: Number(line.taxRate),
           description: line.description,
           withholdingRate: line.withholdingRate ?? undefined,
+          unitId: line.unitId ?? undefined,
+          unitFactor: line.unitId ? Number(line.unitFactor) : undefined,
         };
       })
       .filter((l) => l.quantity > 0);

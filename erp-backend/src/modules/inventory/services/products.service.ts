@@ -119,6 +119,33 @@ export class ProductsService {
   }
 
   /**
+   * Unit of a document line: the factor to the base unit and the unit's own
+   * sell price (alternate units only, null when not set). No unit or the base
+   * unit gives `{ unitId: null, factor: 1 }`.
+   */
+  async resolveLineUnit(
+    tenantId: string,
+    productId: string,
+    unitId?: string | null,
+  ): Promise<{ unitId: string | null; factor: number; sellPrice: number | null }> {
+    const product = await this.productRepo.findOne({ where: { id: productId, tenantId } });
+    if (!product) throw new NotFoundException('Product not found');
+    if (!unitId || unitId === product.unitId) return { unitId: null, factor: 1, sellPrice: null };
+    const row = await this.productUnitRepo.findOne({ where: { tenantId, productId, unitId } });
+    if (row) {
+      if (row.isActive === false) {
+        throw new BadRequestException(`Unit ${unitId} of product ${product.code} is inactive`);
+      }
+      return {
+        unitId,
+        factor: Number(row.factor),
+        sellPrice: row.sellPrice === null || row.sellPrice === undefined ? null : Number(row.sellPrice),
+      };
+    }
+    return { unitId, factor: await this.unitFactor(tenantId, productId, unitId), sellPrice: null };
+  }
+
+  /**
    * Converts a quantity expressed in `unitId` to the product's base (stock)
    * unit, e.g. 2 cartons of 12 -> 24. No unit or the base unit returns the
    * quantity unchanged.

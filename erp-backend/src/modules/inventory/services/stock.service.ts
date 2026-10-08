@@ -152,7 +152,7 @@ export class StockService {
     const onHand = Number(stock.quantity);
     const newQty = round(onHand + quantity, 4);
     if (newQty < -EPS || newQty < Number(stock.reservedQty) - EPS) {
-      if (!(await this.settings.allowNegativeStock(tenantId))) {
+      if (!(await this.settings.allowNegativeStock(tenantId, dto.warehouseId))) {
         throw new BadRequestException(
           newQty < 0
             ? 'Adjustment would result in negative stock'
@@ -298,7 +298,7 @@ export class StockService {
     let fromStock = await this.stockRepo.findOne({
       where: { tenantId, productId: dto.productId, warehouseId: dto.fromWarehouseId },
     });
-    const allowNegative = async () => this.settings.allowNegativeStock(tenantId);
+    const allowNegative = async () => this.settings.allowNegativeStock(tenantId, dto.fromWarehouseId);
     if (!fromStock) {
       if (!(await allowNegative())) throw new NotFoundException('No stock found in source warehouse');
       fromStock = this.stockRepo.create({
@@ -495,7 +495,7 @@ export class StockService {
     const available = quantity - (reserved - releasable);
     let allowNegative = false;
     if (!stock || available + EPS < req.quantity) {
-      allowNegative = await this.settings.allowNegativeStock(tenantId);
+      allowNegative = await this.settings.allowNegativeStock(tenantId, req.warehouseId);
       if (!allowNegative) {
         throw new BadRequestException(
           `Insufficient stock for ${product.code}: available ${round(available, 4)}, requested ${req.quantity}`,
@@ -675,8 +675,24 @@ export class StockService {
     return this.productsService.toBaseQuantity(tenantId, productId, quantity, unitId);
   }
 
-  async allowNegativeStock(tenantId: string): Promise<boolean> {
-    return this.settings.allowNegativeStock(tenantId);
+  /** Negative stock policy of a warehouse (its own flag, else the tenant setting). */
+  async allowNegativeStock(tenantId: string, warehouseId?: string | null): Promise<boolean> {
+    return this.settings.allowNegativeStock(tenantId, warehouseId);
+  }
+
+  /**
+   * Free quantity (on hand minus reserved) of a product in a warehouse and,
+   * for given lots, the quantity left in each of them.
+   */
+  async availableQuantity(
+    tenantId: string,
+    productId: string,
+    warehouseId: string,
+  ): Promise<{ onHand: number; reserved: number; available: number }> {
+    const stock = await this.stockRepo.findOne({ where: { tenantId, productId, warehouseId } });
+    const onHand = Number(stock?.quantity ?? 0);
+    const reserved = Number(stock?.reservedQty ?? 0);
+    return { onHand, reserved, available: round(onHand - reserved, 4) };
   }
 
   private fallbackLotName(req: StockMoveRequest): string {

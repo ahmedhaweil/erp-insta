@@ -28,4 +28,12 @@ export class CreateWarehouseDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Negative stock in this warehouse: true allows, false blocks, null/omitted follows the tenant setting',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowNegativeStock?: boolean | null;
 }

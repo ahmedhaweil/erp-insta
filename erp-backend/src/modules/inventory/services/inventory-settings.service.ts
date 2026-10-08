@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Tenant } from '@modules/tenants/entities/tenant.entity';
+import { Warehouse } from '../entities/warehouse.entity';
 
 export interface InventorySettings {
   /** When true, issues/transfers/adjustments may drive on-hand stock below zero. */
@@ -22,6 +23,9 @@ export class InventorySettingsService {
   constructor(
     @InjectRepository(Tenant)
     private readonly tenantRepo: Repository<Tenant>,
+    @Optional()
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepo?: Repository<Warehouse>,
   ) {}
 
   async get(tenantId: string): Promise<InventorySettings> {
@@ -33,7 +37,17 @@ export class InventorySettingsService {
     };
   }
 
-  async allowNegativeStock(tenantId: string): Promise<boolean> {
+  /**
+   * Whether stock may go below zero. A warehouse with its own policy
+   * (`warehouses.allow_negative_stock` true/false) overrides the tenant option.
+   */
+  async allowNegativeStock(tenantId: string, warehouseId?: string | null): Promise<boolean> {
+    if (warehouseId && this.warehouseRepo) {
+      const warehouse = await this.warehouseRepo.findOne({ where: { id: warehouseId, tenantId } });
+      if (warehouse && warehouse.allowNegativeStock !== null && warehouse.allowNegativeStock !== undefined) {
+        return warehouse.allowNegativeStock === true;
+      }
+    }
     return (await this.get(tenantId)).allowNegativeStock;
   }
 

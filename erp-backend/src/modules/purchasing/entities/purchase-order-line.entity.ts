@@ -1,5 +1,6 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '@shared/entities/base.entity';
+import type { DocumentLot } from '@modules/inventory/services/document-lots.util';
 import { PurchaseOrder } from './purchase-order.entity';
 
 @Entity('purchase_order_lines')
@@ -33,6 +34,18 @@ export class PurchaseOrderLine extends BaseEntity {
 
   @Column({ name: 'qty_billed', type: 'decimal', precision: 18, scale: 4, default: 0 })
   qtyBilled: number;
+
+  /** Alternate unit the quantity and unit price are expressed in (null = base unit). */
+  @Column({ name: 'unit_id', type: 'uuid', nullable: true })
+  unitId: string | null;
+
+  /** Base units per line unit (1 for the base unit); stock moves use quantity x factor. */
+  @Column({ name: 'unit_factor', type: 'decimal', precision: 18, scale: 6, default: 1 })
+  unitFactor: number;
+
+  /** Lots/serial numbers received (base unit). */
+  @Column({ name: 'lots', type: 'jsonb', default: () => "'[]'" })
+  lots: DocumentLot[];
 
   @ManyToOne(() => PurchaseOrder, (order) => order.lines)
   @JoinColumn({ name: 'order_id' })

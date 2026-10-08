@@ -1,5 +1,6 @@
 import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { BaseEntity } from '@shared/entities/base.entity';
+import type { DocumentLot } from '@modules/inventory/services/document-lots.util';
 import { PosOrder } from './pos-order.entity';
 
 @Entity('pos_order_lines')
@@ -32,6 +33,22 @@ export class PosOrderLine extends BaseEntity {
 
   @Column({ name: 'line_total', type: 'decimal', precision: 18, scale: 4 })
   lineTotal: number;
+
+  /** Alternate unit the quantity and unit price are expressed in (null = base unit). */
+  @Column({ name: 'unit_id', type: 'uuid', nullable: true })
+  unitId: string | null;
+
+  /** Base units per line unit (1 for the base unit); stock moves use quantity x factor. */
+  @Column({ name: 'unit_factor', type: 'decimal', precision: 18, scale: 6, default: 1 })
+  unitFactor: number;
+
+  /** Lots/serials sold (sale lines) or restored (refund lines) (base unit). */
+  @Column({ name: 'lots', type: 'jsonb', default: () => "'[]'" })
+  lots: DocumentLot[];
+
+  /** Sold lots already restored by refunds (sale lines) (base unit). */
+  @Column({ name: 'lots_refunded', type: 'jsonb', default: () => "'[]'" })
+  lotsRefunded: DocumentLot[];
 
   @ManyToOne(() => PosOrder, (order) => order.lines)
   @JoinColumn({ name: 'order_id' })
