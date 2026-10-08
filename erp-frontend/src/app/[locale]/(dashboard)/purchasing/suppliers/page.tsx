@@ -11,6 +11,7 @@ import { useOpsMutation, useOpsSuppliers } from '@/hooks/use-operations';
 import { opsPurchasing } from '@/services/operations-purchasing.service';
 import type { Row } from '@/services/operations-api';
 import { PrintButton } from '@/components/platform/PrintButton';
+import ExportMenu from '@/components/platform/ExportMenu';
 
 export default function SuppliersPage() {
   const t = useTranslations('ops');
@@ -43,6 +44,9 @@ export default function SuppliersPage() {
   return (
     <div>
       <PageHeader title={t('pur.suppliers')} action={{ label: t('pur.newSupplier'), onClick: () => form.open() }} />
+      <div className="flex justify-end -mt-3 mb-3">
+        <ExportMenu entity="suppliers" />
+      </div>
       <DataTable
         data={suppliers}
         loading={isLoading}

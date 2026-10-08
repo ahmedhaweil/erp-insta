@@ -11,6 +11,7 @@ import { useOpsCustomerCategories, useOpsCustomers, useOpsMutation, useOpsPriceL
 import { opsSales } from '@/services/operations-sales.service';
 import type { Row } from '@/services/operations-api';
 import { PrintButton } from '@/components/platform/PrintButton';
+import ExportMenu from '@/components/platform/ExportMenu';
 
 export default function CustomersPage() {
   const t = useTranslations('ops');
@@ -58,6 +59,9 @@ export default function CustomersPage() {
   return (
     <div>
       <PageHeader title={t('sales.customers')} action={{ label: t('sales.newCustomer'), onClick: () => form.open() }} />
+      <div className="flex justify-end -mt-3 mb-3">
+        <ExportMenu entity="customers" />
+      </div>
       <DataTable
         data={customers}
         loading={isLoading}

@@ -11,6 +11,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import { useAccounts, useCreateAccount } from '@/hooks/use-accounting';
 import { accountSchema, type AccountFormData } from '@/lib/validations/account.schema';
 import type { Account } from '@/types';
+import ExportMenu from '@/components/platform/ExportMenu';
 
 export default function AccountsPage() {
   const t = useTranslations('accounting');
@@ -72,6 +73,9 @@ export default function AccountsPage() {
         title={t('chartOfAccounts')}
         action={{ label: t('newAccount'), onClick: () => setShowModal(true) }}
       />
+      <div className="flex justify-end -mt-3 mb-3">
+        <ExportMenu entity="accounts" />
+      </div>
       <DataTable columns={columns} data={accounts} loading={isLoading} searchable />
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={t('newAccount')} size="lg">

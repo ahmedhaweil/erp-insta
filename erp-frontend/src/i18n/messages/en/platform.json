@@ -238,7 +238,10 @@
       "below_min": "Below minimum",
       "above_max": "Above maximum"
     },
-    "updateExistingNote": "Rows whose code already exists update the existing record."
+    "updateExistingNote": "Rows whose code already exists update the existing record.",
+    "exportMenu": "Export / import",
+    "exporting": "Exporting...",
+    "importFromExcel": "Import from Excel"
   },
   "alerts": {
     "title": "Alerts",

@@ -18,6 +18,7 @@ import {
 } from '@/hooks/use-operations';
 import { opsInventory } from '@/services/operations-inventory.service';
 import type { Row } from '@/services/operations-api';
+import ExportMenu from '@/components/platform/ExportMenu';
 
 export default function ProductsPage() {
   const t = useTranslations('ops');
@@ -106,6 +107,9 @@ export default function ProductsPage() {
   return (
     <div>
       <PageHeader title={t('inv.products')} action={{ label: t('inv.newProduct'), onClick: () => form.open() }} />
+      <div className="flex justify-end -mt-3 mb-3">
+        <ExportMenu entity="products" />
+      </div>
       <DataTable
         columns={columns}
         data={products}

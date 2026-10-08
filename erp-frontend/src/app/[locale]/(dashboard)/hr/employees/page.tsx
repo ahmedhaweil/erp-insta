@@ -10,6 +10,7 @@ import Modal from '@/components/ui/Modal';
 import { Field, FormActions, Input, LinkButton, Select, Toolbar, todayIso, useMoney } from '@/components/people/ui';
 import { useBranches, useDepartments, useJobTitles, useLabelMap, useLocalName, usePeopleMutation, usePeopleQuery } from '@/hooks/use-people';
 import { hrService, type Employee } from '@/services/people-hr.service';
+import ExportMenu from '@/components/platform/ExportMenu';
 
 export default function EmployeesPage() {
   const t = useTranslations('hr');
@@ -46,6 +47,9 @@ export default function EmployeesPage() {
   return (
     <div>
       <PageHeader title={t('employees')} action={{ label: t('newEmployee'), onClick: () => router.push('/hr/employees/new') }} />
+      <div className="flex justify-end -mt-3 mb-3">
+        <ExportMenu entity="employees" />
+      </div>
       <Toolbar>
         <Field label={tc('search')}>
           <Input value={filters.search} onChange={(e) => set('search', e.target.value)} placeholder={t('employeeSearchHint')} />
