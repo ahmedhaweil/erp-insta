@@ -43,8 +43,8 @@ export class CrmActivitiesService {
     const qb = this.activityRepo
       .createQueryBuilder('a')
       .where('a.tenant_id = :tenantId', { tenantId })
-      .orderBy('a.due_date', 'ASC')
-      .addOrderBy('a.created_at', 'ASC')
+      .orderBy('a.dueDate', 'ASC')
+      .addOrderBy('a.createdAt', 'ASC')
       .take(1000);
     if (query.leadId) qb.andWhere('a.lead_id = :leadId', { leadId: query.leadId });
     if (query.customerId) qb.andWhere('a.customer_id = :customerId', { customerId: query.customerId });

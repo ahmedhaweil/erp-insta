@@ -47,7 +47,7 @@ export class CrmLeadsService {
       .leftJoinAndSelect('l.stage', 'stage')
       .leftJoinAndSelect('l.customer', 'customer')
       .where('l.tenant_id = :tenantId', { tenantId })
-      .orderBy('l.created_at', 'DESC')
+      .orderBy('l.createdAt', 'DESC')
       .take(500);
     if (query.status) qb.andWhere('l.status = :status', { status: query.status });
     if (query.type) qb.andWhere('l.type = :type', { type: query.type });
