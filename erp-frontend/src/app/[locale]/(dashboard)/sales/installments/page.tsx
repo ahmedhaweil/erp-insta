@@ -86,7 +86,7 @@ function PlansTab() {
         columns={[
           { key: 'planNumber', header: t('common.number') },
           { key: 'customerId', header: t('common.customer'), render: (p: Row) => name(p.customer ?? customerMap[p.customerId]) },
-          { key: 'invoiceId', header: t('sales.invoice'), render: (p: Row) => p.invoice?.invoiceNumber ?? '-' },
+          { key: 'invoiceId', header: t('sales.invoice'), render: (p: Row) => p.invoice?.invoiceNumber ?? invoices.find((i) => i.id === p.invoiceId)?.invoiceNumber ?? '-' },
           { key: 'numberOfInstallments', header: t('sales.numberOfInstallments') },
           { key: 'frequency', header: t('sales.frequency'), render: (p: Row) => t(`sales.frequencies.${p.frequency}`) },
           { key: 'totalAmount', header: t('common.total'), render: (p: Row) => fmtMoney(p.totalAmount) },
