@@ -200,10 +200,7 @@ export default function DataImportPage() {
                   />
                 </Field>
                 {!isOpening && (
-                  <label className="flex items-center gap-2 text-sm pb-2">
-                    <input type="checkbox" checked={options.updateExisting} onChange={(e) => setOptions({ ...options, updateExisting: e.target.checked })} />
-                    {t('updateExisting')}
-                  </label>
+                  <p className="text-xs text-gray-500 pb-2 max-w-xs">{t('updateExistingNote')}</p>
                 )}
                 {def.entity === 'products' && (
                   <label className="flex items-center gap-2 text-sm pb-2">

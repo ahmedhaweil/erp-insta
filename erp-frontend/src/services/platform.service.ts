@@ -255,8 +255,11 @@ export const dataImportService = {
   validate: (entity: ImportEntity, file: File, options: ImportOptions) => {
     const form = new FormData();
     form.append('file', file);
+    // Booleans are only sent when true: the server parses any multipart string
+    // (even "false") as true, and both flags default sensibly when omitted.
     for (const [k, v] of Object.entries(options)) {
-      if (v !== undefined && v !== null && v !== '') form.append(k, String(v));
+      if (v === undefined || v === null || v === '' || v === false) continue;
+      form.append(k, String(v));
     }
     return d<ImportReport>(api.post(`/data-import/${entity}/validate`, form, { headers: { 'Content-Type': 'multipart/form-data' } }));
   },

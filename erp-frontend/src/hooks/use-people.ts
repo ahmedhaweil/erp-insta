@@ -46,6 +46,7 @@ export function usePeopleMutation<TArg, TResult = unknown>(
       options.onSuccess?.(result, arg);
     },
     onError: (err: any) => {
+      if (err?.approvalHandled) return;
       toast.error(apiErrorMessage(err, tc('error')));
     },
   });

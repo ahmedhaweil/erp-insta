@@ -30,6 +30,9 @@ api.interceptors.response.use(
     // the layout show a toast linking to the approval request.
     const apiErr = error.response?.data?.error;
     if (error.response?.status === 409 && apiErr?.approvalRequestId && typeof window !== 'undefined') {
+      // The approval toast replaces the generic error toast of the screens.
+      error.approvalHandled = true;
+      if (typeof apiErr.message === 'string') apiErr.message = apiErr.message.replace(/\s*\[approvalRequestId=[^\]]*\]/, '');
       window.dispatchEvent(
         new CustomEvent(APPROVAL_EVENT, {
           detail: { id: apiErr.approvalRequestId, requestNumber: apiErr.requestNumber, message: apiErr.message },

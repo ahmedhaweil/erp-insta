@@ -29,7 +29,8 @@ export function usePlatformMutation<TArg, TRes = unknown>(
       if (options.success !== false) toast.success(options.success ?? t('common.saved'));
       options.onSuccess?.(res, arg);
     },
-    onError: (err) => {
+    onError: (err: any) => {
+      if (err?.approvalHandled) return;
       toast.error(errorMessage(err, t('common.failed')));
     },
   });

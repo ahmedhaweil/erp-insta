@@ -27,6 +27,7 @@ export function useFinAction<TArg, TRes = unknown>(
       options.onSuccess?.(res);
     },
     onError: (err: any) => {
+      if (err?.approvalHandled) return;
       toast.error(apiError(err, t('failed')));
     },
   });

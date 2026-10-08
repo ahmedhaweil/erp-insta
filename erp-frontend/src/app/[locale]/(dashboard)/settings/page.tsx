@@ -2,7 +2,7 @@
 
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter, usePathname, Link } from '@/i18n/navigation';
-import { Globe, Building2, Users, Shield, ScrollText, UserCircle, GitBranch, BookOpen, Calculator } from 'lucide-react';
+import { Globe, Building2, Users, Shield, ScrollText, UserCircle, GitBranch, BookOpen, Calculator, Upload, BellRing, CheckSquare } from 'lucide-react';
 
 export default function SettingsPage() {
   const t = useTranslations('settings');
@@ -24,6 +24,9 @@ export default function SettingsPage() {
     { href: '/settings/profile', icon: UserCircle, title: ta('profileTitle'), desc: ta('profileDesc') },
     { href: '/accounting/settings', icon: Calculator, title: ta('accountingSettingsTitle'), desc: ta('accountingSettingsDesc') },
     { href: '/accounting/setup', icon: BookOpen, title: ta('accountingSetupTitle'), desc: ta('accountingSetupDesc') },
+    { href: '/settings/import', icon: Upload, title: ta('importTitle'), desc: ta('importDesc') },
+    { href: '/settings/alerts', icon: BellRing, title: ta('alertsTitle'), desc: ta('alertsDesc') },
+    { href: '/approvals/rules', icon: CheckSquare, title: ta('approvalRulesTitle'), desc: ta('approvalRulesDesc') },
   ];
 
   return (

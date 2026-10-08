@@ -237,7 +237,8 @@
       "too_many_rows": "Too many rows",
       "below_min": "Below minimum",
       "above_max": "Above maximum"
-    }
+    },
+    "updateExistingNote": "Rows whose code already exists update the existing record."
   },
   "alerts": {
     "title": "Alerts",

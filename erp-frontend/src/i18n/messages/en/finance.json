@@ -225,7 +225,13 @@
       "price_lists": "Price lists",
       "reps": "Sales reps"
     },
-    "editBranch": "Edit branch"
+    "editBranch": "Edit branch",
+    "importTitle": "Data import & export",
+    "importDesc": "Load products, partners, accounts, employees and opening balances from Excel",
+    "alertsTitle": "Alerts",
+    "alertsDesc": "Scheduled alerts: cheques due, overdue invoices, low stock...",
+    "approvalRulesTitle": "Approval rules",
+    "approvalRulesDesc": "Which documents need approval, above which amount and by whom"
   },
   "acct": {
     "level": "Level",

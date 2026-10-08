@@ -32,6 +32,7 @@ export function useOpsMutation<TArg, TResult = unknown>(
       options.onSuccess?.(result, arg);
     },
     onError: (err: any) => {
+      if (err?.approvalHandled) return;
       toast.error(apiError(err, t('msg.error')));
     },
   });
