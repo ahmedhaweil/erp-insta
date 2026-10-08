@@ -49,7 +49,7 @@ export const peopleNav: NavGroup[] = [
       { key: 'hrWorkSchedules', href: '/hr/work-schedules' },
       { key: 'hrHolidays', href: '/hr/holidays' },
       { key: 'hrLeaveTypes', href: '/hr/leave-types' },
-      { key: 'hrSettings', href: '/hr/settings' },
+      { key: 'hrSettings', href: '/hr/payroll-settings' },
     ],
   },
 ];

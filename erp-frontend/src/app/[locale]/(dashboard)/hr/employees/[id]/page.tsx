@@ -13,6 +13,7 @@ import {
   useEmployeesLookup,
   useJobTitles,
   useLabelMap,
+  useLocalName,
   usePeopleMutation,
   usePeopleQuery,
   useSchedules,
@@ -55,6 +56,7 @@ export default function EmployeeFormPage() {
   const tp = useTranslations('people');
   const router = useRouter();
   const money = useMoney();
+  const localName = useLocalName();
   const { data: employee } = usePeopleQuery(['hr-employees', id], () => hrService.employee(id), !isNew);
   const year = new Date().getFullYear();
   const { data: balances } = usePeopleQuery(['hr-leave-balances', id, year], () => hrService.employeeBalances(id, year), !isNew);
@@ -144,7 +146,7 @@ export default function EmployeeFormPage() {
 
   return (
     <form onSubmit={submit} className="space-y-6">
-      <PageHeader title={isNew ? t('newEmployee') : `${employee?.code ?? ''} - ${employee?.nameEn ?? ''}`} />
+      <PageHeader title={isNew ? t('newEmployee') : `${employee?.code ?? ''} - ${localName(employee)}`} />
       {employee?.status === 'terminated' && (
         <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
           {t('terminatedOn', { date: String(employee.terminationDate ?? '').slice(0, 10), reason: employee.terminationReason ?? '' })}

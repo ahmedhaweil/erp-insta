@@ -134,3 +134,26 @@ Per employee and month:
 - Cancelling an approved leave whose month is already in an approved payroll is not blocked.
 - Multi-currency payroll (runs are in the tenant base currency) and per-employee cost centres
   (postings are split by branch only).
+
+## Frontend (phase 2)
+
+Bilingual screens (Arabic RTL default, English) under `/hr/...` in `erp-frontend`, menu group
+"HR & Payroll" (`src/components/layout/nav/people.ts`, order 75):
+
+- Master data: departments, job titles, work schedules (weekend picker), public holidays (per year),
+  leave types (senior entitlement), payroll settings (`/hr/payroll-settings`: EG/SA rates as
+  percentages, insurable wage caps, editable tax-bracket table with client-side validation mirroring
+  the backend rules; backend validation messages are shown too; reset to defaults).
+- Employees: list with status/branch/department/search filters, create/edit form with fixed
+  allowances list, leave balances of the year, terminate dialog, link to the gratuity calculator.
+- Attendance: daily grid per date (inline check-in/out, save one or all changed rows), bulk import
+  from pasted CSV/TSV/JSON with preview and per-row error report, period summary.
+- Leave requests (approve/reject with note, cancel), leave balances report (remaining/entitlement).
+- Loans and advances (create, disburse cash/bank, installment schedule), payroll adjustments.
+- Payroll runs: create for month/branch/department, review lines, recompute, approve (posting date),
+  pay (cash/bank), cancel, reverse; printable payslip and payroll register (`window.print`, print
+  stylesheet hides the app chrome); social insurance report; end-of-service calculator.
+
+UI gaps: payment of salaries/loans cannot pick a specific cash/bank account (the API only takes a
+`cash`/`bank` method and uses the accounting settings accounts); leave-type names in balances come
+from the API in English only.

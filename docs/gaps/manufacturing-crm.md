@@ -114,3 +114,25 @@ No accounting postings in CRM.
 - Lead scoring, duplicate detection, merge, campaigns and web-form capture.
 - Linking the quotation outcome back automatically (won when the order is confirmed).
 - Sales teams and targets.
+
+## Frontend (phase 2)
+
+Bilingual screens (Arabic RTL default, English), menu groups "Manufacturing" (order 55) and "CRM"
+(order 45) in `src/components/layout/nav/people.ts`.
+
+- Manufacturing (`/manufacturing/...`): BOM list and editor (components with scrap %, by-products
+  with cost share %, labour/overhead per unit, activate/deactivate, new version, delete), structure
+  tree (multi-level explosion) and cost roll-up tabs; production orders (create from product/BOM,
+  availability, confirm with reserve / allow shortage, start, partial production with actual
+  consumption per line and optional close, finish, cancel, delete draft, cost/variance report,
+  production runs, scrap); scrap list/entry; MRP requirements report; production cost report.
+- CRM (`/crm/...`): kanban pipeline by stage with native HTML5 drag and drop calling
+  `POST /crm/leads/:id/stage` (optimistic update, rollback on error), quick add per stage; leads list
+  with filters; lead form with won/lost (reason)/reopen, convert to opportunity, convert to customer
+  (new or existing), create quotation (lines), lead activities; my activities with
+  overdue/today/planned/done/cancelled tabs (done with result, cancel), stages admin, pipeline report.
+
+Known backend issue found by the UI: `GET /crm/leads` returns 500 ("Cannot read properties of
+undefined (reading 'databaseName')") because `CrmLeadsService.findAll` orders by the column name
+`l.created_at` together with joins and `take()`; it must order by the property path
+`l.createdAt`. The pipeline, leads list and activities lead lookup depend on it.
