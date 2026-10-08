@@ -8,6 +8,13 @@ export enum ProductType {
   SERVICE = 'service',
 }
 
+/** Lot/serial traceability (Odoo product tracking). */
+export enum TrackingType {
+  NONE = 'none',
+  LOT = 'lot',
+  SERIAL = 'serial',
+}
+
 @Entity('products')
 export class Product extends TenantBaseEntity {
   @Column()
@@ -69,6 +76,14 @@ export class Product extends TenantBaseEntity {
   /** Default purchase tax rate (%) proposed on purchase lines. */
   @Column({ name: 'purchase_tax_rate', type: 'decimal', precision: 5, scale: 2, default: 0 })
   purchaseTaxRate: number;
+
+  /** none, lot (batch numbers) or serial (one unit per serial number). */
+  @Column({ name: 'tracking_type', type: 'enum', enum: TrackingType, default: TrackingType.NONE })
+  trackingType: TrackingType;
+
+  /** Lots of this product carry an expiry date (FEFO removal). */
+  @Column({ name: 'has_expiry', default: false })
+  hasExpiry: boolean;
 
   @ManyToOne(() => Category)
   @JoinColumn({ name: 'category_id' })
