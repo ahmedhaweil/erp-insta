@@ -1,3 +1,6 @@
+import { AuthModule } from '@modules/auth/auth.module';
+import { HrPaymentSourceService } from './services/hr-payment-source.service';
+import { Treasury } from '@modules/treasury/entities/treasury.entity';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Department } from './entities/department.entity';
@@ -46,7 +49,9 @@ import { PayrollController } from './controllers/payroll.controller';
 /** HR, attendance, leaves, employee loans and Egyptian/Saudi payroll. */
 @Module({
   imports: [
+    AuthModule,
     TypeOrmModule.forFeature([
+      Treasury,
       Department,
       JobTitle,
       WorkSchedule,
@@ -85,6 +90,7 @@ import { PayrollController } from './controllers/payroll.controller';
     SelfServiceController,
   ],
   providers: [
+    HrPaymentSourceService,
     HrSettingsService,
     HrOrganizationService,
     EmployeesService,

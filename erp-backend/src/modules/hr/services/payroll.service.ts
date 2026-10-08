@@ -1,9 +1,9 @@
+import { HrPaymentSourceService } from './hr-payment-source.service';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+  NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Like, Repository } from 'typeorm';
 import { PayrollRun, PayrollRunStatus } from '../entities/payroll-run.entity';
@@ -74,6 +74,7 @@ export class PayrollService {
     private readonly autoPosting: AutoPostingService,
     private readonly sequenceService: SequenceService,
     private readonly overtime: OvertimeService,
+    @Optional() private readonly paymentSource?: HrPaymentSourceService,
   ) {}
 
   // ------------------------------------------------------------ adjustments
@@ -212,21 +213,24 @@ export class PayrollService {
     if (run.status !== PayrollRunStatus.APPROVED) {
       throw new ConflictException('Only approved payroll runs can be paid');
     }
-    const liquidityKey = dto.paymentMethod === HrPaymentMethod.CASH ? 'cashAccountId' : 'bankAccountId';
-    await this.autoPosting.preflight(tenantId, dto.date, ['salariesPayableAccountId', liquidityKey]);
-
     const net = Number(run.totalNet);
+    const source = await this.paymentSourceFor(tenantId, userId, dto, net);
+    await this.autoPosting.preflight(tenantId, dto.date, [
+      'salariesPayableAccountId',
+      ...(source.settingsKey ? [source.settingsKey] : []),
+    ]);
+
     await this.autoPosting.post({
       tenantId,
       userId,
-      journalType: dto.paymentMethod === HrPaymentMethod.CASH ? JournalType.CASH : JournalType.BANK,
+      journalType: source.journalType,
       date: dto.date,
       description: `Salaries payment ${run.runNumber} (${run.period})`,
       sourceType: 'payroll_payment',
       sourceId: run.id,
       buildLines: (_s, account) => [
         { accountId: account('salariesPayableAccountId'), debit: net },
-        { accountId: account(liquidityKey), credit: net },
+        { accountId: HrPaymentSourceService.account(source, account), credit: net },
       ],
     });
     await this.runRepo.update(run.id, {
@@ -805,5 +809,19 @@ export class PayrollService {
         `The ${period} payroll of this employee is already approved; reverse it or use the next month`,
       );
     }
+  }
+
+  private paymentSourceFor(
+    tenantId: string,
+    userId: string,
+    dto: { paymentMethod: HrPaymentMethod; treasuryId?: string; date: string },
+    amount: number,
+  ) {
+    if (this.paymentSource) return this.paymentSource.resolve(tenantId, userId, dto, amount);
+    const cash = dto.paymentMethod === HrPaymentMethod.CASH;
+    return Promise.resolve({
+      journalType: cash ? JournalType.CASH : JournalType.BANK,
+      settingsKey: (cash ? 'cashAccountId' : 'bankAccountId') as 'cashAccountId' | 'bankAccountId',
+    } as import('./hr-payment-source.service').HrPaymentSource);
   }
 }

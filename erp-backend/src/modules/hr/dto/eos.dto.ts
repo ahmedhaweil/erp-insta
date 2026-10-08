@@ -84,6 +84,11 @@ export class PostFinalSettlementDto {
 export class PayFinalSettlementDto {
   @ApiProperty() @IsDateString() date: string;
   @ApiProperty({ enum: HrPaymentMethod }) @IsEnum(HrPaymentMethod) paymentMethod: HrPaymentMethod;
+
+  @ApiPropertyOptional({ description: 'Cash box / bank account to pay from (default: the cash or bank account of the accounting settings)' })
+  @IsOptional()
+  @IsUUID()
+  treasuryId?: string;
 }
 
 export class CancelFinalSettlementDto {

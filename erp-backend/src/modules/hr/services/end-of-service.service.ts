@@ -1,9 +1,9 @@
+import { HrPaymentSourceService } from './hr-payment-source.service';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+  NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { EosProvision, EosProvisionLine, EosProvisionStatus } from '../entities/eos-provision.entity';
@@ -73,6 +73,7 @@ export class EndOfServiceService {
     private readonly payrollLock: PayrollLockService,
     private readonly autoPosting: AutoPostingService,
     private readonly sequenceService: SequenceService,
+    @Optional() private readonly paymentSource?: HrPaymentSourceService,
   ) {}
 
   // ------------------------------------------------------------ pure rules
@@ -476,20 +477,30 @@ export class EndOfServiceService {
     if (settlement.status !== FinalSettlementStatus.POSTED) {
       throw new ConflictException('Only posted settlements can be paid');
     }
-    const liquidityKey = dto.paymentMethod === HrPaymentMethod.CASH ? 'cashAccountId' : 'bankAccountId';
-    await this.autoPosting.preflight(tenantId, dto.date, ['salariesPayableAccountId', liquidityKey]);
     const net = Number(settlement.net);
+    const source = this.paymentSource
+      ? await this.paymentSource.resolve(tenantId, userId, dto, net)
+      : {
+          journalType: dto.paymentMethod === HrPaymentMethod.CASH ? JournalType.CASH : JournalType.BANK,
+          settingsKey: (dto.paymentMethod === HrPaymentMethod.CASH ? 'cashAccountId' : 'bankAccountId') as
+            | 'cashAccountId'
+            | 'bankAccountId',
+        };
+    await this.autoPosting.preflight(tenantId, dto.date, [
+      'salariesPayableAccountId',
+      ...(source.settingsKey ? [source.settingsKey] : []),
+    ]);
     await this.autoPosting.post({
       tenantId,
       userId,
-      journalType: dto.paymentMethod === HrPaymentMethod.CASH ? JournalType.CASH : JournalType.BANK,
+      journalType: source.journalType,
       date: dto.date,
       description: `Final settlement payment ${settlement.settlementNumber}`,
       sourceType: SETTLEMENT_PAYMENT_SOURCE,
       sourceId: settlement.id,
       buildLines: (_s, account) => [
         { accountId: account('salariesPayableAccountId'), debit: net },
-        { accountId: account(liquidityKey), credit: net },
+        { accountId: HrPaymentSourceService.account(source, account), credit: net },
       ],
     });
     settlement.status = FinalSettlementStatus.PAID;
