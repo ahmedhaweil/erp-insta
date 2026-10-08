@@ -18,6 +18,9 @@ import { addTransactionalDataSource, getDataSourceByName } from 'typeorm-transac
         ssl: config.get('database.ssl') ? { rejectUnauthorized: false } : false,
         autoLoadEntities: true,
         synchronize: false,
+        // DB_RUN_MIGRATIONS=true applies pending migrations at startup.
+        migrations: [`${__dirname}/migrations/*{.ts,.js}`],
+        migrationsRun: process.env.DB_RUN_MIGRATIONS === 'true',
         logging: config.get('database.logging'),
         subscribers: [],
       }),
