@@ -8,6 +8,7 @@ import { Btn, EntityForm, Field, inputCls } from '@/components/operations/form';
 import { DetailGrid, fmtDateTime, fmtMoney, fmtQty, num, SimpleTable, Status, Stat } from '@/components/operations/common';
 import { useOpsMutation, useOpsQuery } from '@/hooks/use-operations';
 import { opsPos } from '@/services/operations-pos.service';
+import { opsCompliance } from '@/services/operations-compliance.service';
 import type { Row } from '@/services/operations-api';
 
 export type PayMethod = 'cash' | 'card' | 'split';
@@ -109,6 +110,7 @@ export function OrdersModal({
   const t = useTranslations('ops');
   const { data: orders = [], isLoading } = useOpsQuery(['pos-orders', sessionId], () => opsPos.sessionOrders(sessionId));
   const [refunding, setRefunding] = useState<Row | null>(null);
+  const eReceipt = useOpsMutation((id: string) => opsCompliance.submitReceipt(id), { invalidate: ['e-receipts'], success: 'submitted' });
   const [qty, setQty] = useState<Record<string, string>>({});
   const refund = useOpsMutation(
     () =>
@@ -171,10 +173,16 @@ export function OrdersModal({
             {
               key: 'x',
               header: '',
-              render: (o) =>
-                o.status === 'completed' && num(o.totalAmount) > 0 ? (
-                  <Btn size="sm" variant="warning" onClick={() => setRefunding(o)}>{t('pos.refund')}</Btn>
-                ) : null,
+              render: (o) => (
+                <div className="flex gap-2">
+                  {o.status === 'completed' && num(o.totalAmount) > 0 && (
+                    <Btn size="sm" variant="warning" onClick={() => setRefunding(o)}>{t('pos.refund')}</Btn>
+                  )}
+                  <Btn size="sm" variant="secondary" loading={eReceipt.isPending && eReceipt.variables === o.id} onClick={() => eReceipt.mutate(o.id)}>
+                    {t('pos.eReceipt')}
+                  </Btn>
+                </div>
+              ),
             },
           ]}
         />
