@@ -160,4 +160,8 @@ export class Employee extends TenantBaseEntity {
 
   @Column({ name: 'user_id', type: 'uuid', nullable: true })
   userId: string | null;
+
+  /** Cost center charged with the employee's payroll and end-of-service costs. */
+  @Column({ name: 'cost_center_id', type: 'uuid', nullable: true })
+  costCenterId: string | null;
 }

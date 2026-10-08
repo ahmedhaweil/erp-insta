@@ -26,9 +26,16 @@ export class LeaveRequest extends TenantBaseEntity {
   @Column({ name: 'end_date', type: 'date' })
   endDate: string;
 
-  /** Working days covered (weekends and public holidays excluded). */
+  /** Working days covered (weekends and public holidays excluded); 0.5 for a half day. */
   @Column({ type: 'decimal', precision: 6, scale: 2 })
   days: number;
+
+  @Column({ name: 'half_day', default: false })
+  halfDay: boolean;
+
+  /** am | pm (half-day requests). */
+  @Column({ name: 'half_day_period', type: 'varchar', nullable: true })
+  halfDayPeriod: string | null;
 
   @Column({ nullable: true })
   reason: string;
