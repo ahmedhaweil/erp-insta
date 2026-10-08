@@ -1,0 +1,291 @@
+import {
+  BadRequestException,
+  HttpException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { LessThanOrEqual, Repository } from 'typeorm';
+import {
+  RecurringEntry,
+  RecurringEntryLine,
+  RecurringEntryRun,
+  RecurringEntryStatus,
+  RecurringFrequency,
+} from '../entities/recurring-entry.entity';
+import { JournalType } from '../entities/journal.entity';
+import {
+  CreateRecurringEntryDto,
+  RecurringLineDto,
+  UpdateRecurringEntryDto,
+} from '../dto/accounting-depth.dto';
+import { JournalEntriesService } from './journal-entries.service';
+import { AutoPostingService } from './auto-posting.service';
+import { addDays, addMonths, round, today } from '@shared/utils/document-totals.util';
+
+export const RECURRING_SOURCE = 'recurring_entry';
+
+/**
+ * Date of the `index`-th occurrence (0 = start date). Months are counted
+ * from the start date so day-of-month clamping never drifts
+ * (Jan 31 -> Feb 28 -> Mar 31).
+ */
+export function occurrenceDate(
+  t: Pick<RecurringEntry, 'frequency' | 'startDate' | 'intervalDays'>,
+  index: number,
+): string {
+  switch (t.frequency) {
+    case RecurringFrequency.MONTHLY:
+      return addMonths(t.startDate, index);
+    case RecurringFrequency.QUARTERLY:
+      return addMonths(t.startDate, index * 3);
+    case RecurringFrequency.YEARLY:
+      return addMonths(t.startDate, index * 12);
+    case RecurringFrequency.DAYS:
+      return addDays(t.startDate, index * Number(t.intervalDays || 1));
+    default:
+      throw new BadRequestException(`Unknown frequency ${t.frequency}`);
+  }
+}
+
+export interface RecurringRunResult {
+  templateId: string;
+  name: string;
+  generated: { date: string; entryId: string; refNumber: string; status: string }[];
+  error?: string;
+}
+
+/** Recurring journal entries (Odoo recurring moves / 4S "قيود دورية"). */
+@Injectable()
+export class RecurringEntriesService {
+  constructor(
+    @InjectRepository(RecurringEntry)
+    private readonly templateRepo: Repository<RecurringEntry>,
+    @InjectRepository(RecurringEntryLine)
+    private readonly lineRepo: Repository<RecurringEntryLine>,
+    @InjectRepository(RecurringEntryRun)
+    private readonly runRepo: Repository<RecurringEntryRun>,
+    private readonly journalEntries: JournalEntriesService,
+    private readonly autoPosting: AutoPostingService,
+  ) {}
+
+  findAll(tenantId: string): Promise<RecurringEntry[]> {
+    return this.templateRepo.find({ where: { tenantId }, order: { name: 'ASC' } });
+  }
+
+  async findById(tenantId: string, id: string): Promise<RecurringEntry> {
+    const template = await this.templateRepo.findOne({ where: { id, tenantId } });
+    if (!template) throw new NotFoundException('Recurring entry not found');
+    return template;
+  }
+
+  async create(tenantId: string, userId: string, dto: CreateRecurringEntryDto): Promise<RecurringEntry> {
+    this.validate(dto);
+    const template = this.templateRepo.create({
+      tenantId,
+      name: dto.name,
+      description: dto.description,
+      journalId: dto.journalId ?? null,
+      frequency: dto.frequency,
+      intervalDays: dto.intervalDays ?? null,
+      startDate: dto.startDate,
+      endDate: dto.endDate ?? null,
+      nextRunDate: dto.startDate,
+      autoPost: dto.autoPost ?? true,
+      currencyId: dto.currencyId ?? null,
+      exchangeRate: dto.exchangeRate ?? 1,
+      status: RecurringEntryStatus.ACTIVE,
+      createdBy: userId,
+      lines: this.buildLines(dto.lines),
+    });
+    return this.templateRepo.save(template);
+  }
+
+  async update(tenantId: string, id: string, dto: UpdateRecurringEntryDto): Promise<RecurringEntry> {
+    const template = await this.findById(tenantId, id);
+    const { lines, status, ...header } = dto;
+    Object.assign(template, header);
+    if (status) template.status = status as RecurringEntryStatus;
+    this.validate({ ...template, lines: lines ?? template.lines } as any);
+    if (lines) {
+      await this.lineRepo.delete({ templateId: template.id });
+      template.lines = this.buildLines(lines);
+    }
+    // Re-evaluate the next run when the end date changes.
+    if (template.endDate && template.nextRunDate && template.nextRunDate > template.endDate) {
+      template.nextRunDate = null;
+      template.status = RecurringEntryStatus.DONE;
+    }
+    await this.templateRepo.save(template);
+    return this.findById(tenantId, id);
+  }
+
+  /** Upcoming occurrence dates (no side effects). */
+  async preview(tenantId: string, id: string, count = 12): Promise<string[]> {
+    const template = await this.findById(tenantId, id);
+    const dates: string[] = [];
+    for (let i = template.runCount; dates.length < count && i < template.runCount + 1000; i++) {
+      const date = occurrenceDate(template, i);
+      if (template.endDate && date > template.endDate) break;
+      dates.push(date);
+    }
+    return dates;
+  }
+
+  /** Entries generated by a template. */
+  runs(tenantId: string, id: string): Promise<RecurringEntryRun[]> {
+    return this.runRepo.find({ where: { tenantId, templateId: id }, order: { runDate: 'ASC' } });
+  }
+
+  /**
+   * Generates every occurrence due up to `asOf` for active templates (or one
+   * template). Idempotent: an occurrence already generated is skipped. A
+   * template that cannot post (locked period, inactive account) is reported
+   * and left at that occurrence; the others still run.
+   */
+  async runDue(
+    tenantId: string,
+    asOf: string = today(),
+    templateId?: string,
+  ): Promise<{ asOf: string; results: RecurringRunResult[] }> {
+    const where: any = {
+      tenantId,
+      status: RecurringEntryStatus.ACTIVE,
+      nextRunDate: LessThanOrEqual(asOf),
+    };
+    if (templateId) where.id = templateId;
+    const templates = await this.templateRepo.find({ where, order: { nextRunDate: 'ASC' } });
+    const results: RecurringRunResult[] = [];
+
+    for (const template of templates) {
+      const result: RecurringRunResult = { templateId: template.id, name: template.name, generated: [] };
+      for (let guard = 0; guard < 1000; guard++) {
+        const date = occurrenceDate(template, template.runCount);
+        if (date > asOf) break;
+        if (template.endDate && date > template.endDate) {
+          template.status = RecurringEntryStatus.DONE;
+          break;
+        }
+        const existing = await this.runRepo.findOne({
+          where: { tenantId, templateId: template.id, runDate: date },
+        });
+        if (!existing) {
+          try {
+            const entry = await this.generate(template, date);
+            await this.runRepo.save(
+              this.runRepo.create({ tenantId, templateId: template.id, runDate: date, entryId: entry.id }),
+            );
+            result.generated.push({
+              date,
+              entryId: entry.id,
+              refNumber: entry.refNumber,
+              status: entry.status,
+            });
+          } catch (err) {
+            // Business validations fail before anything is written; report and stop this template.
+            if (!(err instanceof HttpException)) throw err;
+            result.error = `${date}: ${err.message}`;
+            break;
+          }
+        }
+        template.runCount += 1;
+        template.lastRunDate = date;
+      }
+      const next = occurrenceDate(template, template.runCount);
+      if (template.endDate && next > template.endDate) {
+        template.status = RecurringEntryStatus.DONE;
+        template.nextRunDate = null;
+      } else {
+        template.nextRunDate = next;
+      }
+      await this.templateRepo.save(template);
+      if (result.generated.length || result.error) results.push(result);
+    }
+    return { asOf, results };
+  }
+
+  /** Tenants with templates due (used by the in-process scheduler). */
+  async tenantsDue(asOf: string): Promise<string[]> {
+    const rows: { tenant_id: string }[] = await this.templateRepo.query(
+      `SELECT DISTINCT tenant_id FROM recurring_entries WHERE status = 'active' AND next_run_date <= $1`,
+      [asOf],
+    );
+    return rows.map((r) => r.tenant_id);
+  }
+
+  private async generate(template: RecurringEntry, date: string) {
+    const journalId =
+      template.journalId ??
+      (await this.autoPosting.resolveJournal(template.tenantId, JournalType.GENERAL)).id;
+    const rate = Number(template.exchangeRate) || 1;
+    const lines = this.autoPosting.toBaseCurrency(
+      template.lines.map((l) => ({
+        accountId: l.accountId,
+        debit: Number(l.debit),
+        credit: Number(l.credit),
+        description: l.description ?? template.description ?? template.name,
+        costCenterId: l.costCenterId ?? undefined,
+        branchId: l.branchId ?? undefined,
+      })),
+      rate,
+    );
+    const dto = {
+      journalId,
+      date,
+      description: `${template.name}${template.description ? ` - ${template.description}` : ''}`,
+      currencyId: template.currencyId ?? undefined,
+      exchangeRate: rate,
+      lines: lines.map((l) => ({
+        accountId: l.accountId,
+        debit: l.debit ?? 0,
+        credit: l.credit ?? 0,
+        amountCurrency: l.amountCurrency,
+        description: l.description,
+        costCenterId: l.costCenterId,
+        branchId: l.branchId,
+      })),
+    };
+    const source = { sourceType: RECURRING_SOURCE, sourceId: template.id };
+    return template.autoPost
+      ? this.journalEntries.createAndPost(template.tenantId, template.createdBy, dto, source)
+      : this.journalEntries.create(template.tenantId, template.createdBy, dto, source);
+  }
+
+  private validate(dto: {
+    frequency: RecurringFrequency;
+    intervalDays?: number | null;
+    startDate: string;
+    endDate?: string | null;
+    lines: { debit?: number; credit?: number }[];
+  }): void {
+    if (dto.frequency === RecurringFrequency.DAYS && !(Number(dto.intervalDays) >= 1)) {
+      throw new BadRequestException('intervalDays is required for the "days" frequency');
+    }
+    if (dto.endDate && dto.endDate < dto.startDate) {
+      throw new BadRequestException('End date cannot precede the start date');
+    }
+    const debit = round(dto.lines.reduce((s, l) => s + Number(l.debit || 0), 0), 4);
+    const credit = round(dto.lines.reduce((s, l) => s + Number(l.credit || 0), 0), 4);
+    if (debit <= 0 || Math.abs(debit - credit) > 0.0001) {
+      throw new BadRequestException('Template lines must balance (total debit = total credit > 0)');
+    }
+  }
+
+  private buildLines(lines: RecurringLineDto[]): RecurringEntryLine[] {
+    return lines.map((l) => {
+      const debit = Number(l.debit || 0);
+      const credit = Number(l.credit || 0);
+      if ((debit > 0) === (credit > 0)) {
+        throw new BadRequestException('Each line needs either a debit or a credit');
+      }
+      return this.lineRepo.create({
+        accountId: l.accountId,
+        debit,
+        credit,
+        description: l.description,
+        costCenterId: l.costCenterId ?? null,
+        branchId: l.branchId ?? null,
+      });
+    });
+  }
+}
