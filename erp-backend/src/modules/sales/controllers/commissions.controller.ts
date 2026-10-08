@@ -82,6 +82,21 @@ export class CommissionStatementsController {
   constructor(private readonly commissions: CommissionsService) {}
 
   @RequirePermissions({ module: 'sales', screen: 'commissions', action: 'read' })
+  @Get('rep-performance')
+  @ApiOperation({ summary: 'Commission vs sales per sales representative for a period' })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  @ApiQuery({ name: 'salesRepId', required: false })
+  repPerformance(
+    @CurrentTenant() tenantId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('salesRepId') salesRepId?: string,
+  ) {
+    return this.commissions.repPerformance(tenantId, { from, to, salesRepId });
+  }
+
+  @RequirePermissions({ module: 'sales', screen: 'commissions', action: 'read' })
   @Get('preview')
   @ApiOperation({ summary: 'Compute the commission of a rep for a period without saving' })
   preview(@CurrentTenant() tenantId: string, @Query() query: CommissionPeriodDto) {

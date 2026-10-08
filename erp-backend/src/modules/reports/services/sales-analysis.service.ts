@@ -26,6 +26,9 @@ export interface SalesFact {
   categoryId: string | null;
   branchId: string | null;
   userId: string | null;
+  /** Sales representative of the document (invoices / POS); salesperson falls back to userId. */
+  salesRepId?: string | null;
+  /** Quantity in the product's base unit (alternate units converted). */
   quantity: number;
   net: number;
   tax: number;
@@ -54,6 +57,7 @@ interface Names {
   categories: Map<string, string>;
   branches: Map<string, { code: string; name: string }>;
   users: Map<string, string>;
+  reps: Map<string, { code: string; name: string }>;
 }
 
 const r4 = (n: number) => round(n, 4);
@@ -164,9 +168,11 @@ export class SalesAnalysisService {
       const lines = await this.query(
         `SELECT i.id AS "docId", i.invoice_number AS number, to_char(i.date, 'YYYY-MM-DD') AS date,
                 i.customer_id AS "partnerId", i.branch_id AS "branchId", i.created_by AS "userId",
+                i.sales_rep_id AS "salesRepId",
                 i.move_type AS "moveType", i.exchange_rate AS rate,
                 COALESCE(i.order_id, ri.order_id) AS "orderId",
-                l.product_id AS "productId", l.quantity AS quantity, l.line_total AS "lineTotal",
+                l.product_id AS "productId", l.quantity * COALESCE(l.unit_factor, 1) AS quantity,
+                l.line_total AS "lineTotal",
                 l.tax_rate AS "taxRate", pr.category_id AS "categoryId", pr.type AS "productType",
                 pr.cost_price AS "costPrice"
            FROM sales_invoice_lines l
@@ -205,6 +211,7 @@ export class SalesAnalysisService {
           categoryId: l.categoryId,
           branchId: l.branchId,
           userId: l.userId,
+          salesRepId: l.salesRepId ?? null,
           quantity: r4(qty),
           net: r4(net),
           tax: r4((net * Number(l.taxRate)) / 100),
@@ -226,8 +233,9 @@ export class SalesAnalysisService {
       const lines = await this.query(
         `SELECT o.id AS "docId", o.order_number AS number, to_char(o.created_at, 'YYYY-MM-DD') AS date,
                 o.customer_id AS "partnerId", t.branch_id AS "branchId", o.created_by AS "userId",
+                o.sales_rep_id AS "salesRepId",
                 o.refunded_order_id AS "refundedOrderId",
-                l.product_id AS "productId", l.quantity AS quantity,
+                l.product_id AS "productId", l.quantity * COALESCE(l.unit_factor, 1) AS quantity,
                 (l.quantity * l.unit_price - l.discount) AS "lineTotal",
                 l.tax_rate AS "taxRate", pr.category_id AS "categoryId", pr.type AS "productType",
                 pr.cost_price AS "costPrice"
@@ -268,6 +276,7 @@ export class SalesAnalysisService {
           categoryId: l.categoryId,
           branchId: l.branchId,
           userId: l.userId,
+          salesRepId: l.salesRepId ?? null,
           quantity: r4(qty),
           net: r4(net),
           tax: r4((net * Number(l.taxRate)) / 100),
@@ -309,6 +318,7 @@ export class SalesAnalysisService {
     const categories = await this.query(`SELECT id, name_ar, name_en FROM categories WHERE tenant_id = $1`, [tenantId]);
     const branches = await this.query(`SELECT id, code, name FROM branches WHERE tenant_id = $1`, [tenantId]);
     const users = await this.query(`SELECT id, name FROM users WHERE tenant_id = $1`, [tenantId]);
+    const reps = await this.query(`SELECT id, code, name FROM sales_reps WHERE tenant_id = $1`, [tenantId]);
     return {
       products: new Map(
         products.map((p) => [p.id, { code: p.code, name: p.name_en || p.name_ar, categoryId: p.category_id }]),
@@ -317,6 +327,7 @@ export class SalesAnalysisService {
       categories: new Map(categories.map((c) => [c.id, c.name_en || c.name_ar])),
       branches: new Map(branches.map((b) => [b.id, { code: b.code, name: b.name }])),
       users: new Map(users.map((u) => [u.id, u.name])),
+      reps: new Map(reps.map((r) => [r.id, { code: r.code, name: r.name }])),
     };
   }
 
@@ -347,9 +358,15 @@ export class SalesAnalysisService {
         (k) => (k ? { code: null, name: names.categories.get(k) ?? k } : none('Uncategorised')),
       ],
       branch: [(f) => f.branchId ?? '', (k) => (k ? names.branches.get(k) ?? none(k) : none('No branch'))],
+      // Sales representative of the document, else the user who created it
       salesperson: [
-        (f) => f.userId ?? '',
-        (k) => (k ? { code: null, name: names.users.get(k) ?? k } : none('Unknown')),
+        (f) => (f.salesRepId ? `rep:${f.salesRepId}` : f.userId ? `user:${f.userId}` : ''),
+        (k) => {
+          if (!k) return none('Unknown');
+          const [kind, id] = k.split(':');
+          if (kind === 'rep') return names.reps.get(id) ?? none(id);
+          return { code: null, name: names.users.get(id) ?? id };
+        },
       ],
       month: [(f) => f.date.slice(0, 7), (k) => ({ code: null, name: k })],
       day: [(f) => f.date, (k) => ({ code: null, name: k, date: k })],
@@ -406,7 +423,7 @@ export class SalesAnalysisService {
       `SELECT i.id AS "docId", i.invoice_number AS number, to_char(i.date, 'YYYY-MM-DD') AS date,
               i.supplier_id AS "partnerId", i.branch_id AS "branchId", i.created_by AS "userId",
               i.move_type AS "moveType", i.exchange_rate AS rate, l.product_id AS "productId",
-              l.quantity AS quantity, l.line_total AS "lineTotal", l.tax_rate AS "taxRate",
+              l.quantity * COALESCE(l.unit_factor, 1) AS quantity, l.line_total AS "lineTotal", l.tax_rate AS "taxRate",
               pr.category_id AS "categoryId"
          FROM purchase_invoice_lines l
          JOIN purchase_invoices i ON i.id = l.invoice_id
