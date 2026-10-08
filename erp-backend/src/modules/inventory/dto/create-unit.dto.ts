@@ -1,5 +1,5 @@
 import { IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 export class CreateUnitDto {
   @ApiProperty() @IsString() nameAr: string;
@@ -17,3 +17,5 @@ export class CreateUnitDto {
   @Min(0.000001)
   conversionFactor?: number;
 }
+
+export class UpdateUnitDto extends PartialType(CreateUnitDto) {}

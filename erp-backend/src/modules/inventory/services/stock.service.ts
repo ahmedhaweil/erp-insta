@@ -116,11 +116,24 @@ export class StockService {
     });
   }
 
-  async getMovements(tenantId: string, productId?: string, warehouseId?: string) {
-    const where: any = { tenantId };
-    if (productId) where.productId = productId;
-    if (warehouseId) where.warehouseId = warehouseId;
-    return this.movementRepo.find({ where, order: { createdAt: 'DESC' }, take: 500 });
+  async getMovements(
+    tenantId: string,
+    productId?: string,
+    warehouseId?: string,
+    filters: { from?: string; to?: string; referenceType?: string; limit?: number; offset?: number } = {},
+  ) {
+    const qb = this.movementRepo
+      .createQueryBuilder('m')
+      .where('m.tenantId = :tenantId', { tenantId })
+      .orderBy('m.createdAt', 'DESC')
+      .take(Math.min(Math.max(Number(filters.limit) || 500, 1), 2000))
+      .skip(Math.max(Number(filters.offset) || 0, 0));
+    if (productId) qb.andWhere('m.productId = :productId', { productId });
+    if (warehouseId) qb.andWhere('m.warehouseId = :warehouseId', { warehouseId });
+    if (filters.referenceType) qb.andWhere('m.referenceType = :referenceType', { referenceType: filters.referenceType });
+    if (filters.from) qb.andWhere('m.createdAt >= :from', { from: `${filters.from}T00:00:00` });
+    if (filters.to) qb.andWhere('m.createdAt <= :to', { to: `${filters.to}T23:59:59.999` });
+    return qb.getMany();
   }
 
   /**

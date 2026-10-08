@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsBoolean, IsUUID } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
 export class CreateWarehouseDto {
   @ApiProperty()
@@ -37,3 +37,5 @@ export class CreateWarehouseDto {
   @IsBoolean()
   allowNegativeStock?: boolean | null;
 }
+
+export class UpdateWarehouseDto extends PartialType(CreateWarehouseDto) {}

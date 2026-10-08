@@ -459,6 +459,65 @@ export class PosService {
     return this.orderRepo.findOne({ where: { id: refund.id }, relations: ['lines'] }) as Promise<PosOrder>;
   }
 
+  /** Sessions, newest first; a till uses `terminalId` + `status=open` to resume its session. */
+  findSessions(
+    tenantId: string,
+    filters: { terminalId?: string; status?: string; userId?: string; from?: string; to?: string } = {},
+  ): Promise<PosSession[]> {
+    const qb = this.sessionRepo
+      .createQueryBuilder('s')
+      .where('s.tenantId = :tenantId', { tenantId })
+      .orderBy('s.openedAt', 'DESC')
+      .take(200);
+    if (filters.terminalId) qb.andWhere('s.terminalId = :terminalId', { terminalId: filters.terminalId });
+    if (filters.status) qb.andWhere('s.status = :status', { status: filters.status });
+    if (filters.userId) qb.andWhere('s.userId = :userId', { userId: filters.userId });
+    if (filters.from) qb.andWhere('s.openedAt >= :from', { from: `${filters.from}T00:00:00` });
+    if (filters.to) qb.andWhere('s.openedAt <= :to', { to: `${filters.to}T23:59:59.999` });
+    return qb.getMany();
+  }
+
+  /** POS orders across sessions (refund lookup, e-receipts, history). */
+  findOrders(
+    tenantId: string,
+    filters: {
+      sessionId?: string;
+      customerId?: string;
+      search?: string;
+      from?: string;
+      to?: string;
+      refunds?: boolean;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ): Promise<PosOrder[]> {
+    const qb = this.orderRepo
+      .createQueryBuilder('o')
+      .leftJoinAndSelect('o.lines', 'l')
+      .where('o.tenantId = :tenantId', { tenantId })
+      .orderBy('o.createdAt', 'DESC')
+      .take(Math.min(Math.max(Number(filters.limit) || 100, 1), 500))
+      .skip(Math.max(Number(filters.offset) || 0, 0));
+    if (filters.sessionId) qb.andWhere('o.sessionId = :sessionId', { sessionId: filters.sessionId });
+    if (filters.customerId) qb.andWhere('o.customerId = :customerId', { customerId: filters.customerId });
+    if (filters.search) {
+      qb.andWhere('(o.orderNumber ILIKE :search OR o.clientReference ILIKE :search)', {
+        search: `%${filters.search}%`,
+      });
+    }
+    if (filters.from) qb.andWhere('o.createdAt >= :from', { from: `${filters.from}T00:00:00` });
+    if (filters.to) qb.andWhere('o.createdAt <= :to', { to: `${filters.to}T23:59:59.999` });
+    if (filters.refunds === true) qb.andWhere('o.refundedOrderId IS NOT NULL');
+    if (filters.refunds === false) qb.andWhere('o.refundedOrderId IS NULL');
+    return qb.getMany();
+  }
+
+  async findOrder(tenantId: string, id: string): Promise<PosOrder> {
+    const order = await this.orderRepo.findOne({ where: { id, tenantId }, relations: ['lines'] });
+    if (!order) throw new NotFoundException('POS order not found');
+    return order;
+  }
+
   async getSessionOrders(
     tenantId: string,
     sessionId: string,

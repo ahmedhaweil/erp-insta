@@ -1,11 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, ParseUUIDPipe } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { RequirePermissions } from '@common/decorators/require-permissions.decorator';
 import { MasterDataService } from '../services/master-data.service';
-import { CreateWarehouseDto } from '../dto/create-warehouse.dto';
-import { CreateCategoryDto } from '../dto/create-category.dto';
-import { CreateUnitDto } from '../dto/create-unit.dto';
+import { CreateWarehouseDto, UpdateWarehouseDto } from '../dto/create-warehouse.dto';
+import { CreateCategoryDto, UpdateCategoryDto } from '../dto/create-category.dto';
+import { CreateUnitDto, UpdateUnitDto } from '../dto/create-unit.dto';
 
 @ApiTags('inventory')
 @ApiBearerAuth()
@@ -29,8 +29,8 @@ export class MasterDataController {
   @Patch('warehouses/:id')
   updateWarehouse(
     @CurrentTenant() tenantId: string,
-    @Param('id') id: string,
-    @Body() dto: CreateWarehouseDto,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateWarehouseDto,
   ) {
     return this.masterData.updateWarehouse(tenantId, id, dto);
   }
@@ -57,5 +57,25 @@ export class MasterDataController {
   @Post('units')
   createUnit(@CurrentTenant() tenantId: string, @Body() dto: CreateUnitDto) {
     return this.masterData.createUnit(tenantId, dto);
+  }
+
+  @RequirePermissions({ module: 'inventory', screen: 'products', action: 'update' })
+  @Patch('categories/:id')
+  updateCategory(
+    @CurrentTenant() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCategoryDto,
+  ) {
+    return this.masterData.updateCategory(tenantId, id, dto);
+  }
+
+  @RequirePermissions({ module: 'inventory', screen: 'products', action: 'update' })
+  @Patch('units/:id')
+  updateUnit(
+    @CurrentTenant() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUnitDto,
+  ) {
+    return this.masterData.updateUnit(tenantId, id, dto);
   }
 }
