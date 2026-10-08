@@ -9,6 +9,7 @@ import Modal from '@/components/ui/Modal';
 import PrintStyles from '@/components/people/PrintStyles';
 import { Button, Card, Field, FormActions, Input, KeyValue, LinkButton, Select, Tabs, todayIso, useMoney } from '@/components/people/ui';
 import { apiErrorMessage, usePeopleMutation } from '@/hooks/use-people';
+import { usePdf } from '@/components/platform/PrintButton';
 import { selfService, type LeaveRequest, type MyPayslipRow, type OvertimeRequest, type EmployeeLoan, type PayslipSummaryKey } from '@/services/people-hr.service';
 
 type Tab = 'payslips' | 'leaves' | 'loans' | 'overtime';
@@ -62,6 +63,7 @@ export default function SelfServicePage() {
   const overtime = useQuery({ queryKey: ['hr-me', 'overtime'], queryFn: selfService.overtime, enabled: linked && tab === 'overtime' });
 
   const [slipRun, setSlipRun] = useState<MyPayslipRow | null>(null);
+  const pdf = usePdf();
   const slip = useQuery({ queryKey: ['hr-me', 'payslip', slipRun?.runId], queryFn: () => selfService.payslip(slipRun!.runId), enabled: !!slipRun });
 
   const typeName = (id: string) => {
@@ -153,7 +155,12 @@ export default function SelfServicePage() {
             { key: 'net', header: t('net'), render: (p) => <b>{money(p.net)}</b> },
             { key: 'status', header: tc('status'), render: (p) => <StatusBadge status={p.status} label={t(`run_${p.status}`)} /> },
           ]}
-          actions={(p) => <LinkButton className="text-primary-600" onClick={() => setSlipRun(p)}>{t('payslip')}</LinkButton>}
+          actions={(p) => (
+            <span className="flex items-center gap-3">
+              <LinkButton className="text-primary-600" onClick={() => setSlipRun(p)}>{t('payslip')}</LinkButton>
+              <LinkButton className="text-primary-600" onClick={() => pdf.open(`/print/me/payslips/${p.runId}`)}>PDF</LinkButton>
+            </span>
+          )}
         />
       )}
 
