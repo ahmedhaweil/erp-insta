@@ -242,7 +242,7 @@ eos_provision_account_id, martyrs_fund_account_id`. Sequence `final_settlement` 
 
 ## Still missing
 
-- Payslip PDF, bank-specific fixed-width formats (the files are generic CSV; the real Mudad/WPS SIF
+- Payslip and payroll register PDFs are done (see `printing.md`). Still missing: bank-specific fixed-width formats (the files are generic CSV; the real Mudad/WPS SIF
   upload layout varies by bank), GOSI and Form 2/6 (Egypt) official filings, monthly tax return
   (Form 4) and annual settlement form export.
 - The final settlement's last salary is gross (no insurance/tax); run the last month's payroll

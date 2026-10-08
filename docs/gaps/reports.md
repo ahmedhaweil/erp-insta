@@ -44,7 +44,7 @@ No posting rules or schema changes were added.
 
 ## Still missing
 
-- PDF export.
+- ~~PDF export~~: done, `?format=pdf` on every report (see `printing.md`); the PDF has no tenant letterhead yet (controllers do not pass the company to `ReportExportService.respond`).
 - Multi-currency partner statements (shown in document currency).
 - VAT categories beyond the rate (exports, exempt, imports, reverse charge) are reported as 0.
 - Submitting returns to ETA/ZATCA, comparative periods, merging a template into an existing chart.

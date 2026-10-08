@@ -1,7 +1,10 @@
 import { Injectable, StreamableFile } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
+import { renderA4 } from '@modules/printing/templates/a4-renderer';
+import { CompanyHeader, PrintDocument } from '@modules/printing/templates/document.model';
+import { PdfFile } from '@modules/printing/pdf-file';
 
-export type ReportFormat = 'json' | 'xlsx';
+export type ReportFormat = 'json' | 'xlsx' | 'pdf';
 export type ReportLang = 'ar' | 'en';
 
 export interface Label {
@@ -71,15 +74,22 @@ export const L = {
 @Injectable()
 export class ReportExportService {
   /**
-   * Returns the report data as is (JSON) or, for `format=xlsx`, the Excel file
-   * built from the spec.
+   * Returns the report data as is (JSON) or, for `format=xlsx` / `format=pdf`,
+   * the Excel / PDF file built from the spec. `company` (optional) is printed
+   * as the PDF letterhead.
    */
   async respond<T>(
     format: ReportFormat | undefined,
     lang: ReportLang | undefined,
     data: T,
     spec: (data: T) => ExportSpec,
-  ): Promise<T | ExcelFile> {
+    company?: CompanyHeader,
+  ): Promise<T | ExcelFile | PdfFile> {
+    if (format === 'pdf') {
+      const exportSpec = spec(data);
+      const buffer = await this.toPdf(exportSpec, lang ?? 'ar', company);
+      return new PdfFile(buffer, exportSpec.filename, 'attachment');
+    }
     if (format !== 'xlsx') return data;
     const exportSpec = spec(data);
     const buffer = await this.toXlsx(exportSpec, lang ?? 'ar');
@@ -154,6 +164,42 @@ export class ReportExportService {
     if (spec.sheets.length === 0) workbook.addWorksheet('Report');
     const out = await workbook.xlsx.writeBuffer();
     return Buffer.from(out as ArrayBuffer);
+  }
+
+  /**
+   * PDF version of a report (A4, landscape when the table is wide), Arabic
+   * shaped and right-to-left for lang=ar.
+   */
+  async toPdf(spec: ExportSpec, lang: ReportLang = 'ar', company?: CompanyHeader): Promise<Buffer> {
+    const wide = spec.sheets.some((s) => s.columns.length > 7);
+    const formatOf = (c: ExportColumn) =>
+      c.type === 'money' ? 'money' : c.type === 'number' ? 'qty' : c.type === 'percent' ? 'percent' : 'text';
+    const text = (v: unknown) => (v instanceof Date ? v.toISOString().slice(0, 10) : v);
+    const doc: PrintDocument = {
+      lang,
+      paper: wide ? 'a4-landscape' : 'a4',
+      title: spec.title[lang],
+      company: company ?? { name: '' },
+      meta: (spec.meta ?? [])
+        .filter((m) => m.value !== undefined && m.value !== null && m.value !== '')
+        .map((m) => ({ label: m.label[lang], value: String(text(m.value)) })),
+      tables: spec.sheets.map((sheet) => ({
+        title: spec.sheets.length > 1 ? sheet.name[lang] : undefined,
+        columns: sheet.columns.map((c) => ({
+          key: c.key,
+          label: c.label[lang],
+          width: c.width ?? (c.type === 'money' || c.type === 'number' ? 14 : c.type === 'date' ? 11 : 24),
+          format: formatOf(c),
+          align: c.type === 'date' ? 'center' : undefined,
+        })),
+        rows: sheet.rows.map((r) =>
+          Object.fromEntries(Object.entries(r).map(([k, v]) => [k, text(v)])),
+        ),
+        footer: sheet.totals,
+      })),
+      filename: spec.filename,
+    };
+    return renderA4(doc);
   }
 
   private cellValue(value: unknown, column: ExportColumn): unknown {

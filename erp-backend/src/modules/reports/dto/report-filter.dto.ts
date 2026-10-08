@@ -13,10 +13,10 @@ const toBool = ({ obj, key }: { obj: Record<string, unknown>; key: string }) => 
 
 /** Output options shared by every report endpoint. */
 export class ReportOutputDto {
-  @ApiPropertyOptional({ enum: ['json', 'xlsx'], description: 'xlsx returns an Excel file' })
+  @ApiPropertyOptional({ enum: ['json', 'xlsx', 'pdf'], description: 'xlsx / pdf return a file' })
   @IsOptional()
-  @IsIn(['json', 'xlsx'])
-  format?: 'json' | 'xlsx';
+  @IsIn(['json', 'xlsx', 'pdf'])
+  format?: 'json' | 'xlsx' | 'pdf';
 
   @ApiPropertyOptional({ enum: ['ar', 'en'], description: 'Language of Excel headers (default ar, right-to-left)' })
   @IsOptional()

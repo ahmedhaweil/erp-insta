@@ -110,5 +110,6 @@ treasury (and `PaymentsModule` imports `AuthModule` for `RbacService`).
   still move at the booked rate.
 - Bank statement import reads JSON, simple CSV and MT940 (no OFX / CAMT.053). CSV dates must be `YYYY-MM-DD`.
 - The generic `JournalEntriesService.reverse` (accounting module) drops `amount_currency` on reversal lines. The treasury ledger works around this by deriving the currency amount as base / entry rate, and transfers are cancelled with an explicit mirror entry. Fixing `reverse` itself would be cleaner.
-- Cheque printing and promissory notes with installment schedules are not built; reminders are a
-  data endpoint (notifications are up to the alerts module).
+- Cheque printing is done (`GET /print/cheques/:id` with per-bank layouts, see `printing.md`).
+  Promissory notes with installment schedules are not built; reminders are a data endpoint
+  (notifications are up to the alerts module).
