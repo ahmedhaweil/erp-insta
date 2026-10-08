@@ -13,7 +13,7 @@ export class ChequePrintLayout extends TenantBaseEntity {
   name: string;
 
   /** Matched (case-insensitively) against the cheque / treasury bank name. */
-  @Column({ name: 'bank_name', nullable: true })
+  @Column({ name: 'bank_name', type: 'varchar', nullable: true })
   bankName: string | null;
 
   /** Bank account (treasury) whose cheque book uses this layout. */

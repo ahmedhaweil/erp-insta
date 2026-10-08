@@ -101,6 +101,7 @@ export function buildStatement(v: StatementView, ctx: PrintContext): PrintDocume
   const t = labels(ctx.lang);
   const rows = v.lines.map((l) => ({
     ...l,
+    description: statementDescription(l.description, ctx.lang),
     type: valueLabel(l.documentType, ctx.lang),
     doc: [l.number, l.reference].filter(Boolean).join(' / '),
   }));
@@ -162,4 +163,24 @@ export function buildStatement(v: StatementView, ctx: PrintContext): PrintDocume
     signatures: [t('accountant'), t('approvedBy')],
     filename: `statement-${v.partner.code ?? 'partner'}`,
   };
+}
+
+const AR_PHRASES: [RegExp, string][] = [
+  [/^Sales invoice$/, 'فاتورة مبيعات'],
+  [/^Credit note$/, 'إشعار دائن'],
+  [/^Vendor bill$/, 'فاتورة مورد'],
+  [/^Vendor refund$/, 'مرتجع مورد'],
+  [/^Settlement of\b/, 'تسوية'],
+  [/^Payment\b/, 'سداد'],
+  [/^Refund\b/, 'رد مبلغ'],
+  [/\(cash\)/, '(نقدي)'],
+  [/\(bank\)/, '(تحويل بنكي)'],
+  [/\(card\)/, '(بطاقة)'],
+  [/\(cheque\)/, '(شيك)'],
+];
+
+/** Arabic wording of the (English) partner statement descriptions. */
+export function statementDescription(description: string, lang: 'ar' | 'en'): string {
+  if (lang !== 'ar' || !description) return description;
+  return AR_PHRASES.reduce((s, [re, ar]) => s.replace(re, ar), description);
 }

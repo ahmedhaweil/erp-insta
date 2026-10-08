@@ -360,7 +360,10 @@ export class PrintDataService {
       } else {
         qty = Number(l.qtyDelivered) > 0 ? Number(l.qtyDelivered) : ordered;
       }
-      lines.push({ ...base[i], quantity: qty, ordered, delivered: Number(l.qtyDelivered) });
+      // `delivered` drives the remaining column: delivered so far, or the
+      // quantity of this note when the order was not delivered yet.
+      const delivered = onNote ? Number(l.qtyDelivered) : Math.max(Number(l.qtyDelivered), qty);
+      lines.push({ ...base[i], quantity: qty, ordered, delivered });
     });
 
     const view: OrderView = {
@@ -508,7 +511,24 @@ export class PrintDataService {
         vatTotal: Math.abs(Number(order.taxAmount)),
       });
     }
-    const lines = await this.lineViews(tenantId, lang, order.lines ?? []);
+    // POS line totals include VAT (and are negative on refunds): print the
+    // net amount so the receipt shows net, VAT and gross consistently.
+    const lines = await this.lineViews(
+      tenantId,
+      lang,
+      (order.lines ?? []).map((l) => {
+        const gross = Math.abs(Number(l.lineTotal));
+        const net = Math.round((gross / (1 + Number(l.taxRate || 0) / 100)) * 10000) / 10000;
+        return {
+          productId: l.productId,
+          quantity: Math.abs(Number(l.quantity)),
+          unitPrice: Number(l.unitPrice),
+          discount: Number(l.discount || 0),
+          taxRate: Number(l.taxRate || 0),
+          lineTotal: net,
+        };
+      }),
+    );
     const view: PosReceiptView = {
       number: order.orderNumber,
       date: order.createdAt,
@@ -517,10 +537,10 @@ export class PrintDataService {
       terminalName: terminal?.name,
       cashierName: cashier?.name,
       paymentMethod: order.paymentMethod,
-      subtotal: Number(order.subtotal),
-      discount: Number(order.discount || 0),
-      taxAmount: Number(order.taxAmount),
-      totalAmount: Number(order.totalAmount),
+      subtotal: Math.abs(Number(order.subtotal)),
+      discount: Math.abs(Number(order.discount || 0)),
+      taxAmount: Math.abs(Number(order.taxAmount)),
+      totalAmount: Math.abs(Number(order.totalAmount)),
       cashReceived: Number(order.cashReceived || 0),
       changeAmount: Number(order.changeAmount || 0),
       customer: customer ? this.customerParty(customer, lang) : null,
