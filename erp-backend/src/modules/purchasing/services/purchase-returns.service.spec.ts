@@ -93,6 +93,7 @@ describe('PurchaseReturnsService', () => {
       't1',
       'u1',
       expect.objectContaining({ productId: 'p1', warehouseId: 'wh1', quantity: 2, referenceType: 'purchase_return' }),
+      { includeExpiredLots: true },
     );
     expect(billLineRepo.save).toHaveBeenCalledWith([expect.objectContaining({ id: 'bl1', qtyReturned: 2 })]);
     expect(invoicesService.create).toHaveBeenCalledWith(

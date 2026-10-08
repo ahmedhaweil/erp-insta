@@ -144,8 +144,16 @@ export class PurchaseReturnsController {
   }
 
   @RequirePermissions({ module: 'purchasing', screen: 'returns', action: 'update' })
+  @ApiOperation({
+    summary:
+      'Cancel a draft return, or a posted one: stock, credit note / refund and cash refund are reversed when not otherwise settled',
+  })
   @Post(':id/cancel')
-  cancel(@CurrentTenant() tenantId: string, @Param('id') id: string) {
-    return this.returns.cancel(tenantId, id);
+  cancel(
+    @CurrentTenant() tenantId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('id') id: string,
+  ) {
+    return this.returns.cancel(tenantId, id, user.sub);
   }
 }

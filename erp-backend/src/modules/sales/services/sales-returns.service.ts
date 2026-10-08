@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -30,6 +31,15 @@ import {
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { SequenceService } from '@shared/services/sequence.service';
+import { ProductsService } from '@modules/inventory/services/products.service';
+import { resolveLineUnits, toBaseQty } from '@modules/inventory/services/document-units.util';
+import {
+  addLots,
+  asLots,
+  lotsOrUndefined,
+  pickReturnLots,
+  subtractLots,
+} from '@modules/inventory/services/document-lots.util';
 import {
   computeLine,
   computeTotals,
@@ -63,6 +73,7 @@ export class SalesReturnsService {
     private readonly stockService: StockService,
     private readonly autoPosting: AutoPostingService,
     private readonly sequenceService: SequenceService,
+    @Optional() private readonly products?: ProductsService,
   ) {}
 
   async create(tenantId: string, userId: string, dto: CreateSalesReturnDto): Promise<SalesReturn> {
@@ -97,6 +108,10 @@ export class SalesReturnsService {
           taxRate: Number(source.taxRate),
           restock: l.restock !== false,
           description: l.description ?? source.description,
+          unitId: source.unitId ?? null,
+          unitFactor: Number(source.unitFactor || 1),
+          // Requested lots; the lots actually restored are fixed when posting
+          lots: addLots(l.lots),
         };
       });
       header = {
@@ -114,22 +129,30 @@ export class SalesReturnsService {
       }
       const customer = await this.customerRepo.findOne({ where: { id: dto.customerId, tenantId } });
       if (!customer) throw new NotFoundException('Customer not found');
-      lines = dto.lines.map((l) => {
+      for (const l of dto.lines) {
         if (!l.productId || l.unitPrice === undefined) {
           throw new BadRequestException(
             'productId and unitPrice are required on returns without an original invoice',
           );
         }
-        return {
-          productId: l.productId,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-          discount: l.discount ?? 0,
-          taxRate: l.taxRate ?? 0,
-          restock: l.restock !== false,
-          description: l.description,
-        };
-      });
+      }
+      const withUnits = await resolveLineUnits(
+        this.products,
+        tenantId,
+        dto.lines.map((l) => ({ ...l, productId: l.productId! })),
+      );
+      lines = withUnits.map((l) => ({
+        productId: l.productId,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        discount: l.discount ?? 0,
+        taxRate: l.taxRate ?? 0,
+        restock: l.restock !== false,
+        description: l.description,
+        unitId: l.unitId,
+        unitFactor: l.unitFactor,
+        lots: addLots(l.lots),
+      }));
       header = {
         customerId: customer.id,
         originalInvoiceId: null,
@@ -240,30 +263,49 @@ export class SalesReturnsService {
       await this.invoiceLineRepo.save([...requested.keys()].map((k) => byId.get(k)!));
     }
 
-    // 2. Restock at the original cost
+    // 2. Restock at the original cost, with the lots/serials originally delivered
     let totalCost = 0;
     const originalCosts = await this.originalUnitCosts(tenantId, invoice, ret.lines);
+    const orderLines = await this.originOrderLines(invoice, ret.lines);
+    const touchedOrderLines = new Set<SalesOrderLine>();
     for (const line of ret.lines) {
-      if (!line.restock) continue;
-      const stockable = await this.stockService.isStockable(tenantId, line.productId);
-      if (!stockable) continue;
+      if (!line.restock || !(await this.stockService.isStockable(tenantId, line.productId))) {
+        line.lots = [];
+        continue;
+      }
       if (!ret.warehouseId) {
         throw new BadRequestException('A warehouse is required to restock returned goods');
       }
+      const baseQuantity = toBaseQty(line.quantity, line.unitFactor);
+      const orderLine = line.invoiceLineId ? orderLines.get(line.invoiceLineId) : undefined;
+      const restored = pickReturnLots(
+        orderLine ? subtractLots(orderLine.lots, orderLine.lotsReturned) : [],
+        baseQuantity,
+        lotsOrUndefined(asLots(line.lots)),
+        'delivery',
+      );
       const unitCost =
         originalCosts.get(line.id) ?? (await this.stockService.getUnitCost(tenantId, line.productId));
       await this.stockService.receive(tenantId, userId, {
         productId: line.productId,
         warehouseId: ret.warehouseId,
-        quantity: Number(line.quantity),
+        quantity: baseQuantity,
         unitCost,
         referenceType: 'sales_return',
         referenceId: ret.id,
         description: `Sales return ${ret.returnNumber}`,
+        lots: restored,
       });
+      line.lots = restored ?? [];
+      if (orderLine && restored?.length) {
+        orderLine.lotsReturned = addLots(orderLine.lotsReturned, restored);
+        touchedOrderLines.add(orderLine);
+      }
+      // Unit cost per base unit
       line.unitCost = unitCost;
-      totalCost += unitCost * Number(line.quantity);
+      totalCost += unitCost * baseQuantity;
     }
+    if (touchedOrderLines.size) await this.orderLineRepo.save([...touchedOrderLines]);
     totalCost = round(totalCost, 4);
     if (ret.lines.length) await this.returnLineRepo.save(ret.lines);
 
@@ -306,6 +348,8 @@ export class SalesReturnsService {
           discount: Number(l.discount),
           taxRate: Number(l.taxRate),
           description: l.description,
+          unitId: l.unitId ?? undefined,
+          unitFactor: l.unitId ? Number(l.unitFactor) : undefined,
           withholdingRate:
             l.invoiceLineId && invoiceLines.get(l.invoiceLineId)?.withholdingRate != null
               ? Number(invoiceLines.get(l.invoiceLineId)!.withholdingRate)
@@ -320,11 +364,15 @@ export class SalesReturnsService {
       { skipPriceChecks: true },
     );
     let posted = await this.invoicesService.post(tenantId, userId, creditNote.id);
+    posted = await this.invoicesService.findById(tenantId, posted.id);
+    // Reconciled with the original invoice by the posting (undone on cancel)
+    const appliedAmount = round(Number(posted.paidAmount || 0), 4);
+    let refundedAmount = 0;
 
     // 4. Cash refund of what the credit note did not settle on the invoice
     if (ret.refundMethod === ReturnRefundMethod.CASH) {
-      posted = await this.invoicesService.findById(tenantId, posted.id);
       const amount = residual(posted.totalAmount, posted.paidAmount);
+      refundedAmount = amount;
       if (amount > 0) {
         await this.autoPosting.post({
           tenantId,
@@ -350,22 +398,153 @@ export class SalesReturnsService {
     ret.postedAt = new Date();
     ret.creditNoteId = creditNote.id;
     ret.costAmount = totalCost;
+    ret.appliedAmount = appliedAmount;
+    ret.refundedAmount = round(refundedAmount, 4);
     const { lines: _l, customer: _c, ...headerOnly } = ret;
     await this.returnRepo.save(headerOnly as SalesReturn);
     return this.findById(tenantId, ret.id);
   }
 
-  async cancel(tenantId: string, id: string): Promise<SalesReturn> {
+  /**
+   * Cancels a draft return, or undoes a posted one: the restocked goods leave
+   * stock again (same lots/serials), the cost entry and cash refund are
+   * reversed, the credit note is un-reconciled from the original invoice and
+   * cancelled, and the returned quantities are released on the invoice.
+   * Refused when the credit note was settled otherwise (payment / refund
+   * through the payments module) or the goods are no longer in stock.
+   */
+  async cancel(tenantId: string, id: string, userId?: string): Promise<SalesReturn> {
     const ret = await this.findById(tenantId, id);
-    if (ret.status !== SalesReturnStatus.DRAFT) {
-      throw new ConflictException(
-        'Only draft returns can be cancelled; re-invoice the goods to undo a posted return',
-      );
+    if (ret.status === SalesReturnStatus.CANCELLED) {
+      throw new ConflictException('The return is already cancelled');
+    }
+    if (ret.status === SalesReturnStatus.POSTED) {
+      await this.reversePosted(tenantId, userId ?? ret.createdBy, ret);
+      ret.cancelledAt = new Date();
     }
     ret.status = SalesReturnStatus.CANCELLED;
     const { lines: _l, customer: _c, ...headerOnly } = ret;
     await this.returnRepo.save(headerOnly as SalesReturn);
     return ret;
+  }
+
+  private async reversePosted(tenantId: string, userId: string, ret: SalesReturn): Promise<void> {
+    const applied = round(Number(ret.appliedAmount || 0), 4);
+    const refunded = round(Number(ret.refundedAmount || 0), 4);
+    const creditNote = ret.creditNoteId
+      ? await this.invoicesService.findById(tenantId, ret.creditNoteId)
+      : null;
+    if (creditNote && creditNote.status !== SalesInvoiceStatus.CANCELLED) {
+      const settledElsewhere = round(Number(creditNote.paidAmount || 0) - applied - refunded, 4);
+      if (settledElsewhere > 0.0001) {
+        throw new ConflictException(
+          `Credit note ${creditNote.invoiceNumber} is already settled (${settledElsewhere}); the return cannot be cancelled`,
+        );
+      }
+    }
+    const original = ret.originalInvoiceId
+      ? await this.invoicesService.findById(tenantId, ret.originalInvoiceId)
+      : null;
+    if (original && applied > 0 && Number(original.paidAmount) + 0.0001 < applied) {
+      throw new ConflictException('The original invoice no longer carries the credit applied by this return');
+    }
+
+    const date = today();
+    if (ret.lines.some((l) => l.restock)) {
+      await this.autoPosting.preflight(tenantId, date, ['inventoryAccountId', 'cogsAccountId']);
+    }
+
+    // 1. Goods leave stock again (refused when they were sold / consumed meanwhile)
+    const orderLines = await this.originOrderLines(original, ret.lines);
+    const touchedOrderLines = new Set<SalesOrderLine>();
+    for (const line of ret.lines) {
+      if (!line.restock || !ret.warehouseId) continue;
+      if (!(await this.stockService.isStockable(tenantId, line.productId))) continue;
+      const baseQuantity = toBaseQty(line.quantity, line.unitFactor);
+      const lots = asLots(line.lots);
+      const { available } = await this.stockService.availableQuantity(
+        tenantId,
+        line.productId,
+        ret.warehouseId,
+      );
+      if (available + 0.0001 < baseQuantity) {
+        throw new ConflictException(
+          `The returned goods are no longer in stock (available ${available}, returned ${baseQuantity}); the return cannot be cancelled`,
+        );
+      }
+      await this.stockService.issue(
+        tenantId,
+        userId,
+        {
+          productId: line.productId,
+          warehouseId: ret.warehouseId,
+          quantity: baseQuantity,
+          referenceType: 'sales_return_cancel',
+          referenceId: ret.id,
+          description: `Cancel sales return ${ret.returnNumber}`,
+          lots: lots.length ? lots : undefined,
+        },
+        { includeExpiredLots: true },
+      );
+      const orderLine = line.invoiceLineId ? orderLines.get(line.invoiceLineId) : undefined;
+      if (orderLine && lots.length) {
+        orderLine.lotsReturned = subtractLots(orderLine.lotsReturned, lots);
+        touchedOrderLines.add(orderLine);
+      }
+    }
+    if (touchedOrderLines.size) await this.orderLineRepo.save([...touchedOrderLines]);
+    await this.autoPosting.reverseSource(tenantId, userId, 'sales_return', ret.id, date);
+
+    // 2. Cash refund, reconciliation and credit note
+    if (refunded > 0) {
+      await this.autoPosting.reverseSource(tenantId, userId, 'sales_return_refund', ret.id, date);
+      await this.invoicesService.adjustCustomerBalance(tenantId, ret.customerId, -refunded);
+    }
+    if (original && applied > 0) {
+      await this.invoicesService.applyPayment(original, -applied);
+    }
+    if (creditNote && creditNote.status !== SalesInvoiceStatus.CANCELLED) {
+      const remaining = round(Number(creditNote.paidAmount) - applied - refunded, 4);
+      creditNote.paidAmount = remaining > 0.0001 ? remaining : 0;
+      await this.invoicesService.setPaidAmount(tenantId, creditNote.id, creditNote.paidAmount);
+      await this.invoicesService.cancel(tenantId, userId, creditNote.id);
+    }
+
+    // 3. Returned quantities are available again on the invoice
+    if (original) {
+      const byId = new Map(original.lines.map((l) => [l.id, l]));
+      const touched = new Set<SalesInvoiceLine>();
+      for (const line of ret.lines) {
+        const source = line.invoiceLineId ? byId.get(line.invoiceLineId) : undefined;
+        if (!source) continue;
+        source.qtyReturned = Math.max(round(Number(source.qtyReturned || 0) - Number(line.quantity), 4), 0);
+        touched.add(source);
+      }
+      if (touched.size) await this.invoiceLineRepo.save([...touched]);
+    }
+  }
+
+  /** Sales order line behind each return line (through the invoice line), keyed by invoice line id. */
+  private async originOrderLines(
+    invoice: SalesInvoice | null,
+    lines: SalesReturnLine[],
+  ): Promise<Map<string, SalesOrderLine>> {
+    const result = new Map<string, SalesOrderLine>();
+    if (!invoice) return result;
+    const invoiceLines = new Map(invoice.lines.map((l) => [l.id, l]));
+    const pairs = lines
+      .map((l) => [l.invoiceLineId, l.invoiceLineId ? invoiceLines.get(l.invoiceLineId)?.orderLineId : null])
+      .filter((p): p is [string, string] => !!p[0] && !!p[1]);
+    if (!pairs.length) return result;
+    const orderLines = await this.orderLineRepo.find({
+      where: { id: In([...new Set(pairs.map((p) => p[1]))]) },
+    });
+    const byId = new Map(orderLines.map((ol) => [ol.id, ol]));
+    for (const [invoiceLineId, orderLineId] of pairs) {
+      const ol = byId.get(orderLineId);
+      if (ol) result.set(invoiceLineId, ol);
+    }
+    return result;
   }
 
   static returnableQuantity(line: Pick<SalesInvoiceLine, 'quantity' | 'qtyReturned'>): number {

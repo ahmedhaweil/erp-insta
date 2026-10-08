@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
@@ -13,7 +14,9 @@ import {
 } from '../entities/purchase-invoice.entity';
 import { PurchaseInvoiceLine } from '../entities/purchase-invoice-line.entity';
 import { Supplier } from '../entities/supplier.entity';
-import { CreatePurchaseInvoiceDto } from '../dto/create-purchase-invoice.dto';
+import { CreatePurchaseInvoiceDto, PurchaseInvoiceLineDto } from '../dto/create-purchase-invoice.dto';
+import { ProductsService } from '@modules/inventory/services/products.service';
+import { UnitLineInput, resolveLineUnits } from '@modules/inventory/services/document-units.util';
 import { CreateVendorRefundDto } from '../dto/purchase-actions.dto';
 import { Product, ProductType } from '@modules/inventory/entities/product.entity';
 import { SequenceService } from '@shared/services/sequence.service';
@@ -50,6 +53,7 @@ export class PurchaseInvoicesService {
     private readonly productRepo: Repository<Product>,
     private readonly sequenceService: SequenceService,
     private readonly autoPosting: AutoPostingService,
+    @Optional() private readonly products?: ProductsService,
   ) {}
 
   /** Creates a draft vendor bill. Amounts are always recomputed from the lines. */
@@ -79,12 +83,18 @@ export class PurchaseInvoicesService {
     }
 
     const taxIncluded = !!dto.pricesIncludeTax;
-    const inputLines = await this.withPurchaseTaxDefaults(tenantId, dto.lines);
+    const inputLines = await resolveLineUnits(
+      this.products,
+      tenantId,
+      await this.withPurchaseTaxDefaults(tenantId, dto.lines as (PurchaseInvoiceLineDto & UnitLineInput)[]),
+    );
     const lines = inputLines.map((l) => ({
       ...computeLine(l, { taxIncluded }),
       productId: l.productId,
       description: l.description,
       orderLineId: l.orderLineId,
+      unitId: l.unitId,
+      unitFactor: l.unitFactor,
       withholdingRate:
         l.withholdingRate === undefined || l.withholdingRate === null
           ? null
@@ -308,6 +318,8 @@ export class PurchaseInvoicesService {
           taxRate: Number(line.taxRate),
           description: line.description,
           withholdingRate: line.withholdingRate ?? undefined,
+          unitId: line.unitId ?? undefined,
+          unitFactor: line.unitId ? Number(line.unitFactor) : undefined,
         };
       })
       .filter((l) => l.quantity > 0);
@@ -333,6 +345,11 @@ export class PurchaseInvoicesService {
     );
 
     return dto.post ? this.approve(tenantId, refund.id, userId) : refund;
+  }
+
+  /** Overwrites the reconciled amount (used when a return undoes its own reconciliation). */
+  async setPaidAmount(tenantId: string, id: string, paidAmount: number): Promise<void> {
+    await this.invoiceRepo.update({ id, tenantId }, { paidAmount: round(paidAmount, 4) });
   }
 
   async adjustSupplierBalance(tenantId: string, supplierId: string, delta: number): Promise<void> {

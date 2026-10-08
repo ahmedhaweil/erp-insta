@@ -22,6 +22,9 @@ import { PurchaseReceivedEvent } from '../events/purchase-received.event';
 import { PurchaseInvoicesService } from './purchase-invoices.service';
 import { Product, ProductType } from '@modules/inventory/entities/product.entity';
 import { StockService } from '@modules/inventory/services/stock.service';
+import { ProductsService } from '@modules/inventory/services/products.service';
+import { resolveLineUnits, toBaseQty } from '@modules/inventory/services/document-units.util';
+import { addLots, lotsOrUndefined } from '@modules/inventory/services/document-lots.util';
 import { SequenceService } from '@shared/services/sequence.service';
 import { RbacService } from '@modules/auth/services/rbac.service';
 import { PurchasingSettingsService } from './purchasing-settings.service';
@@ -50,6 +53,7 @@ export class PurchaseOrdersService {
     private readonly invoicesService: PurchaseInvoicesService,
     @Optional() private readonly settingsService?: PurchasingSettingsService,
     @Optional() private readonly rbac?: RbacService,
+    @Optional() private readonly products?: ProductsService,
   ) {}
 
   async create(
@@ -66,11 +70,17 @@ export class PurchaseOrdersService {
 
     // Client totals are ignored: amounts are recomputed from the lines
     const taxIncluded = !!dto.pricesIncludeTax;
-    const inputLines = await this.withPurchaseTaxDefaults(tenantId, dto.lines);
+    const inputLines = await resolveLineUnits(
+      this.products,
+      tenantId,
+      await this.withPurchaseTaxDefaults(tenantId, dto.lines),
+    );
     const lines = inputLines.map((l) => ({
       ...computeLine(l, { taxIncluded }),
       productId: l.productId,
       description: l.description,
+      unitId: l.unitId,
+      unitFactor: l.unitFactor,
     }));
     const totals = computeTotals(lines);
     const { subtotal: _s, taxAmount: _t, totalAmount: _a, ...header } = dto;
@@ -224,6 +234,12 @@ export class PurchaseOrdersService {
 
     const warehouseId = dto.warehouseId || order.warehouseId;
     const requested = new Map((dto.lines ?? []).map((l) => [l.lineId, Number(l.quantity)]));
+    const requestedLots = new Map((dto.lines ?? []).map((l) => [l.lineId, lotsOrUndefined(l.lots)]));
+    for (const l of dto.lines ?? []) {
+      if (!order.lines.some((line) => line.id === l.lineId)) {
+        throw new BadRequestException(`Line ${l.lineId} is not part of order ${order.orderNumber}`);
+      }
+    }
     let received = 0;
 
     for (const line of order.lines) {
@@ -239,20 +255,24 @@ export class PurchaseOrdersService {
         if (!warehouseId) {
           throw new BadRequestException('A warehouse is required to receive stockable products');
         }
-        // Net unit cost after the line discount, in company currency
+        // Net cost per base unit after the line discount, in company currency
+        const factor = Number(line.unitFactor || 1);
         const unitCost = round(
-          (Number(line.lineTotal) / Number(line.quantity)) * Number(order.exchangeRate || 1),
+          (Number(line.lineTotal) / (Number(line.quantity) * factor)) * Number(order.exchangeRate || 1),
           4,
         );
+        const lots = requestedLots.get(line.id);
         await this.stockService.receive(tenantId, userId, {
           productId: line.productId,
           warehouseId,
-          quantity,
+          quantity: toBaseQty(quantity, factor),
           unitCost,
           referenceType: 'purchase_order',
           referenceId: order.id,
           description: `Receipt ${order.orderNumber}`,
+          lots,
         });
+        if (lots?.length) line.lots = addLots(line.lots, lots);
       }
 
       line.qtyReceived = round(Number(line.qtyReceived) + quantity, 4);
@@ -319,6 +339,8 @@ export class PurchaseOrdersService {
         taxRate: Number(line.taxRate),
         description: line.description,
         orderLineId: line.id,
+        unitId: line.unitId ?? undefined,
+        unitFactor: line.unitId ? Number(line.unitFactor) : undefined,
       })),
     });
 

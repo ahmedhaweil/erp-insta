@@ -411,6 +411,11 @@ export class SalesInvoicesService {
     return dto.post ? this.post(tenantId, userId, creditNote.id) : creditNote;
   }
 
+  /** Overwrites the reconciled amount (used when a return undoes its own reconciliation). */
+  async setPaidAmount(tenantId: string, id: string, paidAmount: number): Promise<void> {
+    await this.invoiceRepo.update({ id, tenantId }, { paidAmount: round(paidAmount, 4) });
+  }
+
   async adjustCustomerBalance(tenantId: string, customerId: string, delta: number): Promise<void> {
     if (!customerId || !delta) return;
     await this.customerRepo

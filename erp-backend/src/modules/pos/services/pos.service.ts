@@ -15,7 +15,7 @@ import { PosTerminal } from '../entities/pos-terminal.entity';
 import { PosCashMovement } from '../entities/pos-cash-movement.entity';
 import { OpenSessionDto } from '../dto/open-session.dto';
 import { CloseSessionDto } from '../dto/close-session.dto';
-import { CreatePosOrderDto } from '../dto/create-pos-order.dto';
+import { CreatePosOrderDto, PosOrderLineDto } from '../dto/create-pos-order.dto';
 import {
   CashMovementDto,
   CreateTerminalDto,
@@ -30,6 +30,18 @@ import { AutoPostingService, SettingsAccountKey } from '@modules/accounting/serv
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { computeLine, computeTotals, round, today } from '@shared/utils/document-totals.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ProductsService } from '@modules/inventory/services/products.service';
+import { resolveLineUnits, toBaseQty } from '@modules/inventory/services/document-units.util';
+import {
+  DocumentLot,
+  addLots,
+  lotsOrUndefined,
+  pickReturnLots,
+  subtractLots,
+} from '@modules/inventory/services/document-lots.util';
+import type { StockLotInput } from '@modules/inventory/services/lots.service';
+import { SalesRep } from '@modules/sales/entities/sales-rep.entity';
+import { Customer } from '@modules/sales/entities/customer.entity';
 
 /** What the acting user may do beyond the normal cashier permissions. */
 export interface PosActor {
@@ -59,6 +71,9 @@ export class PosService {
     private readonly stockService: StockService,
     private readonly autoPosting: AutoPostingService,
     @Optional() private readonly eventEmitter?: EventEmitter2,
+    @Optional() private readonly products?: ProductsService,
+    @Optional() @InjectRepository(SalesRep) private readonly salesRepRepo?: Repository<SalesRep>,
+    @Optional() @InjectRepository(Customer) private readonly customerRepo?: Repository<Customer>,
   ) {}
 
   createTerminal(tenantId: string, dto: CreateTerminalDto): Promise<PosTerminal> {
@@ -209,7 +224,13 @@ export class PosService {
     const terminal = await this.terminalRepo.findOne({ where: { id: session.terminalId, tenantId } });
 
     const priced = await this.priceLines(tenantId, dto, terminal, actor);
-    const computed = priced.map((line) => ({ ...computeLine(line), productId: line.productId }));
+    const computed = priced.map((line) => ({
+      ...computeLine(line),
+      productId: line.productId,
+      unitId: line.unitId,
+      unitFactor: line.unitFactor,
+      lots: line.lots,
+    }));
     const { subtotal, taxAmount, totalAmount } = computeTotals(computed);
     const discount = round(computed.reduce((sum, l) => sum + l.discount, 0), 4);
 
@@ -231,6 +252,7 @@ export class PosService {
       sessionId: dto.sessionId,
       orderNumber,
       customerId: dto.customerId ?? null,
+      salesRepId: await this.resolveSalesRep(tenantId, dto, actor.userId),
       clientReference: dto.clientReference ?? null,
       subtotal,
       taxAmount,
@@ -249,17 +271,21 @@ export class PosService {
     const lines: PosOrderLine[] = [];
     for (const line of computed) {
       let unitCost = 0;
+      let soldLots: DocumentLot[] = [];
       if (terminal?.warehouseId) {
+        // Stock moves in base units; the lots sold are kept for refunds
         const issued = await this.stockService.issue(tenantId, actor.userId, {
           productId: line.productId,
           warehouseId: terminal.warehouseId,
-          quantity: line.quantity,
+          quantity: toBaseQty(line.quantity, line.unitFactor),
           referenceType: 'pos_order',
           referenceId: savedOrder.id,
           description: `POS ${orderNumber}`,
+          lots: lotsOrUndefined(line.lots),
         });
         cost += issued.cost;
         unitCost = issued.unitCost;
+        soldLots = addLots(issued.lots);
       }
       // POS lines store the tax-included total
       lines.push(
@@ -273,6 +299,10 @@ export class PosService {
           unitCost,
           refundedQty: 0,
           lineTotal: round(line.lineTotal + line.taxAmount, 4),
+          unitId: line.unitId,
+          unitFactor: line.unitFactor,
+          lots: soldLots,
+          lotsRefunded: [],
         }),
       );
     }
@@ -349,6 +379,7 @@ export class PosService {
         sessionId,
         orderNumber,
         customerId: original.customerId,
+        salesRepId: original.salesRepId ?? null,
         subtotal: -round(subtotal, 4),
         taxAmount: -round(tax, 4),
         totalAmount: -total,
@@ -363,7 +394,21 @@ export class PosService {
 
     let cost = 0;
     const refundRows: PosOrderLine[] = [];
-    for (const { line, quantity } of selection) {
+    for (const { line, quantity, lots: requestedLots } of selection) {
+      const baseQuantity = toBaseQty(quantity, line.unitFactor);
+      let restored: DocumentLot[] | undefined;
+      const stocked =
+        !!terminal?.warehouseId && (await this.stockService.isStockable(tenantId, line.productId));
+      if (stocked) {
+        // Serial/lot products get back the lots recorded on the sale
+        restored = pickReturnLots(
+          subtractLots(line.lots, line.lotsRefunded),
+          baseQuantity,
+          requestedLots,
+          `sale line of ${original.orderNumber}`,
+        );
+        if (restored?.length) line.lotsRefunded = addLots(line.lotsRefunded, restored);
+      }
       refundRows.push(
         this.orderLineRepo.create({
           orderId: refund.id,
@@ -375,11 +420,15 @@ export class PosService {
           unitCost: Number(line.unitCost),
           refundedQty: 0,
           lineTotal: -share(line, quantity, Number(line.lineTotal)),
+          unitId: line.unitId ?? null,
+          unitFactor: Number(line.unitFactor || 1),
+          lots: restored ?? [],
+          lotsRefunded: [],
         }),
       );
       line.refundedQty = round(Number(line.refundedQty) + quantity, 4);
 
-      if (terminal?.warehouseId && (await this.stockService.isStockable(tenantId, line.productId))) {
+      if (stocked && terminal?.warehouseId) {
         const unitCost =
           Number(line.unitCost) > 0
             ? Number(line.unitCost)
@@ -387,13 +436,14 @@ export class PosService {
         await this.stockService.receive(tenantId, actor.userId, {
           productId: line.productId,
           warehouseId: terminal.warehouseId,
-          quantity,
+          quantity: baseQuantity,
           unitCost,
           referenceType: 'pos_refund',
           referenceId: refund.id,
           description: `POS refund ${orderNumber}`,
+          lots: restored,
         });
-        cost += unitCost * quantity;
+        cost += unitCost * baseQuantity;
       }
     }
     await this.orderLineRepo.save([...refundRows, ...original.lines]);
@@ -475,21 +525,53 @@ export class PosService {
    * a price or discount more than the terminal's limit below the list price
    * needs the discount override permission.
    */
+  /**
+   * Prices come from the product master (or the alternate unit's own price,
+   * else product price x unit factor) unless the cashier types one; a price
+   * or discount more than the terminal's limit below the list price needs the
+   * discount override permission. Lines may give a scanned barcode instead
+   * of the product, which also selects the unit.
+   */
   private async priceLines(
     tenantId: string,
     dto: CreatePosOrderDto,
     terminal: PosTerminal | null,
     actor: PosActor,
   ) {
-    const ids = [...new Set(dto.lines.map((l) => l.productId))];
+    // 1. Barcodes -> product, unit and scanned price
+    const scanned = new Map<number, number>();
+    const resolved: (PosOrderLineDto & { productId: string })[] = [];
+    for (const [i, line] of dto.lines.entries()) {
+      if (line.barcode && !line.productId) {
+        if (!this.products) throw new BadRequestException('Barcode lookup is not available');
+        const hit = await this.products.lookupBarcode(tenantId, line.barcode);
+        scanned.set(i, hit.price);
+        resolved.push({
+          ...line,
+          productId: hit.product.id,
+          unitId: line.unitId ?? (hit.factor !== 1 ? hit.unitId : undefined),
+        });
+      } else {
+        if (!line.productId) throw new BadRequestException('Each line needs a productId or a barcode');
+        resolved.push({ ...line, productId: line.productId });
+      }
+    }
+    const withUnits = await resolveLineUnits(this.products, tenantId, resolved);
+
+    const ids = [...new Set(withUnits.map((l) => l.productId))];
     const products = await this.productRepo.find({ where: { tenantId, id: In(ids), isActive: true } });
     const byId = new Map(products.map((p) => [p.id, p]));
     const limit = terminal?.maxDiscountPercent != null ? Number(terminal.maxDiscountPercent) : null;
 
-    return dto.lines.map((line) => {
+    return withUnits.map((line, i) => {
       const product = byId.get(line.productId);
       if (!product) throw new NotFoundException(`Product ${line.productId} not found or inactive`);
-      const listPrice = Number(product.sellPrice);
+      // List price of one line unit
+      const listPrice =
+        scanned.get(i) ??
+        (line.unitSellPrice !== null
+          ? line.unitSellPrice
+          : round(Number(product.sellPrice) * line.unitFactor, 4));
       const unitPrice = line.unitPrice ?? listPrice;
       const taxRate = line.taxRate ?? Number(product.salesTaxRate ?? 0);
 
@@ -503,36 +585,80 @@ export class PosService {
           );
         }
       }
-      return { productId: line.productId, quantity: line.quantity, unitPrice, discount: line.discount, taxRate };
+      return {
+        productId: line.productId,
+        quantity: line.quantity,
+        unitPrice,
+        discount: line.discount,
+        taxRate,
+        unitId: line.unitId,
+        unitFactor: line.unitFactor,
+        lots: line.lots,
+      };
     });
   }
 
+  /** Explicit rep, else the customer's rep, else the rep linked to the cashier's user. */
+  private async resolveSalesRep(
+    tenantId: string,
+    dto: CreatePosOrderDto,
+    userId: string,
+  ): Promise<string | null> {
+    if (dto.salesRepId) return dto.salesRepId;
+    if (dto.customerId && this.customerRepo) {
+      const customer = await this.customerRepo.findOne({ where: { id: dto.customerId, tenantId } });
+      if (customer?.salesRepId) return customer.salesRepId;
+    }
+    if (this.salesRepRepo) {
+      const rep = await this.salesRepRepo.findOne({ where: { tenantId, userId, isActive: true } });
+      if (rep) return rep.id;
+    }
+    return null;
+  }
+
+  /**
+   * Sale lines to refund: explicit sale lines (`lineId`), or a product taken
+   * from its sale lines in order (only lines in the requested unit, base
+   * unit by default). Quantities are in the unit of the sale line.
+   */
   private refundSelection(original: PosOrder, requested?: RefundLineDto[]) {
     const remaining = (l: PosOrderLine) => round(Number(l.quantity) - Number(l.refundedQty || 0), 4);
     if (!requested?.length) {
       const all = original.lines
-        .map((line) => ({ line, quantity: remaining(line) }))
+        .map((line) => ({ line, quantity: remaining(line), lots: undefined as StockLotInput[] | undefined }))
         .filter((x) => x.quantity > 0);
       if (!all.length) throw new ConflictException('The sale is already fully refunded');
       return all;
     }
 
     const pending = new Map(original.lines.map((l) => [l.id, remaining(l)]));
-    const selection: { line: PosOrderLine; quantity: number }[] = [];
+    const selection: { line: PosOrderLine; quantity: number; lots?: StockLotInput[] }[] = [];
     for (const req of requested) {
       let qty = round(req.quantity, 4);
+      const candidates = req.lineId
+        ? original.lines.filter((l) => l.id === req.lineId)
+        : original.lines.filter(
+            (l) => l.productId === req.productId && (l.unitId ?? null) === (req.unitId ?? null),
+          );
+      if (req.lineId && !candidates.length) {
+        throw new BadRequestException(`Line ${req.lineId} is not part of ${original.orderNumber}`);
+      }
+      const explicitLots = lotsOrUndefined(req.lots);
       // A product may appear on several lines: take from them in order
-      for (const line of original.lines.filter((l) => l.productId === req.productId)) {
+      for (const line of candidates) {
         const take = Math.min(qty, pending.get(line.id) ?? 0);
         if (take <= 0) continue;
-        selection.push({ line, quantity: take });
+        if (explicitLots && take + 0.0001 < qty) {
+          throw new BadRequestException('Give lineId when refunding explicit lots of a product sold on several lines');
+        }
+        selection.push({ line, quantity: take, lots: explicitLots });
         pending.set(line.id, round((pending.get(line.id) ?? 0) - take, 4));
         qty = round(qty - take, 4);
         if (qty <= 0) break;
       }
       if (qty > 0) {
         throw new BadRequestException(
-          `Cannot refund ${req.quantity} of product ${req.productId}: more than sold and not yet refunded`,
+          `Cannot refund ${req.quantity} of ${req.lineId ?? req.productId}: more than sold and not yet refunded`,
         );
       }
     }
