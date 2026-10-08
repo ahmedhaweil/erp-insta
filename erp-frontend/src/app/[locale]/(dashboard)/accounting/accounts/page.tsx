@@ -15,6 +15,7 @@ import type { Account } from '@/types';
 export default function AccountsPage() {
   const t = useTranslations('accounting');
   const tc = useTranslations('common');
+  const ta = useTranslations('acct');
   const locale = useLocale();
   const [showModal, setShowModal] = useState(false);
 
@@ -55,7 +56,7 @@ export default function AccountsPage() {
       header: t('accountType'),
       render: (item: Account) => <StatusBadge status={item.type} label={t(item.type)} />,
     },
-    { key: 'level', header: 'Level' },
+    { key: 'level', header: ta('level') },
     {
       key: 'isActive',
       header: tc('status'),
