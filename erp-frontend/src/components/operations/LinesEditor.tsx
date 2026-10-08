@@ -32,15 +32,19 @@ export interface LinesEditorProps {
   showPrice?: boolean;
   showDiscount?: boolean;
   showTax?: boolean;
-  /** Hint shown under the price column (e.g. "empty = price list"). */
+  /**
+   * When set, the unit price is not prefilled: an empty price is priced by the
+   * backend (price list); the product price is only used as an estimate.
+   */
   priceHint?: string;
 }
 
-export function lineTotals(lines: DocLine[]) {
+export function lineTotals(lines: DocLine[], estimate?: (l: DocLine) => number) {
   let subtotal = 0;
   let tax = 0;
   for (const l of lines) {
-    const net = num(l.quantity) * num(l.unitPrice) - num(l.discount);
+    const price = l.unitPrice === '' && estimate ? estimate(l) : num(l.unitPrice);
+    const net = num(l.quantity) * price - num(l.discount);
     subtotal += net;
     tax += (net * num(l.taxRate)) / 100;
   }
@@ -82,12 +86,13 @@ export default function LinesEditor({
     const p = productMap[productId];
     update(key, {
       productId,
-      unitPrice: p && showPrice ? String(num(p[priceField])) : '',
+      unitPrice: p && showPrice && !priceHint ? String(num(p[priceField])) : '',
       taxRate: p && showTax ? String(num(p[taxField])) : '',
     });
   };
 
-  const totals = lineTotals(lines);
+  const estimate = (l: DocLine) => num(productMap[l.productId]?.[priceField]);
+  const totals = lineTotals(lines, priceHint ? estimate : undefined);
 
   return (
     <div className="space-y-2">
@@ -122,7 +127,7 @@ export default function LinesEditor({
                 </td>
                 {showPrice && (
                   <td className="px-2 py-1.5">
-                    <input type="number" step="any" min="0" value={l.unitPrice} onChange={(e) => update(l.key, { unitPrice: e.target.value })} className={inputCls} placeholder={priceHint ? t('common.auto') : undefined} />
+                    <input type="number" step="any" min="0" value={l.unitPrice} onChange={(e) => update(l.key, { unitPrice: e.target.value })} className={inputCls} placeholder={priceHint ? (l.productId ? String(estimate(l)) : t('common.auto')) : undefined} />
                   </td>
                 )}
                 {showDiscount && (
@@ -137,7 +142,7 @@ export default function LinesEditor({
                 )}
                 {showPrice && (
                   <td className="px-2 py-1.5 text-gray-700">
-                    {fmtMoney(num(l.quantity) * num(l.unitPrice) - num(l.discount))}
+                    {fmtMoney(num(l.quantity) * (l.unitPrice === '' && priceHint ? estimate(l) : num(l.unitPrice)) - num(l.discount))}
                   </td>
                 )}
                 <td className="px-2 py-1.5">

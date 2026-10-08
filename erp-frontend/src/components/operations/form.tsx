@@ -173,7 +173,11 @@ export function EntityForm({
   onSubmit,
   onCancel,
   submitLabel,
+  children,
+  columns = 2,
 }: {
+  children?: React.ReactNode;
+  columns?: 2 | 3;
   fields: FieldDef[];
   initial?: Values;
   mode?: 'create' | 'edit';
@@ -194,7 +198,7 @@ export function EntityForm({
       }}
       className="space-y-4"
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className={clsx('grid grid-cols-1 md:grid-cols-2 gap-4', columns === 3 && 'lg:grid-cols-3')}>
         {fields
           .filter((f) => !f.hidden)
           .map((f) => {
@@ -257,6 +261,7 @@ export function EntityForm({
             );
           })}
       </div>
+      {children}
       <div className="flex justify-end gap-2 pt-2">
         <Btn variant="secondary" onClick={onCancel}>
           {t('common.cancel')}
