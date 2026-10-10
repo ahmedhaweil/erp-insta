@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, LessThanOrEqual, Not, Repository } from 'typeorm';
 import {
@@ -18,6 +18,10 @@ import {
   PaymentStatus,
 } from '@modules/payments/entities/payment.entity';
 import { PaymentAllocation } from '@modules/payments/entities/payment-allocation.entity';
+import {
+  PartnerWriteOff,
+  WriteOffStatus,
+} from '@modules/payments/entities/partner-write-off.entity';
 import { Customer } from '@modules/sales/entities/customer.entity';
 import { Supplier } from '@modules/purchasing/entities/supplier.entity';
 import { round, today } from '@shared/utils/document-totals.util';
@@ -29,7 +33,8 @@ export type StatementDocType =
   | 'vendor_refund'
   | 'payment'
   | 'refund'
-  | 'direct_payment';
+  | 'direct_payment'
+  | 'write_off';
 
 export interface StatementMovement {
   date: string;
@@ -112,6 +117,9 @@ export class PartnerStatementService {
     private readonly customerRepo: Repository<Customer>,
     @InjectRepository(Supplier)
     private readonly supplierRepo: Repository<Supplier>,
+    @Optional()
+    @InjectRepository(PartnerWriteOff)
+    private readonly writeOffRepo?: Repository<PartnerWriteOff>,
   ) {}
 
   async getStatement(
@@ -202,8 +210,12 @@ export class PartnerStatementService {
     for (const payment of payments) {
       const inbound = payment.direction === PaymentDirection.INBOUND;
       // Money received is a credit on both statements (a customer paying us,
-      // or a supplier refunding us); money paid out is a debit.
-      const amount = Number(payment.amount);
+      // or a supplier refunding us); money paid out is a debit. The partner
+      // is settled for the gross amount (tax withheld and discount included).
+      const amount =
+        Number(payment.amount) +
+        Number(payment.withholdingAmount || 0) +
+        Number(payment.discountAllowed || 0);
       const applied = allocations
         .filter((a) => a.paymentId === payment.id)
         .map((a) => invoiceNumbers.get(a.invoiceId) ?? a.invoiceId);
@@ -222,6 +234,32 @@ export class PartnerStatementService {
         currencyId: payment.currencyId,
         createdAt: payment.createdAt,
       });
+    }
+
+    if (this.writeOffRepo) {
+      const writeOffs = await this.writeOffRepo.find({
+        where: {
+          tenantId,
+          partnerId: q.partnerId,
+          partnerType: isCustomer ? PaymentPartnerType.CUSTOMER : PaymentPartnerType.SUPPLIER,
+          status: WriteOffStatus.POSTED,
+          date: LessThanOrEqual(to),
+        },
+      });
+      for (const wo of writeOffs) {
+        const amount = Number(wo.amount);
+        movements.push({
+          date: wo.date,
+          documentType: 'write_off',
+          documentId: wo.id,
+          number: wo.writeOffNumber,
+          description: `Write-off (${wo.kind})${wo.reason ? ` - ${wo.reason}` : ''}`,
+          // Reduces what the customer owes / what we owe the supplier.
+          debit: isCustomer ? 0 : amount,
+          credit: isCustomer ? amount : 0,
+          createdAt: wo.createdAt,
+        });
+      }
     }
 
     const statement = buildStatement(movements, q.from, isCustomer ? 1 : -1);

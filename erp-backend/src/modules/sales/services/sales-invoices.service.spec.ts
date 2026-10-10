@@ -143,6 +143,26 @@ describe('SalesInvoicesService', () => {
     expect(autoPosting.post).not.toHaveBeenCalled();
   });
 
+  it('posts above the soft balance threshold with a warning', async () => {
+    invoiceRepo.findOne.mockResolvedValue({ ...postedInvoice(), status: SalesInvoiceStatus.DRAFT });
+    customerRepo.findOne.mockResolvedValue({ ...customer, balance: 0, balanceWarningThreshold: 100 });
+
+    const result = await service.post('t1', 'u1', 'inv-1');
+    expect(result.status).toBe(SalesInvoiceStatus.POSTED);
+    expect(result.warnings).toEqual([expect.stringContaining('warning threshold')]);
+  });
+
+  it('refuses invoices for a blocked customer', async () => {
+    customerRepo.findOne.mockResolvedValue({ ...customer, isBlocked: true, blockReason: 'rejected' });
+    await expect(
+      service.create('t1', 'u1', {
+        customerId: 'cust-1',
+        date: '2026-01-10',
+        lines: [{ productId: 'p1', quantity: 1, unitPrice: 50 }],
+      } as any),
+    ).rejects.toThrow('Customer is blocked: rejected');
+  });
+
   it('records partial payments', async () => {
     const result = await service.applyPayment(postedInvoice() as any, 50);
     expect(result.status).toBe(SalesInvoiceStatus.PARTIAL);

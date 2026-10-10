@@ -22,6 +22,7 @@ import { CreateInvoiceFromOrderDto, DeliverOrderDto } from '../dto/sales-actions
 import { OrderConfirmedEvent } from '../events/order-confirmed.event';
 import { SalesInvoicesService } from './sales-invoices.service';
 import { SalesPricingService } from './sales-pricing.service';
+import { CustomerCreditService, assertCustomerNotBlocked } from './customer-credit.service';
 import { SequenceService } from '@shared/services/sequence.service';
 import { StockService } from '@modules/inventory/services/stock.service';
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
@@ -43,6 +44,7 @@ export class SalesOrdersService {
     private readonly invoicesService: SalesInvoicesService,
     private readonly autoPosting: AutoPostingService,
     @Optional() private readonly pricing?: SalesPricingService,
+    @Optional() private readonly credit?: CustomerCreditService,
   ) {}
 
   async create(
@@ -53,6 +55,7 @@ export class SalesOrdersService {
     const customer = await this.customerRepo.findOne({ where: { id: dto.customerId, tenantId } });
     if (!customer) throw new NotFoundException('Customer not found');
     if (!customer.isActive) throw new BadRequestException('Customer is archived');
+    assertCustomerNotBlocked(customer);
 
     const orderNumber = await this.sequenceService.next(tenantId, 'sales_order', 'SO');
 
@@ -134,7 +137,11 @@ export class SalesOrdersService {
    * Confirms a quotation into a sales order: enforces quotation validity and
    * the customer credit limit, then reserves stock in the order warehouse.
    */
-  async confirm(tenantId: string, userId: string, id: string): Promise<SalesOrder> {
+  async confirm(
+    tenantId: string,
+    userId: string,
+    id: string,
+  ): Promise<SalesOrder & { warnings?: string[] }> {
     const order = await this.findById(tenantId, id);
 
     if (order.status !== SalesOrderStatus.DRAFT && order.status !== SalesOrderStatus.SENT) {
@@ -146,13 +153,12 @@ export class SalesOrdersService {
     }
 
     const customer = order.customer;
-    if (customer && Number(customer.creditLimit) > 0) {
-      const exposure = Number(customer.balance) + Number(order.totalAmount);
-      if (exposure > Number(customer.creditLimit)) {
-        throw new BadRequestException(
-          `Credit limit exceeded. Limit: ${customer.creditLimit}, Current balance: ${customer.balance}, Order: ${Number(order.totalAmount).toFixed(2)}`,
-        );
-      }
+    let warnings: string[] = [];
+    if (customer) {
+      const amount = Number(order.totalAmount);
+      warnings = this.credit
+        ? await this.credit.check(tenantId, userId, customer, amount, 'Order')
+        : CustomerCreditService.checkWithoutOverride(customer, amount, 'Order');
     }
 
     if (order.warehouseId) {
@@ -183,7 +189,7 @@ export class SalesOrdersService {
       ),
     );
 
-    return saved;
+    return warnings.length ? Object.assign(saved, { warnings }) : saved;
   }
 
   /**

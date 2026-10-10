@@ -36,6 +36,20 @@ export class Customer extends TenantBaseEntity {
   @Column({ name: 'credit_limit', type: 'decimal', precision: 18, scale: 4, default: 0 })
   creditLimit: number;
 
+  /**
+   * Soft limit: posting a sale that takes the balance above it succeeds but
+   * returns a warning. Null = use the customer category threshold.
+   */
+  @Column({ name: 'balance_warning_threshold', type: 'decimal', precision: 18, scale: 4, nullable: true })
+  balanceWarningThreshold: number | null;
+
+  /** Blocked (rejected) customer: no new orders, invoices or POS sales. */
+  @Column({ name: 'is_blocked', default: false })
+  isBlocked: boolean;
+
+  @Column({ name: 'block_reason', type: 'varchar', nullable: true })
+  blockReason: string | null;
+
   /** Outstanding receivable (posted invoices minus credit notes and payments). */
   @Column({ type: 'decimal', precision: 18, scale: 4, default: 0 })
   balance: number;

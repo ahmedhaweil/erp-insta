@@ -256,6 +256,9 @@ export class PurchaseInvoicesService {
     if (invoice.status === PurchaseInvoiceStatus.CANCELLED) {
       throw new ConflictException('Invoice is already cancelled');
     }
+    if (invoice.openingBalanceId) {
+      throw new ConflictException('Opening balance items are cancelled through their opening balance document');
+    }
     if (Number(invoice.paidAmount) > 0) {
       throw new ConflictException(
         'Bills with payments or refunds cannot be cancelled; issue a vendor refund instead',

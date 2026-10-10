@@ -54,6 +54,14 @@ export class Payment extends TenantBaseEntity {
   @Column({ name: 'withholding_amount', type: 'decimal', precision: 18, scale: 4, default: 0 })
   withholdingAmount: number;
 
+  /**
+   * Settlement discount (خصم مسموح به / خصم مكتسب): allowed to the customer on
+   * a receipt, or received from the supplier on a payment. The partner is
+   * settled for amount + withholdingAmount + discountAllowed.
+   */
+  @Column({ name: 'discount_allowed', type: 'decimal', precision: 18, scale: 4, default: 0 })
+  discountAllowed: number;
+
   /** Part of the settled amount reconciled with invoices; the rest is an advance/credit. */
   @Column({ name: 'allocated_amount', type: 'decimal', precision: 18, scale: 4, default: 0 })
   allocatedAmount: number;

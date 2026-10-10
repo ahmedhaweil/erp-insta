@@ -21,6 +21,7 @@ import { AutoPostingService } from '@modules/accounting/services/auto-posting.se
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { SalesPricingService } from './sales-pricing.service';
 import { InstallmentScheduleService } from './installment-schedule.service';
+import { CustomerCreditService, assertCustomerNotBlocked } from './customer-credit.service';
 import {
   addDays,
   computeLine,
@@ -71,6 +72,7 @@ export class SalesInvoicesService {
     private readonly autoPosting: AutoPostingService,
     @Optional() private readonly pricing?: SalesPricingService,
     @Optional() private readonly installments?: InstallmentScheduleService,
+    @Optional() private readonly credit?: CustomerCreditService,
   ) {}
 
   /**
@@ -86,6 +88,7 @@ export class SalesInvoicesService {
   ): Promise<SalesInvoice> {
     const customer = await this.getCustomer(tenantId, dto.customerId);
     const isCreditNote = extra.moveType === SalesInvoiceType.CREDIT_NOTE;
+    if (!isCreditNote) assertCustomerNotBlocked(customer);
     const checkPrices = !isCreditNote && !options.skipPriceChecks;
 
     let inputLines: InvoiceLineInput[] = dto.lines;
@@ -173,7 +176,11 @@ export class SalesInvoicesService {
    * customer credit limit, posts the journal entry and updates the customer
    * receivable balance.
    */
-  async post(tenantId: string, userId: string, id: string): Promise<SalesInvoice> {
+  async post(
+    tenantId: string,
+    userId: string,
+    id: string,
+  ): Promise<SalesInvoice & { warnings?: string[] }> {
     const invoice = await this.findById(tenantId, id);
     if (invoice.status !== SalesInvoiceStatus.DRAFT) {
       throw new ConflictException('Only draft invoices can be posted');
@@ -183,13 +190,14 @@ export class SalesInvoicesService {
     const total = Number(invoice.totalAmount);
     const customer = await this.getCustomer(tenantId, invoice.customerId);
 
-    if (!isCreditNote && Number(customer.creditLimit) > 0) {
-      const newBalance = Number(customer.balance) + total;
-      if (newBalance > Number(customer.creditLimit)) {
-        throw new BadRequestException(
-          `Credit limit exceeded. Limit: ${customer.creditLimit}, Current balance: ${customer.balance}, Invoice: ${total.toFixed(2)}`,
-        );
-      }
+    // Instasoft rule: balance + invoice − already paid against the credit
+    // limit (blocking unless overridden) and the soft threshold (warning).
+    let warnings: string[] = [];
+    if (!isCreditNote) {
+      const exposure = round(total - Number(invoice.paidAmount || 0), 4);
+      warnings = this.credit
+        ? await this.credit.check(tenantId, userId, customer, exposure, 'Invoice')
+        : CustomerCreditService.checkWithoutOverride(customer, exposure, 'Invoice');
     }
 
     const subtotal = Number(invoice.subtotal);
@@ -235,7 +243,7 @@ export class SalesInvoicesService {
       }
     }
 
-    return saved;
+    return warnings.length ? Object.assign(saved, { warnings }) : saved;
   }
 
   /**
@@ -315,6 +323,9 @@ export class SalesInvoicesService {
     const invoice = await this.findById(tenantId, id);
     if (invoice.status === SalesInvoiceStatus.CANCELLED) {
       throw new ConflictException('Invoice is already cancelled');
+    }
+    if (invoice.openingBalanceId) {
+      throw new ConflictException('Opening balance items are cancelled through their opening balance document');
     }
     if (Number(invoice.paidAmount) > 0) {
       throw new ConflictException(

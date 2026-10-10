@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import {
@@ -71,6 +71,86 @@ export class InstallmentScheduleService {
       inst.status = InstallmentScheduleService.statusOf(amount, applied, inst.dueDate, asOf);
     }
     return sorted;
+  }
+
+  /**
+   * Reschedules the unpaid balance. Installments keep what was paid on them:
+   * a partially paid installment is reduced to its paid part and its unpaid
+   * remainder joins the balance (Instasoft dropped that remainder). Fully
+   * unpaid installments are replaced by new ones of `installmentAmount` (the
+   * last takes the remainder) or by `numberOfInstallments` equal ones.
+   */
+  static reschedule(
+    installments: Pick<Installment, 'id' | 'sequence' | 'dueDate' | 'amount' | 'paidAmount'>[],
+    options: {
+      installmentAmount?: number;
+      numberOfInstallments?: number;
+      firstDueDate?: string;
+      frequency: InstallmentFrequency;
+    },
+  ) {
+    const sorted = [...installments].sort(
+      (a, b) => a.dueDate.localeCompare(b.dueDate) || a.sequence - b.sequence,
+    );
+    const kept: { id: string; amount: number }[] = [];
+    const removedIds: string[] = [];
+    let remaining = 0;
+    let lastKeptDue: string | null = null;
+    let firstOpenDue: string | null = null;
+    let maxSequence = 0;
+    for (const inst of sorted) {
+      const amount = Number(inst.amount);
+      const paid = round(Math.min(Number(inst.paidAmount), amount), 4);
+      const open = round(amount - paid, 4);
+      if (open > 0 && !firstOpenDue) firstOpenDue = inst.dueDate;
+      remaining = round(remaining + open, 4);
+      if (paid > 0) {
+        if (open > 0) kept.push({ id: inst.id, amount: paid });
+        if (lastKeptDue === null || inst.dueDate > (lastKeptDue as string)) lastKeptDue = inst.dueDate;
+        maxSequence = Math.max(maxSequence, inst.sequence);
+      } else {
+        removedIds.push(inst.id);
+      }
+    }
+    if (remaining <= 0) throw new ConflictException('Nothing left to reschedule');
+
+    const hasAmount = options.installmentAmount !== undefined && options.installmentAmount !== null;
+    const hasCount = options.numberOfInstallments !== undefined && options.numberOfInstallments !== null;
+    if (hasAmount === hasCount) {
+      throw new BadRequestException('Give either installmentAmount or numberOfInstallments');
+    }
+    const firstDueDate = options.firstDueDate || firstOpenDue!;
+    if (lastKeptDue !== null && firstDueDate < (lastKeptDue as string)) {
+      throw new BadRequestException(
+        `The first new due date cannot be before ${lastKeptDue} (last installment with payments)`,
+      );
+    }
+
+    const dueAt = (i: number) =>
+      options.frequency === InstallmentFrequency.WEEKLY
+        ? addDays(firstDueDate, 7 * i)
+        : addMonths(firstDueDate, i);
+    const created: Pick<Installment, 'sequence' | 'dueDate' | 'amount'>[] = [];
+    if (hasAmount) {
+      const each = round(Number(options.installmentAmount), 2);
+      const count = Math.ceil(round(remaining / each, 6));
+      if (count > 360) throw new BadRequestException('The installment amount is too small');
+      for (let i = 0; i < count; i++) {
+        const amount = i === count - 1 ? round(remaining - each * (count - 1), 4) : each;
+        created.push({ sequence: maxSequence + i + 1, dueDate: dueAt(i), amount });
+      }
+    } else {
+      const schedule = InstallmentScheduleService.buildSchedule({
+        startDate: firstDueDate,
+        firstDueDate,
+        frequency: options.frequency,
+        numberOfInstallments: Number(options.numberOfInstallments),
+        downPayment: 0,
+        installmentsTotal: remaining,
+      });
+      schedule.forEach((s) => created.push({ ...s, sequence: maxSequence + s.sequence }));
+    }
+    return { kept, removedIds, created, remaining };
   }
 
   static statusOf(amount: number, paid: number, dueDate: string, asOf: string): InstallmentStatus {

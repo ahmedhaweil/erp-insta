@@ -28,6 +28,7 @@ import { Branch } from '@modules/tenants/entities/branch.entity';
 import { Tenant } from '@modules/tenants/entities/tenant.entity';
 import { Payment } from '@modules/payments/entities/payment.entity';
 import { PaymentAllocation } from '@modules/payments/entities/payment-allocation.entity';
+import { PartnerWriteOff } from '@modules/payments/entities/partner-write-off.entity';
 import { Customer } from '@modules/sales/entities/customer.entity';
 import { Supplier } from '@modules/purchasing/entities/supplier.entity';
 
@@ -51,6 +52,7 @@ import { Supplier } from '@modules/purchasing/entities/supplier.entity';
       Tenant,
       Payment,
       PaymentAllocation,
+      PartnerWriteOff,
       Customer,
       Supplier,
     ]),

@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Optional,
   NotFoundException,
   BadRequestException,
   ConflictException,
@@ -23,6 +24,8 @@ import {
   UpdateTerminalDto,
 } from '../dto/terminal.dto';
 import { Product } from '@modules/inventory/entities/product.entity';
+import { Customer } from '@modules/sales/entities/customer.entity';
+import { assertCustomerNotBlocked } from '@modules/sales/services/customer-credit.service';
 import { SequenceService } from '@shared/services/sequence.service';
 import { StockService } from '@modules/inventory/services/stock.service';
 import { AutoPostingService, SettingsAccountKey } from '@modules/accounting/services/auto-posting.service';
@@ -56,6 +59,9 @@ export class PosService {
     private readonly sequenceService: SequenceService,
     private readonly stockService: StockService,
     private readonly autoPosting: AutoPostingService,
+    @Optional()
+    @InjectRepository(Customer)
+    private readonly customerRepo?: Repository<Customer>,
   ) {}
 
   createTerminal(tenantId: string, dto: CreateTerminalDto): Promise<PosTerminal> {
@@ -204,6 +210,12 @@ export class PosService {
 
     const session = await this.openSessionFor(tenantId, dto.sessionId, actor);
     const terminal = await this.terminalRepo.findOne({ where: { id: session.terminalId, tenantId } });
+
+    if (dto.customerId && this.customerRepo) {
+      const customer = await this.customerRepo.findOne({ where: { id: dto.customerId, tenantId } });
+      if (!customer) throw new NotFoundException('Customer not found');
+      assertCustomerNotBlocked(customer);
+    }
 
     const priced = await this.priceLines(tenantId, dto, terminal, actor);
     const computed = priced.map((line) => ({ ...computeLine(line), productId: line.productId }));
