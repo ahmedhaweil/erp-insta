@@ -107,6 +107,10 @@ export class SalesInvoice extends TenantBaseEntity {
   @Column({ name: 'sales_return_id', type: 'uuid', nullable: true })
   salesReturnId: string | null;
 
+  /** Opening balance document that created this open item (no lines, no own entry). */
+  @Column({ name: 'opening_balance_id', type: 'uuid', nullable: true })
+  openingBalanceId: string | null;
+
   @ManyToOne(() => Customer)
   @JoinColumn({ name: 'customer_id' })
   customer: Customer;

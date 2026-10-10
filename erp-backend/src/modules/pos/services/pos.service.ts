@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -23,11 +24,14 @@ import {
   UpdateTerminalDto,
 } from '../dto/terminal.dto';
 import { Product } from '@modules/inventory/entities/product.entity';
+import { Customer } from '@modules/sales/entities/customer.entity';
+import { assertCustomerNotBlocked } from '@modules/sales/services/customer-credit.service';
 import { SequenceService } from '@shared/services/sequence.service';
 import { StockService } from '@modules/inventory/services/stock.service';
 import { AutoPostingService, SettingsAccountKey } from '@modules/accounting/services/auto-posting.service';
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { computeLine, computeTotals, round, today } from '@shared/utils/document-totals.util';
+import { PromotionsService, currentTime } from '@modules/promotions/services/promotions.service';
 
 /** What the acting user may do beyond the normal cashier permissions. */
 export interface PosActor {
@@ -36,6 +40,14 @@ export interface PosActor {
   canOverrideDiscount?: boolean;
   /** pos/sessions/manage: act on other cashiers' sessions. */
   canManageSessions?: boolean;
+}
+
+/** Options for callers that build the sale server-side (e.g. restaurant tickets). */
+export interface PosOrderOptions {
+  /** Prices and discounts were already authorized by the caller: skip the terminal discount limit. */
+  trustedPrices?: boolean;
+  /** Indexes of `dto.lines` whose product must not be issued from stock (e.g. a combo parent). */
+  skipStockLines?: number[];
 }
 
 @Injectable()
@@ -56,6 +68,10 @@ export class PosService {
     private readonly sequenceService: SequenceService,
     private readonly stockService: StockService,
     private readonly autoPosting: AutoPostingService,
+    @Optional() private readonly promotions?: PromotionsService,
+    @Optional()
+    @InjectRepository(Customer)
+    private readonly customerRepo?: Repository<Customer>,
   ) {}
 
   createTerminal(tenantId: string, dto: CreateTerminalDto): Promise<PosTerminal> {
@@ -193,6 +209,7 @@ export class PosService {
     tenantId: string,
     actor: PosActor,
     dto: CreatePosOrderDto,
+    options: PosOrderOptions = {},
   ): Promise<PosOrder> {
     if (dto.clientReference) {
       const existing = await this.orderRepo.findOne({
@@ -205,8 +222,15 @@ export class PosService {
     const session = await this.openSessionFor(tenantId, dto.sessionId, actor);
     const terminal = await this.terminalRepo.findOne({ where: { id: session.terminalId, tenantId } });
 
-    const priced = await this.priceLines(tenantId, dto, terminal, actor);
-    const computed = priced.map((line) => ({ ...computeLine(line), productId: line.productId }));
+    if (dto.customerId && this.customerRepo) {
+      const customer = await this.customerRepo.findOne({ where: { id: dto.customerId, tenantId } });
+      if (!customer) throw new NotFoundException('Customer not found');
+      assertCustomerNotBlocked(customer);
+    }
+
+    const priced = await this.priceLines(tenantId, dto, terminal, actor, options);
+    const promo = await this.applyPromotions(tenantId, dto, terminal, actor, priced, options);
+    const computed = promo.lines.map((line) => ({ ...computeLine(line), productId: line.productId }));
     const { subtotal, taxAmount, totalAmount } = computeTotals(computed);
     const discount = round(computed.reduce((sum, l) => sum + l.discount, 0), 4);
 
@@ -244,9 +268,9 @@ export class PosService {
 
     let cost = 0;
     const lines: PosOrderLine[] = [];
-    for (const line of computed) {
+    for (const [index, line] of computed.entries()) {
       let unitCost = 0;
-      if (terminal?.warehouseId) {
+      if (terminal?.warehouseId && !options.skipStockLines?.includes(index)) {
         const issued = await this.stockService.issue(tenantId, actor.userId, {
           productId: line.productId,
           warehouseId: terminal.warehouseId,
@@ -274,6 +298,7 @@ export class PosService {
       );
     }
     await this.orderLineRepo.save(lines);
+    await this.promotions?.recordUsages(tenantId, 'pos_order', savedOrder.id, today(), promo.usages);
 
     await this.postOrder(tenantId, actor.userId, savedOrder, round(cost, 4), false);
 
@@ -475,6 +500,7 @@ export class PosService {
     dto: CreatePosOrderDto,
     terminal: PosTerminal | null,
     actor: PosActor,
+    options: PosOrderOptions = {},
   ) {
     const ids = [...new Set(dto.lines.map((l) => l.productId))];
     const products = await this.productRepo.find({ where: { tenantId, id: In(ids), isActive: true } });
@@ -488,7 +514,7 @@ export class PosService {
       const unitPrice = line.unitPrice ?? listPrice;
       const taxRate = line.taxRate ?? Number(product.salesTaxRate ?? 0);
 
-      if (limit !== null && listPrice > 0 && !actor.canOverrideDiscount) {
+      if (limit !== null && listPrice > 0 && !actor.canOverrideDiscount && !options.trustedPrices) {
         const listAmount = listPrice * Number(line.quantity);
         const charged = unitPrice * Number(line.quantity) - Number(line.discount ?? 0);
         const discountPct = ((listAmount - charged) / listAmount) * 100;
@@ -500,6 +526,35 @@ export class PosService {
       }
       return { productId: line.productId, quantity: line.quantity, unitPrice, discount: line.discount, taxRate };
     });
+  }
+
+  /**
+   * Promotions (campaign discounts added to line discounts, bonus units as
+   * zero-price lines issued from stock, invoice discount spread over lines)
+   * and the tenant manual discount limit. POS sales are paid at the till,
+   * so the payment condition is always cash.
+   */
+  private async applyPromotions(
+    tenantId: string,
+    dto: CreatePosOrderDto,
+    terminal: PosTerminal | null,
+    actor: PosActor,
+    priced: Awaited<ReturnType<PosService['priceLines']>>,
+    options: PosOrderOptions = {},
+  ) {
+    if (!this.promotions) return { lines: priced, usages: [] };
+    const date = today();
+    return this.promotions.applyToDocument(
+      tenantId,
+      { channel: 'pos', date, time: currentTime(), branchId: terminal?.branchId ?? null, paymentCondition: 'cash' },
+      priced.map((l) => ({ ...l, unitPrice: Number(l.unitPrice), taxRate: Number(l.taxRate) })),
+      {
+        userId: actor.userId,
+        applyPromotions: dto.applyPromotions !== false,
+        manualInvoiceDiscount: dto.invoiceDiscount,
+        canOverrideDiscount: actor.canOverrideDiscount || options.trustedPrices,
+      },
+    );
   }
 
   private refundSelection(original: PosOrder, requested?: RefundLineDto[]) {

@@ -172,3 +172,78 @@ describe('InstallmentPlansService', () => {
     await expect(service.cancel('t1', 'u1', 'plan-1')).rejects.toThrow(ConflictException);
   });
 });
+
+describe('InstallmentScheduleService.reschedule', () => {
+  const inst = (id: string, sequence: number, dueDate: string, amount: number, paidAmount: number) =>
+    ({ id, sequence, dueDate, amount, paidAmount }) as Installment;
+  const schedule = () => [
+    inst('a', 1, '2026-01-10', 100, 100),
+    inst('b', 2, '2026-02-10', 100, 40),
+    inst('c', 3, '2026-03-10', 100, 0),
+    inst('d', 4, '2026-04-10', 100, 0),
+  ];
+
+  it('includes the unpaid remainder of partially paid installments (Instasoft bug)', () => {
+    const r = InstallmentScheduleService.reschedule(schedule(), {
+      numberOfInstallments: 4,
+      frequency: InstallmentFrequency.MONTHLY,
+    });
+    expect(r.remaining).toBe(260);
+    expect(r.kept).toEqual([{ id: 'b', amount: 40 }]);
+    expect(r.removedIds).toEqual(['c', 'd']);
+    expect(r.created).toEqual([
+      { sequence: 3, dueDate: '2026-02-10', amount: 65 },
+      { sequence: 4, dueDate: '2026-03-10', amount: 65 },
+      { sequence: 5, dueDate: '2026-04-10', amount: 65 },
+      { sequence: 6, dueDate: '2026-05-10', amount: 65 },
+    ]);
+    const total = 100 + 40 + r.created.reduce((s, c) => s + Number(c.amount), 0);
+    expect(total).toBe(400);
+  });
+
+  it('derives the count from a new monthly amount, remainder last', () => {
+    const r = InstallmentScheduleService.reschedule(schedule(), {
+      installmentAmount: 100,
+      firstDueDate: '2026-05-01',
+      frequency: InstallmentFrequency.MONTHLY,
+    });
+    expect(r.created.map((c) => c.amount)).toEqual([100, 100, 60]);
+    expect(r.created[0].dueDate).toBe('2026-05-01');
+  });
+
+  it('validates the options and the first due date', () => {
+    expect(() =>
+      InstallmentScheduleService.reschedule(schedule(), { frequency: InstallmentFrequency.MONTHLY }),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      InstallmentScheduleService.reschedule(schedule(), {
+        numberOfInstallments: 2,
+        firstDueDate: '2026-01-01',
+        frequency: InstallmentFrequency.MONTHLY,
+      }),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      InstallmentScheduleService.reschedule([inst('a', 1, '2026-01-10', 100, 100)], {
+        numberOfInstallments: 2,
+        frequency: InstallmentFrequency.MONTHLY,
+      }),
+    ).toThrow(ConflictException);
+  });
+
+  it('spills a payment over to later installments in due-date order', () => {
+    const rows = InstallmentScheduleService.allocate(
+      [
+        inst('a', 1, '2026-01-10', 100, 0),
+        inst('b', 2, '2026-02-10', 100, 0),
+        inst('c', 3, '2026-03-10', 100, 0),
+      ],
+      250,
+      '2026-01-01',
+    );
+    expect(rows.map((r) => [r.paidAmount, r.status])).toEqual([
+      [100, InstallmentStatus.PAID],
+      [100, InstallmentStatus.PAID],
+      [50, InstallmentStatus.PARTIAL],
+    ]);
+  });
+});

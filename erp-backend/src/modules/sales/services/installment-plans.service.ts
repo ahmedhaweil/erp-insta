@@ -18,7 +18,12 @@ import {
   SalesInvoiceStatus,
   SalesInvoiceType,
 } from '../entities/sales-invoice.entity';
-import { CreateInstallmentPlanDto, InstallmentReportQueryDto } from '../dto/installment-plan.dto';
+import {
+  CreateInstallmentPlanDto,
+  InstallmentGuarantorDto,
+  InstallmentReportQueryDto,
+  RescheduleInstallmentPlanDto,
+} from '../dto/installment-plan.dto';
 import { SalesInvoicesService } from './sales-invoices.service';
 import { InstallmentScheduleService } from './installment-schedule.service';
 import { AutoPostingService } from '@modules/accounting/services/auto-posting.service';
@@ -130,6 +135,7 @@ export class InstallmentPlansService {
         paidAmount: 0,
         status: InstallmentPlanStatus.ACTIVE,
         notes: dto.notes,
+        ...InstallmentPlansService.guarantorFields(dto.guarantor),
         createdBy: userId,
         installments: InstallmentScheduleService.buildSchedule({
           startDate,
@@ -233,6 +239,81 @@ export class InstallmentPlansService {
     return this.findById(tenantId, id);
   }
 
+  /** Sets or replaces the guarantor of a plan. */
+  async setGuarantor(
+    tenantId: string,
+    id: string,
+    dto: InstallmentGuarantorDto,
+  ): Promise<InstallmentPlan> {
+    const plan = await this.findById(tenantId, id);
+    await this.planRepo.update(
+      { id: plan.id, tenantId },
+      InstallmentPlansService.guarantorFields(dto),
+    );
+    return this.findById(tenantId, id);
+  }
+
+  static guarantorFields(dto?: InstallmentGuarantorDto) {
+    return {
+      guarantorName: dto?.name ?? null,
+      guarantorPhone: dto?.phone ?? null,
+      guarantorNationalId: dto?.nationalId ?? null,
+      guarantorCustomerId: dto?.customerId ?? null,
+    };
+  }
+
+  /**
+   * Reschedules the unpaid balance of an active plan: installments keep what
+   * was paid on them (a partially paid one is reduced to its paid part) and
+   * the whole unpaid balance, partial remainders included, is spread over new
+   * installments. The plan total is unchanged (no extra interest).
+   */
+  async reschedule(
+    tenantId: string,
+    id: string,
+    dto: RescheduleInstallmentPlanDto,
+  ): Promise<InstallmentPlan> {
+    let plan = await this.findById(tenantId, id);
+    if (plan.status !== InstallmentPlanStatus.ACTIVE) {
+      throw new ConflictException('Only active plans can be rescheduled');
+    }
+    // Start from an up-to-date allocation of the invoice payments.
+    const invoice = await this.invoicesService.findById(tenantId, plan.invoiceId);
+    await this.schedule.applyToPlan(plan, Number(invoice.paidAmount));
+    plan = await this.findById(tenantId, id);
+
+    const frequency = dto.frequency ?? plan.frequency;
+    const result = InstallmentScheduleService.reschedule(plan.installments, {
+      installmentAmount: dto.installmentAmount,
+      numberOfInstallments: dto.numberOfInstallments,
+      firstDueDate: dto.firstDueDate,
+      frequency,
+    });
+
+    for (const k of result.kept) {
+      await this.installmentRepo.update({ id: k.id }, { amount: k.amount });
+    }
+    if (result.removedIds.length) await this.installmentRepo.delete(result.removedIds);
+    await this.installmentRepo.save(
+      result.created.map((c) => this.installmentRepo.create({ ...c, planId: plan.id, paidAmount: 0 })),
+    );
+    const remainingSequences = plan.installments
+      .filter((i) => !result.removedIds.includes(i.id) && i.sequence > 0).length;
+    await this.planRepo.update(
+      { id: plan.id, tenantId },
+      {
+        frequency,
+        numberOfInstallments: remainingSequences + result.created.length,
+        rescheduleCount: Number(plan.rescheduleCount ?? 0) + 1,
+        ...(dto.notes ? { notes: dto.notes } : {}),
+      },
+    );
+
+    const fresh = await this.findById(tenantId, id);
+    await this.schedule.applyToPlan(fresh, Number(invoice.paidAmount));
+    return this.findById(tenantId, id);
+  }
+
   /** Due / overdue installments of active plans (collection list). */
   async dueReport(tenantId: string, query: InstallmentReportQueryDto) {
     const asOf = query.asOf || today();
@@ -248,6 +329,7 @@ export class InstallmentPlansService {
           const amount = Number(inst.amount);
           const paid = Number(inst.paidAmount);
           const status = InstallmentScheduleService.statusOf(amount, paid, inst.dueDate, asOf);
+          const daysLate = status === InstallmentStatus.OVERDUE ? daysBetween(inst.dueDate, asOf) : 0;
           return {
             planId: plan.id,
             planNumber: plan.planNumber,
@@ -262,12 +344,28 @@ export class InstallmentPlansService {
             paidAmount: paid,
             remaining: round(amount - paid, 4),
             status,
-            daysOverdue: status === InstallmentStatus.OVERDUE ? daysBetween(inst.dueDate, asOf) : 0,
+            daysOverdue: daysLate,
+            daysLate,
+            daysUntilDue: Math.max(daysBetween(asOf, inst.dueDate), 0),
+            bucket:
+              status === InstallmentStatus.OVERDUE
+                ? 'overdue'
+                : inst.dueDate === asOf
+                  ? 'due_today'
+                  : 'upcoming',
+            guarantorName: plan.guarantorName,
+            guarantorPhone: plan.guarantorPhone,
           };
         }),
       )
       .filter((r) => r.status !== InstallmentStatus.PAID)
       .filter((r) => !query.dueTo || r.dueDate <= query.dueTo)
+      .filter(
+        (r) =>
+          query.upcomingDays === undefined ||
+          query.upcomingDays === null ||
+          r.dueDate <= addDays(asOf, Number(query.upcomingDays)),
+      )
       .filter((r) => !query.status || r.status === query.status)
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
     return {

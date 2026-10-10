@@ -7,6 +7,7 @@ import {
   ValidateNested,
   ArrayMinSize,
   IsBoolean,
+  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -101,6 +102,17 @@ export class CreateSalesOrderDto {
   @IsOptional()
   @IsBoolean()
   pricesIncludeTax?: boolean;
+
+  @ApiPropertyOptional({ default: true, description: 'Apply active promotions (campaigns, bonus, invoice discount)' })
+  @IsOptional()
+  @IsBoolean()
+  applyPromotions?: boolean;
+
+  @ApiPropertyOptional({ description: 'Manual invoice discount (amount, spread over the lines); replaces any automatic invoice discount' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  invoiceDiscount?: number;
 
   @ApiProperty({ type: [CreateSalesOrderLineDto] })
   @IsArray()

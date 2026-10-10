@@ -28,6 +28,11 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { ManufacturingModule } from './modules/manufacturing/manufacturing.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { TreasuryModule } from './modules/treasury/treasury.module';
+import { RestaurantModule } from './modules/restaurant/restaurant.module';
+import { PromotionsModule } from './modules/promotions/promotions.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { FuelModule } from './modules/fuel/fuel.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 function buildImports() {
   const imports: any[] = [
@@ -63,8 +68,10 @@ function buildImports() {
     SalesModule,
     PurchasingModule,
     PosModule,
+    RestaurantModule,
     PaymentsModule,
     TreasuryModule,
+    PromotionsModule,
     ComplianceModule,
     NotificationsModule,
     RealtimeModule,
@@ -73,6 +80,9 @@ function buildImports() {
     ManufacturingModule,
     CrmModule,
     HrModule,
+    MaintenanceModule,
+    FuelModule,
+    AnalyticsModule,
   ];
 
   // BullMQ for background jobs – only when Redis is available

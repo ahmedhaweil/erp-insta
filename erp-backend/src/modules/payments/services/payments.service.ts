@@ -58,9 +58,16 @@ const OPEN_PURCHASE = [
 
 type OpenDocument = SalesInvoice | PurchaseInvoice;
 
-/** Amount a payment settles on the partner: cash/cheque amount plus tax withheld. */
-export function settledAmount(payment: Pick<Payment, 'amount' | 'withholdingAmount'>): number {
-  return round(Number(payment.amount) + Number(payment.withholdingAmount || 0), 4);
+/** Amount a payment settles on the partner: cash/cheque amount plus tax withheld and discount. */
+export function settledAmount(
+  payment: Pick<Payment, 'amount' | 'withholdingAmount'> & Partial<Pick<Payment, 'discountAllowed'>>,
+): number {
+  return round(
+    Number(payment.amount) +
+      Number(payment.withholdingAmount || 0) +
+      Number(payment.discountAllowed || 0),
+    4,
+  );
 }
 
 /** True for customer receipts and supplier payments (as opposed to refunds). */
@@ -140,12 +147,18 @@ export class PaymentsService {
     const amount = round(dto.amount, 4);
     const method = dto.method ?? PaymentMethod.CASH;
     const withholdingAmount = round(dto.withholdingAmount ?? 0, 4);
+    const discountAllowed = round(dto.discountAllowed ?? 0, 4);
     let exchangeRate = Number(dto.exchangeRate ?? 1);
     let currencyId = dto.currencyId;
 
     if (withholdingAmount > 0 && !isSettlement({ partnerType: dto.partnerType, direction })) {
       throw new BadRequestException(
         'Withholding tax applies only to customer receipts and supplier payments',
+      );
+    }
+    if (discountAllowed > 0 && !isSettlement({ partnerType: dto.partnerType, direction })) {
+      throw new BadRequestException(
+        'A settlement discount applies only to customer receipts and supplier payments',
       );
     }
 
@@ -196,6 +209,7 @@ export class PaymentsService {
       date: dto.date,
       amount,
       withholdingAmount,
+      discountAllowed,
       allocatedAmount: 0,
       method,
       reference: dto.reference,
@@ -622,7 +636,17 @@ export class PaymentsService {
           : 'withholdingTaxPayableAccountId',
       );
     }
+    if (Number(payment.discountAllowed) > 0) {
+      keys.push(PaymentsService.discountKey(payment.partnerType));
+    }
     return keys;
+  }
+
+  /** Discount allowed to customers / received from suppliers on settlement. */
+  static discountKey(partnerType: PaymentPartnerType): SettingsAccountKey {
+    return partnerType === PaymentPartnerType.CUSTOMER
+      ? 'salesDiscountAccountId'
+      : 'purchaseDiscountAccountId';
   }
 
   /** Settings key of the money-side account, or null when the treasury's own account is used. */
@@ -650,7 +674,8 @@ export class PaymentsService {
   ) {
     const amount = Number(payment.amount);
     const withheld = Number(payment.withholdingAmount || 0);
-    const gross = round(amount + withheld, 4);
+    const discount = Number(payment.discountAllowed || 0);
+    const gross = round(amount + withheld + discount, 4);
     const isCustomer = payment.partnerType === PaymentPartnerType.CUSTOMER;
     const inbound = payment.direction === PaymentDirection.INBOUND;
     const liquidityKey = this.liquidityKey(payment, treasury, endorsement);
@@ -677,6 +702,9 @@ export class PaymentsService {
           if (withheld > 0) {
             lines.push({ accountId: account('withholdingTaxReceivableAccountId'), debit: withheld });
           }
+          if (discount > 0) {
+            lines.push({ accountId: account(PaymentsService.discountKey(payment.partnerType)), debit: discount });
+          }
           lines.push({ accountId: counterpart, credit: gross });
           return lines;
         }
@@ -684,6 +712,9 @@ export class PaymentsService {
         lines.push({ accountId: liquidity, credit: amount, branchId });
         if (withheld > 0) {
           lines.push({ accountId: account('withholdingTaxPayableAccountId'), credit: withheld });
+        }
+        if (discount > 0) {
+          lines.push({ accountId: account(PaymentsService.discountKey(payment.partnerType)), credit: discount });
         }
         return lines;
       },

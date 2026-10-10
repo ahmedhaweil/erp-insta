@@ -88,6 +88,15 @@ export class CreatePaymentDto {
   @Min(0)
   withholdingAmount?: number;
 
+  @ApiPropertyOptional({
+    description:
+      'Settlement discount on top of `amount` (customer receipts: discount allowed; supplier payments: discount received). The partner is settled for amount + withholdingAmount + discountAllowed',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  discountAllowed?: number;
+
   @ApiPropertyOptional({ type: PaymentChequeDto, description: 'Required for method=cheque' })
   @IsOptional()
   @ValidateNested()

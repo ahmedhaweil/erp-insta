@@ -80,6 +80,25 @@ export class InstallmentPlan extends TenantBaseEntity {
   @Column({ nullable: true })
   notes: string;
 
+  /** Guarantor (كفيل / ضامن) of the plan. */
+  @Column({ name: 'guarantor_name', type: 'varchar', nullable: true })
+  guarantorName: string | null;
+
+  @Column({ name: 'guarantor_phone', type: 'varchar', nullable: true })
+  guarantorPhone: string | null;
+
+  @Column({ name: 'guarantor_national_id', type: 'varchar', nullable: true })
+  guarantorNationalId: string | null;
+
+  /** When the guarantor is also a customer. */
+  @Column({ name: 'guarantor_customer_id', type: 'uuid', nullable: true })
+  guarantorCustomerId: string | null;
+
+  /** Number of times the remaining balance was rescheduled. */
+  @Column({ name: 'reschedule_count', type: 'int', default: 0 })
+  rescheduleCount: number;
+
+
   @Column({ name: 'created_by', type: 'uuid' })
   createdBy: string;
 

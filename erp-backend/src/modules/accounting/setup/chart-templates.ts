@@ -84,6 +84,7 @@ const EG_ROWS: ChartTemplateRow[] = [
   ['120204', 'سلف وقروض العاملين', 'Employee advances and loans', 'employeeAdvancesAccountId'],
   ['120205', 'مدينون متنوعون', 'Sundry debtors'],
   ['120206', 'مخصص الديون المشكوك في تحصيلها', 'Allowance for doubtful debts'],
+  ['120207', 'كوبونات وقود تحت التحصيل', 'Fuel coupons receivable', 'fuelCouponAccountId'],
   ['1203', 'أرصدة مدينة أخرى', 'Other debit balances'],
   ['120301', 'ضريبة القيمة المضافة على المشتريات', 'Input VAT', 'inputTaxAccountId'],
   ['120302', 'ضريبة الخصم والإضافة - مدينة', 'Withholding tax receivable', 'withholdingTaxReceivableAccountId'],
@@ -133,6 +134,7 @@ const EG_ROWS: ChartTemplateRow[] = [
   ['3301', 'الأرباح والخسائر المرحلة', 'Retained earnings'],
   ['330101', 'أرباح (خسائر) مرحلة', 'Retained earnings (accumulated losses)', 'retainedEarningsAccountId'],
   ['330102', 'جاري الشركاء / المالك', "Partners' / owner's current account"],
+  ['330103', 'أرصدة افتتاحية', 'Opening balance equity', 'openingBalanceEquityAccountId'],
 
   ['4', 'الإيرادات', 'Revenue'],
   ['41', 'إيرادات النشاط', 'Operating revenue'],
@@ -146,7 +148,8 @@ const EG_ROWS: ChartTemplateRow[] = [
   ['420101', 'فوائد البيع بالتقسيط', 'Instalment sales interest', 'installmentInterestAccountId'],
   ['420102', 'أرباح فروق العملة', 'Foreign exchange gains', 'fxGainAccountId'],
   ['420103', 'أرباح وخسائر بيع الأصول الثابتة', 'Gain / loss on disposal of fixed assets', 'assetDisposalAccountId'],
-  ['420104', 'إيرادات متنوعة', 'Miscellaneous income'],
+  ['420104', 'إيرادات متنوعة', 'Miscellaneous income', 'writeOffIncomeAccountId'],
+  ['420105', 'خصم مكتسب', 'Purchase discounts received', 'purchaseDiscountAccountId'],
 
   ['5', 'المصروفات', 'Expenses'],
   ['51', 'تكلفة المبيعات', 'Cost of sales'],
@@ -181,9 +184,11 @@ const EG_ROWS: ChartTemplateRow[] = [
   ['540102', 'خسائر فروق العملة', 'Foreign exchange losses', 'fxLossAccountId'],
   ['540103', 'فوائد القروض', 'Loan interest'],
   ['5402', 'مصروفات أخرى', 'Other expenses'],
-  ['540201', 'ديون معدومة', 'Bad debts'],
+  ['540201', 'ديون معدومة', 'Bad debts', 'badDebtExpenseAccountId'],
   ['540202', 'مصروفات متنوعة', 'Miscellaneous expenses'],
   ['540203', 'ضريبة الدخل', 'Income tax expense'],
+  ['540204', 'عجز وزيادة النقدية', 'Cash over and short', 'cashOverShortAccountId'],
+  ['540205', 'تبرعات وهدايا عينية', 'Donations and charity', 'donationsExpenseAccountId'],
 ];
 
 const SA_ROWS: ChartTemplateRow[] = [
@@ -212,6 +217,7 @@ const SA_ROWS: ChartTemplateRow[] = [
   ['120203', 'شيكات تحت التحصيل', 'Cheques under collection', 'chequesUnderCollectionAccountId'],
   ['120204', 'سلف الموظفين', 'Employee advances', 'employeeAdvancesAccountId'],
   ['120205', 'مخصص الخسائر الائتمانية المتوقعة', 'Allowance for expected credit losses'],
+  ['120206', 'كوبونات وقود تحت التحصيل', 'Fuel coupons receivable', 'fuelCouponAccountId'],
   ['1203', 'المخزون', 'Inventories'],
   ['120301', 'مخزون البضاعة', 'Merchandise inventory', 'inventoryAccountId'],
   ['120302', 'مخزون المواد الخام', 'Raw materials'],
@@ -260,6 +266,7 @@ const SA_ROWS: ChartTemplateRow[] = [
   ['3301', 'الأرباح المبقاة', 'Retained earnings'],
   ['330101', 'الأرباح المبقاة (الخسائر المتراكمة)', 'Retained earnings (accumulated losses)', 'retainedEarningsAccountId'],
   ['330102', 'جاري الشركاء', "Partners' current accounts"],
+  ['330103', 'أرصدة افتتاحية', 'Opening balance equity', 'openingBalanceEquityAccountId'],
 
   ['4', 'الإيرادات', 'Revenue'],
   ['41', 'إيرادات النشاط الرئيسي', 'Operating revenue'],
@@ -273,7 +280,8 @@ const SA_ROWS: ChartTemplateRow[] = [
   ['420101', 'إيرادات البيع بالتقسيط', 'Instalment sales income', 'installmentInterestAccountId'],
   ['420102', 'أرباح فروق العملة', 'Foreign exchange gains', 'fxGainAccountId'],
   ['420103', 'أرباح وخسائر استبعاد الأصول', 'Gain / loss on disposal of assets', 'assetDisposalAccountId'],
-  ['420104', 'إيرادات متنوعة', 'Miscellaneous income'],
+  ['420104', 'إيرادات متنوعة', 'Miscellaneous income', 'writeOffIncomeAccountId'],
+  ['420105', 'الخصم المكتسب', 'Purchase discounts received', 'purchaseDiscountAccountId'],
 
   ['5', 'تكلفة الإيرادات', 'Cost of revenue'],
   ['51', 'تكلفة المبيعات', 'Cost of sales'],
@@ -311,8 +319,10 @@ const SA_ROWS: ChartTemplateRow[] = [
   ['630102', 'خسائر فروق العملة', 'Foreign exchange losses', 'fxLossAccountId'],
   ['630103', 'تكاليف التمويل', 'Finance charges'],
   ['6302', 'مصروفات أخرى', 'Other expenses'],
-  ['630201', 'الديون المعدومة', 'Bad debts'],
+  ['630201', 'الديون المعدومة', 'Bad debts', 'badDebtExpenseAccountId'],
   ['630202', 'مصروفات متنوعة', 'Miscellaneous expenses'],
+  ['630203', 'عجز وزيادة النقدية', 'Cash over and short', 'cashOverShortAccountId'],
+  ['630204', 'التبرعات والهدايا العينية', 'Donations and charity', 'donationsExpenseAccountId'],
   ['64', 'الزكاة وضريبة الدخل', 'Zakat and income tax'],
   ['6401', 'الزكاة وضريبة الدخل', 'Zakat and income tax'],
   ['640101', 'مصروف الزكاة', 'Zakat expense'],

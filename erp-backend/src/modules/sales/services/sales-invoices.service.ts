@@ -21,6 +21,8 @@ import { AutoPostingService } from '@modules/accounting/services/auto-posting.se
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { SalesPricingService } from './sales-pricing.service';
 import { InstallmentScheduleService } from './installment-schedule.service';
+import { PromotionsService, PendingUsage, timeForDate } from '@modules/promotions/services/promotions.service';
+import { CustomerCreditService, assertCustomerNotBlocked } from './customer-credit.service';
 import {
   addDays,
   computeLine,
@@ -71,6 +73,8 @@ export class SalesInvoicesService {
     private readonly autoPosting: AutoPostingService,
     @Optional() private readonly pricing?: SalesPricingService,
     @Optional() private readonly installments?: InstallmentScheduleService,
+    @Optional() private readonly promotions?: PromotionsService,
+    @Optional() private readonly credit?: CustomerCreditService,
   ) {}
 
   /**
@@ -86,6 +90,7 @@ export class SalesInvoicesService {
   ): Promise<SalesInvoice> {
     const customer = await this.getCustomer(tenantId, dto.customerId);
     const isCreditNote = extra.moveType === SalesInvoiceType.CREDIT_NOTE;
+    if (!isCreditNote) assertCustomerNotBlocked(customer);
     const checkPrices = !isCreditNote && !options.skipPriceChecks;
 
     let inputLines: InvoiceLineInput[] = dto.lines;
@@ -104,6 +109,41 @@ export class SalesInvoicesService {
     }
 
     const taxIncluded = !!dto.pricesIncludeTax;
+
+    // Promotions apply to new invoices only: not to credit notes nor to
+    // invoices of an order (the order already carried them). Cash when the
+    // invoice is due on its date (no payment terms), credit otherwise.
+    let promoUsages: PendingUsage[] = [];
+    let minPriceLines: { productId: string; quantity: number; lineTotal: number }[] | null = null;
+    if (checkPrices && !dto.orderId && this.promotions) {
+      const dueDate = dto.dueDate || addDays(dto.date, customer.paymentTermDays || 0);
+      const applied = await this.promotions.applyToDocument(
+        tenantId,
+        {
+          channel: 'sales',
+          date: dto.date,
+          time: timeForDate(dto.date),
+          branchId: dto.branchId ?? null,
+          paymentCondition: dueDate <= dto.date ? 'cash' : 'credit',
+        },
+        inputLines as (InvoiceLineInput & { unitPrice: number })[],
+        { userId, applyPromotions: dto.applyPromotions !== false, manualInvoiceDiscount: dto.invoiceDiscount },
+      );
+      inputLines = applied.lines.map(
+        ({ manualDiscount: _m, promotionDiscount: _p, isBonus: _b, ...l }) => l,
+      );
+      promoUsages = applied.usages;
+      // The minimum selling price is checked against manual discounts only:
+      // promotion discounts and bonus units are approved by the rule itself.
+      minPriceLines = applied.lines
+        .filter((l) => !l.isBonus)
+        .map((l) => ({
+          productId: l.productId,
+          quantity: Number(l.quantity),
+          lineTotal: computeLine({ ...l, discount: l.manualDiscount }, { taxIncluded }).lineTotal,
+        }));
+    }
+
     const lines = inputLines.map((l) => ({
       ...computeLine(l as InvoiceLineInput & { unitPrice: number }, { taxIncluded }),
       productId: l.productId,
@@ -121,7 +161,7 @@ export class SalesInvoicesService {
       await this.pricing.enforceMinPrice(
         tenantId,
         userId,
-        lines.filter((l) => !l.orderLineId),
+        minPriceLines ?? lines.filter((l) => !l.orderLineId),
         Number(dto.exchangeRate ?? 1),
       );
     }
@@ -148,7 +188,9 @@ export class SalesInvoicesService {
       lines: lines.map(({ taxAmount: _t, ...l }) => this.lineRepo.create(l)),
     });
 
-    return this.invoiceRepo.save(invoice);
+    const saved = await this.invoiceRepo.save(invoice);
+    await this.promotions?.recordUsages(tenantId, 'sales_invoice', saved.id, dto.date, promoUsages);
+    return saved;
   }
 
   async findAll(tenantId: string): Promise<SalesInvoice[]> {
@@ -173,7 +215,11 @@ export class SalesInvoicesService {
    * customer credit limit, posts the journal entry and updates the customer
    * receivable balance.
    */
-  async post(tenantId: string, userId: string, id: string): Promise<SalesInvoice> {
+  async post(
+    tenantId: string,
+    userId: string,
+    id: string,
+  ): Promise<SalesInvoice & { warnings?: string[] }> {
     const invoice = await this.findById(tenantId, id);
     if (invoice.status !== SalesInvoiceStatus.DRAFT) {
       throw new ConflictException('Only draft invoices can be posted');
@@ -183,13 +229,14 @@ export class SalesInvoicesService {
     const total = Number(invoice.totalAmount);
     const customer = await this.getCustomer(tenantId, invoice.customerId);
 
-    if (!isCreditNote && Number(customer.creditLimit) > 0) {
-      const newBalance = Number(customer.balance) + total;
-      if (newBalance > Number(customer.creditLimit)) {
-        throw new BadRequestException(
-          `Credit limit exceeded. Limit: ${customer.creditLimit}, Current balance: ${customer.balance}, Invoice: ${total.toFixed(2)}`,
-        );
-      }
+    // Instasoft rule: balance + invoice − already paid against the credit
+    // limit (blocking unless overridden) and the soft threshold (warning).
+    let warnings: string[] = [];
+    if (!isCreditNote) {
+      const exposure = round(total - Number(invoice.paidAmount || 0), 4);
+      warnings = this.credit
+        ? await this.credit.check(tenantId, userId, customer, exposure, 'Invoice')
+        : CustomerCreditService.checkWithoutOverride(customer, exposure, 'Invoice');
     }
 
     const subtotal = Number(invoice.subtotal);
@@ -235,7 +282,7 @@ export class SalesInvoicesService {
       }
     }
 
-    return saved;
+    return warnings.length ? Object.assign(saved, { warnings }) : saved;
   }
 
   /**
@@ -316,6 +363,9 @@ export class SalesInvoicesService {
     if (invoice.status === SalesInvoiceStatus.CANCELLED) {
       throw new ConflictException('Invoice is already cancelled');
     }
+    if (invoice.openingBalanceId) {
+      throw new ConflictException('Opening balance items are cancelled through their opening balance document');
+    }
     if (Number(invoice.paidAmount) > 0) {
       throw new ConflictException(
         'Invoices with payments or credit notes cannot be cancelled; issue a credit note instead',
@@ -333,6 +383,7 @@ export class SalesInvoicesService {
     }
 
     invoice.status = SalesInvoiceStatus.CANCELLED;
+    await this.promotions?.voidUsages(tenantId, 'sales_invoice', invoice.id);
     return this.invoiceRepo.save(invoice);
   }
 

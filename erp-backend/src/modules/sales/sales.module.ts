@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Customer } from './entities/customer.entity';
 import { CustomerCategory } from './entities/customer-category.entity';
+import { CustomerAddress } from './entities/customer-address.entity';
 import { SalesOrder } from './entities/sales-order.entity';
 import { SalesOrderLine } from './entities/sales-order-line.entity';
 import { SalesInvoice } from './entities/sales-invoice.entity';
@@ -25,6 +26,7 @@ import { CommissionsService } from './services/commissions.service';
 import { SalesReturnsService } from './services/sales-returns.service';
 import { InstallmentScheduleService } from './services/installment-schedule.service';
 import { InstallmentPlansService } from './services/installment-plans.service';
+import { CustomerCreditService } from './services/customer-credit.service';
 import { CustomersController } from './controllers/customers.controller';
 import { SalesOrdersController } from './controllers/sales-orders.controller';
 import { SalesInvoicesController } from './controllers/sales-invoices.controller';
@@ -43,12 +45,14 @@ import { InstallmentPlansController } from './controllers/installment-plans.cont
 import { AccountingModule } from '@modules/accounting/accounting.module';
 import { InventoryModule } from '@modules/inventory/inventory.module';
 import { AuthModule } from '@modules/auth/auth.module';
+import { PromotionsModule } from '@modules/promotions/promotions.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
       Customer,
       CustomerCategory,
+      CustomerAddress,
       SalesOrder,
       SalesOrderLine,
       SalesInvoice,
@@ -69,6 +73,7 @@ import { AuthModule } from '@modules/auth/auth.module';
     AccountingModule,
     InventoryModule,
     AuthModule,
+    PromotionsModule,
   ],
   controllers: [
     CustomersController,
@@ -93,6 +98,7 @@ import { AuthModule } from '@modules/auth/auth.module';
     SalesReturnsService,
     InstallmentScheduleService,
     InstallmentPlansService,
+    CustomerCreditService,
   ],
   exports: [
     CustomersService,
@@ -102,6 +108,7 @@ import { AuthModule } from '@modules/auth/auth.module';
     SalesReturnsService,
     InstallmentPlansService,
     CommissionsService,
+    CustomerCreditService,
   ],
 })
 export class SalesModule {}
