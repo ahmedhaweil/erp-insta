@@ -1,7 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { InstallmentPlansService } from '../services/installment-plans.service';
-import { CreateInstallmentPlanDto, InstallmentReportQueryDto } from '../dto/installment-plan.dto';
+import {
+  CreateInstallmentPlanDto,
+  InstallmentGuarantorDto,
+  InstallmentReportQueryDto,
+  RescheduleInstallmentPlanDto,
+} from '../dto/installment-plan.dto';
 import { InstallmentPlanStatus } from '../entities/installment-plan.entity';
 import { CurrentTenant } from '@common/decorators/current-tenant.decorator';
 import { CurrentUser } from '@common/decorators/current-user.decorator';
@@ -53,6 +58,28 @@ export class InstallmentPlansController {
   }
 
   @RequirePermissions({ module: 'sales', screen: 'installments', action: 'update' })
+  @Put('installment-plans/:id/guarantor')
+  @ApiOperation({ summary: 'Set the guarantor (name, phone, national id, optional customer)' })
+  setGuarantor(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: InstallmentGuarantorDto,
+  ) {
+    return this.plans.setGuarantor(tenantId, id, dto);
+  }
+
+  @RequirePermissions({ module: 'sales', screen: 'installments', action: 'update' })
+  @Post('installment-plans/:id/reschedule')
+  @ApiOperation({ summary: 'Reschedule the unpaid balance (new amount or number of installments)' })
+  reschedule(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: RescheduleInstallmentPlanDto,
+  ) {
+    return this.plans.reschedule(tenantId, id, dto);
+  }
+
+  @RequirePermissions({ module: 'sales', screen: 'installments', action: 'update' })
   @Post('installment-plans/:id/cancel')
   cancel(@CurrentTenant() tenantId: string, @CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.plans.cancel(tenantId, user.sub, id);
@@ -67,7 +94,9 @@ export class InstallmentPlansController {
 
   @RequirePermissions({ module: 'sales', screen: 'installments', action: 'read' })
   @Get('installments/due')
-  @ApiOperation({ summary: 'Due and overdue installments (collection report)' })
+  @ApiOperation({
+    summary: 'Due and overdue installments with days late; `upcomingDays=7` adds those due in the next 7 days only',
+  })
   due(@CurrentTenant() tenantId: string, @Query() query: InstallmentReportQueryDto) {
     return this.plans.dueReport(tenantId, query);
   }

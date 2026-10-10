@@ -137,6 +137,26 @@ export class AccountingSettings extends TenantBaseEntity {
   @Column({ name: 'purchase_return_account_id', type: 'uuid', nullable: true })
   purchaseReturnAccountId: string;
 
+  /** Discounts received from suppliers on settlement (other income / contra-purchases). */
+  @Column({ name: 'purchase_discount_account_id', type: 'uuid', nullable: true })
+  purchaseDiscountAccountId: string;
+
+  /** Customer balances written off as uncollectible. */
+  @Column({ name: 'bad_debt_expense_account_id', type: 'uuid', nullable: true })
+  badDebtExpenseAccountId: string;
+
+  /** Supplier residual balances written off (income). */
+  @Column({ name: 'write_off_income_account_id', type: 'uuid', nullable: true })
+  writeOffIncomeAccountId: string;
+
+  /** Goods given away as donations / charity. */
+  @Column({ name: 'donations_expense_account_id', type: 'uuid', nullable: true })
+  donationsExpenseAccountId: string;
+
+  /** Counterpart of customer/supplier opening balances; falls back to retained earnings. */
+  @Column({ name: 'opening_balance_equity_account_id', type: 'uuid', nullable: true })
+  openingBalanceEquityAccountId: string;
+
   /** Fuel coupons / vouchers accepted at the pump, awaiting settlement by the issuer. */
   @Column({ name: 'fuel_coupon_account_id', type: 'uuid', nullable: true })
   fuelCouponAccountId: string;

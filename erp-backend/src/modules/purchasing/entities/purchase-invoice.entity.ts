@@ -98,6 +98,10 @@ export class PurchaseInvoice extends TenantBaseEntity {
   @Column({ name: 'purchase_return_id', type: 'uuid', nullable: true })
   purchaseReturnId: string | null;
 
+  /** Opening balance document that created this open item (no lines, no own entry). */
+  @Column({ name: 'opening_balance_id', type: 'uuid', nullable: true })
+  openingBalanceId: string | null;
+
   @ManyToOne(() => Supplier)
   @JoinColumn({ name: 'supplier_id' })
   supplier: Supplier;

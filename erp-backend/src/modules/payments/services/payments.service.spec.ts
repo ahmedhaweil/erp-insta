@@ -328,6 +328,84 @@ describe('PaymentsService', () => {
     });
   });
 
+  describe('settlement discount', () => {
+    it('settles invoices for amount + discount allowed and debits the discount account', async () => {
+      const payment = await service.create('t1', 'u1', {
+        partnerType: PaymentPartnerType.CUSTOMER,
+        partnerId: 'c1',
+        amount: 95,
+        discountAllowed: 5,
+        date: '2026-03-01',
+        method: PaymentMethod.BANK,
+        autoAllocate: true,
+      });
+
+      expect(payment.allocatedAmount).toBe(100);
+      expect(salesInvoices.applyPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'inv-old' }),
+        100,
+      );
+      expect(salesInvoices.adjustCustomerBalance).toHaveBeenCalledWith('t1', 'c1', -100);
+      expect(autoPosting.preflight.mock.calls[0][2]).toContain('salesDiscountAccountId');
+      expect(postedLines()).toEqual([
+        { accountId: 'bankAccountId', debit: 95 },
+        { accountId: 'salesDiscountAccountId', debit: 5 },
+        { accountId: 'receivableAccountId', credit: 100 },
+      ]);
+    });
+
+    it('credits discount received on supplier payments', async () => {
+      await service.create('t1', 'u1', {
+        partnerType: PaymentPartnerType.SUPPLIER,
+        partnerId: 's1',
+        amount: 980,
+        discountAllowed: 20,
+        date: '2026-03-01',
+        autoAllocate: true,
+      });
+
+      expect(purchaseInvoices.applyPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'bill-1' }),
+        1000,
+      );
+      expect(postedLines()).toEqual([
+        { accountId: 'payableAccountId', debit: 1000 },
+        { accountId: 'cashAccountId', credit: 980 },
+        { accountId: 'purchaseDiscountAccountId', credit: 20 },
+      ]);
+    });
+
+    it('restores the gross settled amount on cancel', async () => {
+      await service.create('t1', 'u1', {
+        partnerType: PaymentPartnerType.CUSTOMER,
+        partnerId: 'c1',
+        amount: 95,
+        discountAllowed: 5,
+        date: '2026-03-01',
+        allocations: [{ invoiceId: 'inv-old', amount: 100 }],
+      });
+      await service.cancel('t1', 'u1', 'pay-1');
+      expect(salesInvoices.adjustCustomerBalance).toHaveBeenLastCalledWith('t1', 'c1', 100);
+      expect(salesInvoices.applyPayment).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: 'inv-old' }),
+        -100,
+      );
+    });
+
+    it('refuses a discount on refunds', async () => {
+      await expect(
+        service.create('t1', 'u1', {
+          partnerType: PaymentPartnerType.SUPPLIER,
+          partnerId: 's1',
+          direction: PaymentDirection.INBOUND,
+          amount: 50,
+          discountAllowed: 1,
+          date: '2026-03-01',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('exchange differences', () => {
     it('computes gains and losses by direction', () => {
       expect(PaymentsService.exchangeDifference(true, 100, 31, 30)).toBe(100);

@@ -1,5 +1,16 @@
-import { IsEnum, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { InstallmentFrequency, InstallmentStatus } from '../entities/installment-plan.entity';
 
 export class CreateInstallmentPlanDto {
@@ -45,6 +56,55 @@ export class CreateInstallmentPlanDto {
   interestRate?: number;
 
   @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
+
+  @ApiPropertyOptional({ type: () => InstallmentGuarantorDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => InstallmentGuarantorDto)
+  guarantor?: InstallmentGuarantorDto;
+}
+
+export class InstallmentGuarantorDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() name?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() phone?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() nationalId?: string;
+  @ApiPropertyOptional({ description: 'Guarantor who is also a customer' })
+  @IsOptional()
+  @IsUUID()
+  customerId?: string;
+}
+
+/**
+ * Reschedules the unpaid balance of a plan: give either a new installment
+ * amount (the count follows) or a new number of installments.
+ */
+export class RescheduleInstallmentPlanDto {
+  @ApiPropertyOptional({ description: 'New installment amount (the last one takes the remainder)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.01)
+  installmentAmount?: number;
+
+  @ApiPropertyOptional({ description: 'New number of installments for the remaining balance' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(360)
+  numberOfInstallments?: number;
+
+  @ApiPropertyOptional({
+    description: 'Due date of the first new installment (default: first unpaid due date)',
+  })
+  @IsOptional()
+  @IsString()
+  firstDueDate?: string;
+
+  @ApiPropertyOptional({ enum: InstallmentFrequency })
+  @IsOptional()
+  @IsEnum(InstallmentFrequency)
+  frequency?: InstallmentFrequency;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() notes?: string;
 }
 
 export class InstallmentReportQueryDto {
@@ -64,4 +124,14 @@ export class InstallmentReportQueryDto {
   status?: InstallmentStatus;
 
   @ApiPropertyOptional() @IsOptional() @IsUUID() customerId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Collection list: overdue installments plus those due within N days of asOf (e.g. 7)',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  upcomingDays?: number;
 }

@@ -11,6 +11,8 @@ import { StockLotMovement } from './entities/stock-lot-movement.entity';
 import { ProductUnit } from './entities/product-unit.entity';
 import { StockTransfer, StockTransferLine } from './entities/stock-transfer.entity';
 import { StockCount, StockCountLine } from './entities/stock-count.entity';
+import { StockIssue, StockIssueLine } from './entities/stock-issue.entity';
+import { Account } from '@modules/accounting/entities/account.entity';
 import { Tenant } from '@modules/tenants/entities/tenant.entity';
 import { ProductsService } from './services/products.service';
 import { StockService } from './services/stock.service';
@@ -19,6 +21,8 @@ import { InventorySettingsService } from './services/inventory-settings.service'
 import { StockTransfersService } from './services/stock-transfers.service';
 import { StockCountsService } from './services/stock-counts.service';
 import { InventoryReportsService } from './services/inventory-reports.service';
+import { StockIssuesService } from './services/stock-issues.service';
+import { StockIssuesController } from './controllers/stock-issues.controller';
 import { ProductsController } from './controllers/products.controller';
 import { StockController } from './controllers/stock.controller';
 import { MasterDataController } from './controllers/master-data.controller';
@@ -44,6 +48,9 @@ import { AccountingModule } from '@modules/accounting/accounting.module';
       StockTransferLine,
       StockCount,
       StockCountLine,
+      StockIssue,
+      StockIssueLine,
+      Account,
       Tenant,
     ]),
     AccountingModule,
@@ -55,6 +62,7 @@ import { AccountingModule } from '@modules/accounting/accounting.module';
     StockTransfersController,
     StockCountsController,
     InventoryReportsController,
+    StockIssuesController,
   ],
   providers: [
     ProductsService,
@@ -65,6 +73,7 @@ import { AccountingModule } from '@modules/accounting/accounting.module';
     StockTransfersService,
     StockCountsService,
     InventoryReportsService,
+    StockIssuesService,
   ],
   exports: [ProductsService, StockService, LotsService, InventorySettingsService],
 })

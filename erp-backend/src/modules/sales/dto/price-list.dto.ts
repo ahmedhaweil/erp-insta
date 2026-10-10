@@ -89,6 +89,11 @@ export class CreateCustomerCategoryDto {
   @ApiPropertyOptional() @IsOptional() @IsString() nameEn?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() priceListId?: string;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isActive?: boolean;
+  @ApiPropertyOptional({ description: 'Soft balance threshold of the category customers (warning only)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  balanceWarningThreshold?: number;
 }
 
 export class UpdateCustomerCategoryDto extends PartialType(CreateCustomerCategoryDto) {}

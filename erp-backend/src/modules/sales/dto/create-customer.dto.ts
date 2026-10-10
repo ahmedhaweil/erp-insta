@@ -53,6 +53,13 @@ export class CreateCustomerDto {
   @IsNumber()
   creditLimit?: number;
 
+  @ApiPropertyOptional({
+    description: 'Soft balance threshold: exceeding it only returns a warning (overrides the category)',
+  })
+  @IsOptional()
+  @IsNumber()
+  balanceWarningThreshold?: number;
+
   @ApiPropertyOptional({ description: 'Payment terms in days' })
   @IsOptional()
   @IsNumber()

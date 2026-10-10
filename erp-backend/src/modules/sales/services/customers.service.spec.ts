@@ -95,3 +95,57 @@ describe('CustomersService', () => {
     });
   });
 });
+
+describe('CustomersService (block and addresses)', () => {
+  const customer = { id: 'c1', tenantId: 't1', isBlocked: false, blockReason: null };
+  let customerRepo: any;
+  let addressRepo: any;
+  let service: CustomersService;
+
+  beforeEach(() => {
+    customerRepo = {
+      findOne: jest.fn().mockResolvedValue({ ...customer }),
+      save: jest.fn(async (c) => c),
+    };
+    addressRepo = {
+      count: jest.fn().mockResolvedValue(0),
+      create: jest.fn((a) => a),
+      save: jest.fn(async (a) => ({ id: 'a1', ...a })),
+      update: jest.fn(),
+      findOne: jest.fn(),
+      delete: jest.fn(),
+    };
+    service = new CustomersService(customerRepo, addressRepo);
+  });
+
+  it('blocks with a reason and unblocks', async () => {
+    const blocked = await service.block('t1', 'c1', 'returned cheques');
+    expect(blocked).toEqual(expect.objectContaining({ isBlocked: true, blockReason: 'returned cheques' }));
+    const unblocked = await service.unblock('t1', 'c1');
+    expect(unblocked).toEqual(expect.objectContaining({ isBlocked: false, blockReason: null }));
+  });
+
+  it('makes the first address the default and leaves later ones non-default', async () => {
+    const first = await service.addAddress('t1', 'c1', { label: 'HQ', address: 'Street 1' });
+    expect(first.isDefault).toBe(true);
+    expect(addressRepo.update).toHaveBeenCalledWith(
+      { tenantId: 't1', customerId: 'c1', isDefault: true },
+      { isDefault: false },
+    );
+
+    addressRepo.count.mockResolvedValue(1);
+    addressRepo.update.mockClear();
+    const second = await service.addAddress('t1', 'c1', { label: 'Store', address: 'Street 2' });
+    expect(second.isDefault).toBe(false);
+    expect(addressRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('promotes another address when the default is removed', async () => {
+    addressRepo.findOne
+      .mockResolvedValueOnce({ id: 'a1', isDefault: true })
+      .mockResolvedValueOnce({ id: 'a2', isDefault: false });
+    await service.removeAddress('t1', 'c1', 'a1');
+    expect(addressRepo.delete).toHaveBeenCalledWith({ id: 'a1', tenantId: 't1' });
+    expect(addressRepo.save).toHaveBeenCalledWith({ id: 'a2', isDefault: true });
+  });
+});
