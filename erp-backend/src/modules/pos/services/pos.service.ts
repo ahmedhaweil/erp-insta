@@ -40,6 +40,14 @@ export interface PosActor {
   canManageSessions?: boolean;
 }
 
+/** Options for callers that build the sale server-side (e.g. restaurant tickets). */
+export interface PosOrderOptions {
+  /** Prices and discounts were already authorized by the caller: skip the terminal discount limit. */
+  trustedPrices?: boolean;
+  /** Indexes of `dto.lines` whose product must not be issued from stock (e.g. a combo parent). */
+  skipStockLines?: number[];
+}
+
 @Injectable()
 export class PosService {
   constructor(
@@ -196,6 +204,7 @@ export class PosService {
     tenantId: string,
     actor: PosActor,
     dto: CreatePosOrderDto,
+    options: PosOrderOptions = {},
   ): Promise<PosOrder> {
     if (dto.clientReference) {
       const existing = await this.orderRepo.findOne({
@@ -208,8 +217,8 @@ export class PosService {
     const session = await this.openSessionFor(tenantId, dto.sessionId, actor);
     const terminal = await this.terminalRepo.findOne({ where: { id: session.terminalId, tenantId } });
 
-    const priced = await this.priceLines(tenantId, dto, terminal, actor);
-    const promo = await this.applyPromotions(tenantId, dto, terminal, actor, priced);
+    const priced = await this.priceLines(tenantId, dto, terminal, actor, options);
+    const promo = await this.applyPromotions(tenantId, dto, terminal, actor, priced, options);
     const computed = promo.lines.map((line) => ({ ...computeLine(line), productId: line.productId }));
     const { subtotal, taxAmount, totalAmount } = computeTotals(computed);
     const discount = round(computed.reduce((sum, l) => sum + l.discount, 0), 4);
@@ -248,9 +257,9 @@ export class PosService {
 
     let cost = 0;
     const lines: PosOrderLine[] = [];
-    for (const line of computed) {
+    for (const [index, line] of computed.entries()) {
       let unitCost = 0;
-      if (terminal?.warehouseId) {
+      if (terminal?.warehouseId && !options.skipStockLines?.includes(index)) {
         const issued = await this.stockService.issue(tenantId, actor.userId, {
           productId: line.productId,
           warehouseId: terminal.warehouseId,
@@ -480,6 +489,7 @@ export class PosService {
     dto: CreatePosOrderDto,
     terminal: PosTerminal | null,
     actor: PosActor,
+    options: PosOrderOptions = {},
   ) {
     const ids = [...new Set(dto.lines.map((l) => l.productId))];
     const products = await this.productRepo.find({ where: { tenantId, id: In(ids), isActive: true } });
@@ -493,7 +503,7 @@ export class PosService {
       const unitPrice = line.unitPrice ?? listPrice;
       const taxRate = line.taxRate ?? Number(product.salesTaxRate ?? 0);
 
-      if (limit !== null && listPrice > 0 && !actor.canOverrideDiscount) {
+      if (limit !== null && listPrice > 0 && !actor.canOverrideDiscount && !options.trustedPrices) {
         const listAmount = listPrice * Number(line.quantity);
         const charged = unitPrice * Number(line.quantity) - Number(line.discount ?? 0);
         const discountPct = ((listAmount - charged) / listAmount) * 100;
@@ -519,6 +529,7 @@ export class PosService {
     terminal: PosTerminal | null,
     actor: PosActor,
     priced: Awaited<ReturnType<PosService['priceLines']>>,
+    options: PosOrderOptions = {},
   ) {
     if (!this.promotions) return { lines: priced, usages: [] };
     const date = today();
@@ -530,7 +541,7 @@ export class PosService {
         userId: actor.userId,
         applyPromotions: dto.applyPromotions !== false,
         manualInvoiceDiscount: dto.invoiceDiscount,
-        canOverrideDiscount: actor.canOverrideDiscount,
+        canOverrideDiscount: actor.canOverrideDiscount || options.trustedPrices,
       },
     );
   }
