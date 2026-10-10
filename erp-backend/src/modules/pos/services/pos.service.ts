@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -28,6 +29,7 @@ import { StockService } from '@modules/inventory/services/stock.service';
 import { AutoPostingService, SettingsAccountKey } from '@modules/accounting/services/auto-posting.service';
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { computeLine, computeTotals, round, today } from '@shared/utils/document-totals.util';
+import { PromotionsService, currentTime } from '@modules/promotions/services/promotions.service';
 
 /** What the acting user may do beyond the normal cashier permissions. */
 export interface PosActor {
@@ -56,6 +58,7 @@ export class PosService {
     private readonly sequenceService: SequenceService,
     private readonly stockService: StockService,
     private readonly autoPosting: AutoPostingService,
+    @Optional() private readonly promotions?: PromotionsService,
   ) {}
 
   createTerminal(tenantId: string, dto: CreateTerminalDto): Promise<PosTerminal> {
@@ -206,7 +209,8 @@ export class PosService {
     const terminal = await this.terminalRepo.findOne({ where: { id: session.terminalId, tenantId } });
 
     const priced = await this.priceLines(tenantId, dto, terminal, actor);
-    const computed = priced.map((line) => ({ ...computeLine(line), productId: line.productId }));
+    const promo = await this.applyPromotions(tenantId, dto, terminal, actor, priced);
+    const computed = promo.lines.map((line) => ({ ...computeLine(line), productId: line.productId }));
     const { subtotal, taxAmount, totalAmount } = computeTotals(computed);
     const discount = round(computed.reduce((sum, l) => sum + l.discount, 0), 4);
 
@@ -274,6 +278,7 @@ export class PosService {
       );
     }
     await this.orderLineRepo.save(lines);
+    await this.promotions?.recordUsages(tenantId, 'pos_order', savedOrder.id, today(), promo.usages);
 
     await this.postOrder(tenantId, actor.userId, savedOrder, round(cost, 4), false);
 
@@ -500,6 +505,34 @@ export class PosService {
       }
       return { productId: line.productId, quantity: line.quantity, unitPrice, discount: line.discount, taxRate };
     });
+  }
+
+  /**
+   * Promotions (campaign discounts added to line discounts, bonus units as
+   * zero-price lines issued from stock, invoice discount spread over lines)
+   * and the tenant manual discount limit. POS sales are paid at the till,
+   * so the payment condition is always cash.
+   */
+  private async applyPromotions(
+    tenantId: string,
+    dto: CreatePosOrderDto,
+    terminal: PosTerminal | null,
+    actor: PosActor,
+    priced: Awaited<ReturnType<PosService['priceLines']>>,
+  ) {
+    if (!this.promotions) return { lines: priced, usages: [] };
+    const date = today();
+    return this.promotions.applyToDocument(
+      tenantId,
+      { channel: 'pos', date, time: currentTime(), branchId: terminal?.branchId ?? null, paymentCondition: 'cash' },
+      priced.map((l) => ({ ...l, unitPrice: Number(l.unitPrice), taxRate: Number(l.taxRate) })),
+      {
+        userId: actor.userId,
+        applyPromotions: dto.applyPromotions !== false,
+        manualInvoiceDiscount: dto.invoiceDiscount,
+        canOverrideDiscount: actor.canOverrideDiscount,
+      },
+    );
   }
 
   private refundSelection(original: PosOrder, requested?: RefundLineDto[]) {
