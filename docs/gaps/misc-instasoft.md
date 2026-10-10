@@ -56,7 +56,7 @@ All create endpoints accept `post: true` to post immediately.
 | Opening balances | Dr receivable (customer debit balances) / Cr payable (supplier credit balances), net to Cr/Dr openingBalanceEquity (falls back to retainedEarnings) |
 | Cancellations | `reverseSource` of the document's entries |
 
-New accounting settings keys: `purchaseDiscountAccountId`, `badDebtExpenseAccountId`, `writeOffIncomeAccountId`, `donationsExpenseAccountId`, `openingBalanceEquityAccountId`. Chart templates map them (EG: 540201, 420104, 420105, 540204, 330103; SA: 630201, 420104, 420105, 630203, 330103).
+New accounting settings keys: `purchaseDiscountAccountId`, `badDebtExpenseAccountId`, `writeOffIncomeAccountId`, `donationsExpenseAccountId`, `openingBalanceEquityAccountId`. Chart templates map them (EG: 540201, 420104, 420105, 540205, 330103; SA: 630201, 420104, 420105, 630204, 330103).
 
 ## Deliberate differences from Instasoft
 

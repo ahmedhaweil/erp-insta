@@ -12,6 +12,7 @@ import { PosService } from './services/pos.service';
 import { PosController } from './controllers/pos.controller';
 import { AccountingModule } from '@modules/accounting/accounting.module';
 import { InventoryModule } from '@modules/inventory/inventory.module';
+import { PromotionsModule } from '@modules/promotions/promotions.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { InventoryModule } from '@modules/inventory/inventory.module';
     AuthModule,
     AccountingModule,
     InventoryModule,
+    PromotionsModule,
   ],
   controllers: [PosController],
   providers: [PosService],

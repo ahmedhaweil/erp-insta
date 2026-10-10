@@ -68,6 +68,6 @@ import { Supplier } from '@modules/purchasing/entities/supplier.entity';
     VatReturnService,
     ReportExportService,
   ],
-  exports: [FinancialReportsService, DashboardService, ReportExportService],
+  exports: [FinancialReportsService, DashboardService, ReportExportService, SalesAnalysisService],
 })
 export class ReportsModule {}

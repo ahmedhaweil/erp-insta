@@ -21,6 +21,7 @@ import { AutoPostingService } from '@modules/accounting/services/auto-posting.se
 import { JournalType } from '@modules/accounting/entities/journal.entity';
 import { SalesPricingService } from './sales-pricing.service';
 import { InstallmentScheduleService } from './installment-schedule.service';
+import { PromotionsService, PendingUsage, timeForDate } from '@modules/promotions/services/promotions.service';
 import { CustomerCreditService, assertCustomerNotBlocked } from './customer-credit.service';
 import {
   addDays,
@@ -72,6 +73,7 @@ export class SalesInvoicesService {
     private readonly autoPosting: AutoPostingService,
     @Optional() private readonly pricing?: SalesPricingService,
     @Optional() private readonly installments?: InstallmentScheduleService,
+    @Optional() private readonly promotions?: PromotionsService,
     @Optional() private readonly credit?: CustomerCreditService,
   ) {}
 
@@ -107,6 +109,41 @@ export class SalesInvoicesService {
     }
 
     const taxIncluded = !!dto.pricesIncludeTax;
+
+    // Promotions apply to new invoices only: not to credit notes nor to
+    // invoices of an order (the order already carried them). Cash when the
+    // invoice is due on its date (no payment terms), credit otherwise.
+    let promoUsages: PendingUsage[] = [];
+    let minPriceLines: { productId: string; quantity: number; lineTotal: number }[] | null = null;
+    if (checkPrices && !dto.orderId && this.promotions) {
+      const dueDate = dto.dueDate || addDays(dto.date, customer.paymentTermDays || 0);
+      const applied = await this.promotions.applyToDocument(
+        tenantId,
+        {
+          channel: 'sales',
+          date: dto.date,
+          time: timeForDate(dto.date),
+          branchId: dto.branchId ?? null,
+          paymentCondition: dueDate <= dto.date ? 'cash' : 'credit',
+        },
+        inputLines as (InvoiceLineInput & { unitPrice: number })[],
+        { userId, applyPromotions: dto.applyPromotions !== false, manualInvoiceDiscount: dto.invoiceDiscount },
+      );
+      inputLines = applied.lines.map(
+        ({ manualDiscount: _m, promotionDiscount: _p, isBonus: _b, ...l }) => l,
+      );
+      promoUsages = applied.usages;
+      // The minimum selling price is checked against manual discounts only:
+      // promotion discounts and bonus units are approved by the rule itself.
+      minPriceLines = applied.lines
+        .filter((l) => !l.isBonus)
+        .map((l) => ({
+          productId: l.productId,
+          quantity: Number(l.quantity),
+          lineTotal: computeLine({ ...l, discount: l.manualDiscount }, { taxIncluded }).lineTotal,
+        }));
+    }
+
     const lines = inputLines.map((l) => ({
       ...computeLine(l as InvoiceLineInput & { unitPrice: number }, { taxIncluded }),
       productId: l.productId,
@@ -124,7 +161,7 @@ export class SalesInvoicesService {
       await this.pricing.enforceMinPrice(
         tenantId,
         userId,
-        lines.filter((l) => !l.orderLineId),
+        minPriceLines ?? lines.filter((l) => !l.orderLineId),
         Number(dto.exchangeRate ?? 1),
       );
     }
@@ -151,7 +188,9 @@ export class SalesInvoicesService {
       lines: lines.map(({ taxAmount: _t, ...l }) => this.lineRepo.create(l)),
     });
 
-    return this.invoiceRepo.save(invoice);
+    const saved = await this.invoiceRepo.save(invoice);
+    await this.promotions?.recordUsages(tenantId, 'sales_invoice', saved.id, dto.date, promoUsages);
+    return saved;
   }
 
   async findAll(tenantId: string): Promise<SalesInvoice[]> {
@@ -344,6 +383,7 @@ export class SalesInvoicesService {
     }
 
     invoice.status = SalesInvoiceStatus.CANCELLED;
+    await this.promotions?.voidUsages(tenantId, 'sales_invoice', invoice.id);
     return this.invoiceRepo.save(invoice);
   }
 

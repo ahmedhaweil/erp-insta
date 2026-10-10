@@ -22,6 +22,7 @@ import { CreateInvoiceFromOrderDto, DeliverOrderDto } from '../dto/sales-actions
 import { OrderConfirmedEvent } from '../events/order-confirmed.event';
 import { SalesInvoicesService } from './sales-invoices.service';
 import { SalesPricingService } from './sales-pricing.service';
+import { PromotionsService, PendingUsage, timeForDate } from '@modules/promotions/services/promotions.service';
 import { CustomerCreditService, assertCustomerNotBlocked } from './customer-credit.service';
 import { SequenceService } from '@shared/services/sequence.service';
 import { StockService } from '@modules/inventory/services/stock.service';
@@ -44,6 +45,7 @@ export class SalesOrdersService {
     private readonly invoicesService: SalesInvoicesService,
     private readonly autoPosting: AutoPostingService,
     @Optional() private readonly pricing?: SalesPricingService,
+    @Optional() private readonly promotions?: PromotionsService,
     @Optional() private readonly credit?: CustomerCreditService,
   ) {}
 
@@ -75,8 +77,38 @@ export class SalesOrdersService {
       throw new BadRequestException('Every line needs a unit price');
     }
 
-    // Amounts are always recomputed server-side from quantities and prices
     const taxIncluded = !!dto.pricesIncludeTax;
+
+    // Promotions: cash when the customer has no payment terms, credit otherwise.
+    let promoUsages: PendingUsage[] = [];
+    let minPriceLines: { productId: string; quantity: number; lineTotal: number }[] | null = null;
+    if (this.promotions) {
+      const applied = await this.promotions.applyToDocument(
+        tenantId,
+        {
+          channel: 'sales',
+          date: dto.date,
+          time: timeForDate(dto.date),
+          branchId: dto.branchId ?? null,
+          paymentCondition: (customer.paymentTermDays || 0) <= 0 ? 'cash' : 'credit',
+        },
+        inputLines.map((l) => ({ ...l, unitPrice: l.unitPrice as number })),
+        { userId, applyPromotions: dto.applyPromotions !== false, manualInvoiceDiscount: dto.invoiceDiscount },
+      );
+      inputLines = applied.lines.map(
+        ({ manualDiscount: _m, promotionDiscount: _p, isBonus: _b, ...l }) => l,
+      );
+      promoUsages = applied.usages;
+      minPriceLines = applied.lines
+        .filter((l) => !l.isBonus)
+        .map((l) => ({
+          productId: l.productId,
+          quantity: Number(l.quantity),
+          lineTotal: computeLine({ ...l, discount: l.manualDiscount }, { taxIncluded }).lineTotal,
+        }));
+    }
+
+    // Amounts are always recomputed server-side from quantities and prices
     const lines = inputLines.map((l) => ({
       ...computeLine({ ...l, unitPrice: l.unitPrice as number }, { taxIncluded }),
       productId: l.productId,
@@ -85,7 +117,12 @@ export class SalesOrdersService {
     const { subtotal, taxAmount, totalAmount } = computeTotals(lines);
 
     if (this.pricing) {
-      await this.pricing.enforceMinPrice(tenantId, userId, lines, Number(dto.exchangeRate ?? 1));
+      await this.pricing.enforceMinPrice(
+        tenantId,
+        userId,
+        minPriceLines ?? lines,
+        Number(dto.exchangeRate ?? 1),
+      );
     }
 
     const order = this.orderRepo.create({
@@ -103,7 +140,9 @@ export class SalesOrdersService {
       lines: lines.map(({ taxAmount: _t, ...l }) => this.lineRepo.create(l)),
     });
 
-    return this.orderRepo.save(order);
+    const saved = await this.orderRepo.save(order);
+    await this.promotions?.recordUsages(tenantId, 'sales_order', saved.id, dto.date, promoUsages);
+    return saved;
   }
 
   async findAll(tenantId: string): Promise<SalesOrder[]> {
@@ -382,6 +421,7 @@ export class SalesOrdersService {
 
     order.status = SalesOrderStatus.CANCELLED;
     order.invoiceStatus = SalesOrderInvoiceStatus.NOTHING;
+    await this.promotions?.voidUsages(tenantId, 'sales_order', order.id);
     return this.orderRepo.save(order);
   }
 }
