@@ -118,6 +118,17 @@ export class CreateSalesInvoiceDto {
   @Max(100)
   withholdingRate?: number;
 
+  @ApiPropertyOptional({ default: true, description: 'Apply active promotions (campaigns, bonus, invoice discount)' })
+  @IsOptional()
+  @IsBoolean()
+  applyPromotions?: boolean;
+
+  @ApiPropertyOptional({ description: 'Manual invoice discount (amount, spread over the lines); replaces any automatic invoice discount' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  invoiceDiscount?: number;
+
   @ApiProperty({ type: [CreateSalesInvoiceLineDto] })
   @IsArray()
   @ArrayMinSize(1)

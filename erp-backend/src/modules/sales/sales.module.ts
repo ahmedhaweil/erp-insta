@@ -43,6 +43,7 @@ import { InstallmentPlansController } from './controllers/installment-plans.cont
 import { AccountingModule } from '@modules/accounting/accounting.module';
 import { InventoryModule } from '@modules/inventory/inventory.module';
 import { AuthModule } from '@modules/auth/auth.module';
+import { PromotionsModule } from '@modules/promotions/promotions.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { AuthModule } from '@modules/auth/auth.module';
     AccountingModule,
     InventoryModule,
     AuthModule,
+    PromotionsModule,
   ],
   controllers: [
     CustomersController,
