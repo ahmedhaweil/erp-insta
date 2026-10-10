@@ -31,6 +31,7 @@ import { TreasuryModule } from './modules/treasury/treasury.module';
 import { PromotionsModule } from './modules/promotions/promotions.module';
 import { MaintenanceModule } from './modules/maintenance/maintenance.module';
 import { FuelModule } from './modules/fuel/fuel.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 function buildImports() {
   const imports: any[] = [
@@ -79,6 +80,7 @@ function buildImports() {
     HrModule,
     MaintenanceModule,
     FuelModule,
+    AnalyticsModule,
   ];
 
   // BullMQ for background jobs – only when Redis is available
