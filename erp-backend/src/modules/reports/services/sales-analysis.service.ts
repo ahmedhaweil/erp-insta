@@ -31,6 +31,8 @@ export interface SalesFact {
   tax: number;
   cost: number;
   costSource: 'stock_moves' | 'product_cost' | 'none';
+  /** Line discount in base currency (signed like `net`). */
+  discount?: number;
 }
 
 export interface AnalysisRow {
@@ -48,7 +50,7 @@ export interface AnalysisRow {
   margin?: number | null;
 }
 
-interface Names {
+export interface Names {
   products: Map<string, { code: string; name: string; categoryId: string | null }>;
   partners: Map<string, { code: string; name: string }>;
   categories: Map<string, string>;
@@ -144,6 +146,8 @@ export class SalesAnalysisService {
       customerId?: string;
       productId?: string;
       categoryId?: string;
+      /** Invoices: warehouse of the delivering sales order; POS: terminal warehouse. */
+      warehouseId?: string;
     },
   ): Promise<SalesFact[]> {
     const facts: SalesFact[] = [];
@@ -161,13 +165,19 @@ export class SalesAnalysisService {
       if (q.customerId) where.push(`i.customer_id = ${p.add(q.customerId)}`);
       if (q.productId) where.push(`l.product_id = ${p.add(q.productId)}`);
       if (q.categoryId) where.push(`pr.category_id = ${p.add(q.categoryId)}`);
+      if (q.warehouseId) {
+        where.push(
+          `EXISTS (SELECT 1 FROM sales_orders wso WHERE wso.id = COALESCE(i.order_id, ri.order_id)
+                     AND wso.warehouse_id = ${p.add(q.warehouseId)})`,
+        );
+      }
       const lines = await this.query(
         `SELECT i.id AS "docId", i.invoice_number AS number, to_char(i.date, 'YYYY-MM-DD') AS date,
                 i.customer_id AS "partnerId", i.branch_id AS "branchId", i.created_by AS "userId",
                 i.move_type AS "moveType", i.exchange_rate AS rate,
                 COALESCE(i.order_id, ri.order_id) AS "orderId",
                 l.product_id AS "productId", l.quantity AS quantity, l.line_total AS "lineTotal",
-                l.tax_rate AS "taxRate", pr.category_id AS "categoryId", pr.type AS "productType",
+                l.discount AS discount, l.tax_rate AS "taxRate", pr.category_id AS "categoryId", pr.type AS "productType",
                 pr.cost_price AS "costPrice"
            FROM sales_invoice_lines l
            JOIN sales_invoices i ON i.id = l.invoice_id
@@ -210,6 +220,7 @@ export class SalesAnalysisService {
           tax: r4((net * Number(l.taxRate)) / 100),
           cost: r4(qty * unitCost),
           costSource,
+          discount: r4(Number(l.discount || 0) * sign * rate),
         });
       }
     }
@@ -223,12 +234,13 @@ export class SalesAnalysisService {
       if (q.customerId) where.push(`o.customer_id = ${p.add(q.customerId)}`);
       if (q.productId) where.push(`l.product_id = ${p.add(q.productId)}`);
       if (q.categoryId) where.push(`pr.category_id = ${p.add(q.categoryId)}`);
+      if (q.warehouseId) where.push(`t.warehouse_id = ${p.add(q.warehouseId)}`);
       const lines = await this.query(
         `SELECT o.id AS "docId", o.order_number AS number, to_char(o.created_at, 'YYYY-MM-DD') AS date,
                 o.customer_id AS "partnerId", t.branch_id AS "branchId", o.created_by AS "userId",
                 o.refunded_order_id AS "refundedOrderId",
                 l.product_id AS "productId", l.quantity AS quantity,
-                (l.quantity * l.unit_price - l.discount) AS "lineTotal",
+                (l.quantity * l.unit_price - l.discount) AS "lineTotal", l.discount AS discount,
                 l.tax_rate AS "taxRate", pr.category_id AS "categoryId", pr.type AS "productType",
                 pr.cost_price AS "costPrice"
            FROM pos_order_lines l
@@ -273,6 +285,8 @@ export class SalesAnalysisService {
           tax: r4((net * Number(l.taxRate)) / 100),
           cost: r4(qty * unitCost),
           costSource,
+          // refund lines store a negative discount already
+          discount: r4(Number(l.discount || 0)),
         });
       }
     }
@@ -302,7 +316,7 @@ export class SalesAnalysisService {
     return out;
   }
 
-  private async names(tenantId: string): Promise<Names> {
+  async names(tenantId: string): Promise<Names> {
     // Sequential: the request runs on a single transactional connection
     const products = await this.query(`SELECT id, code, name_ar, name_en, category_id FROM products WHERE tenant_id = $1`, [tenantId]);
     const customers = await this.query(`SELECT id, code, name_ar, name_en FROM customers WHERE tenant_id = $1`, [tenantId]);
