@@ -137,6 +137,14 @@ export class AccountingSettings extends TenantBaseEntity {
   @Column({ name: 'purchase_return_account_id', type: 'uuid', nullable: true })
   purchaseReturnAccountId: string;
 
+  /** Fuel coupons / vouchers accepted at the pump, awaiting settlement by the issuer. */
+  @Column({ name: 'fuel_coupon_account_id', type: 'uuid', nullable: true })
+  fuelCouponAccountId: string;
+
+  /** Cash shortages and overages found when counting a till or shift. */
+  @Column({ name: 'cash_over_short_account_id', type: 'uuid', nullable: true })
+  cashOverShortAccountId: string;
+
   /** Entries dated on or before this date can no longer be posted (Odoo lock date). */
   @Column({ name: 'lock_date', type: 'date', nullable: true })
   lockDate: string;

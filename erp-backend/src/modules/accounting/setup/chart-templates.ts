@@ -84,6 +84,7 @@ const EG_ROWS: ChartTemplateRow[] = [
   ['120204', 'سلف وقروض العاملين', 'Employee advances and loans', 'employeeAdvancesAccountId'],
   ['120205', 'مدينون متنوعون', 'Sundry debtors'],
   ['120206', 'مخصص الديون المشكوك في تحصيلها', 'Allowance for doubtful debts'],
+  ['120207', 'كوبونات وقود تحت التحصيل', 'Fuel coupons receivable', 'fuelCouponAccountId'],
   ['1203', 'أرصدة مدينة أخرى', 'Other debit balances'],
   ['120301', 'ضريبة القيمة المضافة على المشتريات', 'Input VAT', 'inputTaxAccountId'],
   ['120302', 'ضريبة الخصم والإضافة - مدينة', 'Withholding tax receivable', 'withholdingTaxReceivableAccountId'],
@@ -184,6 +185,7 @@ const EG_ROWS: ChartTemplateRow[] = [
   ['540201', 'ديون معدومة', 'Bad debts'],
   ['540202', 'مصروفات متنوعة', 'Miscellaneous expenses'],
   ['540203', 'ضريبة الدخل', 'Income tax expense'],
+  ['540204', 'عجز وزيادة النقدية', 'Cash over and short', 'cashOverShortAccountId'],
 ];
 
 const SA_ROWS: ChartTemplateRow[] = [
@@ -212,6 +214,7 @@ const SA_ROWS: ChartTemplateRow[] = [
   ['120203', 'شيكات تحت التحصيل', 'Cheques under collection', 'chequesUnderCollectionAccountId'],
   ['120204', 'سلف الموظفين', 'Employee advances', 'employeeAdvancesAccountId'],
   ['120205', 'مخصص الخسائر الائتمانية المتوقعة', 'Allowance for expected credit losses'],
+  ['120206', 'كوبونات وقود تحت التحصيل', 'Fuel coupons receivable', 'fuelCouponAccountId'],
   ['1203', 'المخزون', 'Inventories'],
   ['120301', 'مخزون البضاعة', 'Merchandise inventory', 'inventoryAccountId'],
   ['120302', 'مخزون المواد الخام', 'Raw materials'],
@@ -313,6 +316,7 @@ const SA_ROWS: ChartTemplateRow[] = [
   ['6302', 'مصروفات أخرى', 'Other expenses'],
   ['630201', 'الديون المعدومة', 'Bad debts'],
   ['630202', 'مصروفات متنوعة', 'Miscellaneous expenses'],
+  ['630203', 'عجز وزيادة النقدية', 'Cash over and short', 'cashOverShortAccountId'],
   ['64', 'الزكاة وضريبة الدخل', 'Zakat and income tax'],
   ['6401', 'الزكاة وضريبة الدخل', 'Zakat and income tax'],
   ['640101', 'مصروف الزكاة', 'Zakat expense'],

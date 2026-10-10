@@ -38,5 +38,7 @@ export class UpdateAccountingSettingsDto {
   @ApiPropertyOptional() @IsOptional() @IsUUID() installmentInterestAccountId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() manufacturingOverheadAccountId?: string;
   @ApiPropertyOptional() @IsOptional() @IsUUID() purchaseReturnAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() fuelCouponAccountId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsUUID() cashOverShortAccountId?: string;
   @ApiPropertyOptional() @IsOptional() @IsDateString() lockDate?: string;
 }
